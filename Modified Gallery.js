@@ -1,7 +1,8 @@
 // ==UserScript==
 // @name         Modified Kemono Galleries
+// @namespace    https://sleazyfork.org/en/users/1027300-ntf
 // @version      1.0
-// @description  Load original resolution
+// @description  Load original resolution, toggle fitted zoom views, remove photos. Use a plug-in for batch download, can't do cross-origin image downloads with JS alone.
 // @author       ntf
 // @author       Modified by Meri
 // @match        *://kemono.party/*/user/*/post/*
@@ -48,21 +49,24 @@ function DownloadAllImages() {
   const images = document.querySelectorAll('.post__image');
   images.forEach((img, index) => {
     const imgSrc = img.getAttribute('src');
-    const title = img.parentNode.parentNode.querySelector('.post__title').getElementsByTagName('span')[0].textContent.trim();
-    const username = img.parentNode.parentNode.querySelector('.post__user-name').textContent.trim();
-    const imgName = `${title}_${username}_${index}.png`; // replace invalid characters in filename
-    fetch(imgSrc)
-      .then(response => response.blob())
-      .then(blob => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = imgName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-      });
+    const titleElement = document.querySelector('.post__title');
+    const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
+    const username = document.querySelector('.post__user-name').textContent.trim();
+    const imgName = `${title}_${username}_${index}.png`.replace("/[/\\?%*:|\"<>]/g", '-'); // replace invalid  characters in filename
+    setTimeout(() => {
+      fetch(imgSrc)
+        .then(response => response.blob())
+        .then(blob => {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = imgName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+        });
+    }, 250 * index); // add delay based on index
   });
 }
 
