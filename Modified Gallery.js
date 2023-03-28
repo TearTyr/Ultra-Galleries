@@ -101,13 +101,13 @@ function DownloadAllImages() {
   // Iterate over the images and download each one with a delay between downloads
   images.forEach((img, index) => {
     // Get the source URL of the image
-    const imgSrc = img.getAttribute('data-file-url');
+    const imgSrc = img.getAttribute('src');
     // Get the title and username information from the post
     const titleElement = document.querySelector('.post__title');
     const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
     const username = document.querySelector('.post__user-name').textContent.trim();
     // Construct a filename for the downloaded image
-    const imgName = `${title}_${username}_${index}.png`.replace(/[/\\?%*:|"<>.]/g, '-'); // Replace invalid characters in filename
+    const imgName = `${title}_${username}_${index}.png`.replace("/[/\\?%*:|\"<>]/g", '-'); // replace invalid characters in filename
     // Fetch the image data as a blob with a delay based on the index
     setTimeout(() => {
       fetch(imgSrc)
@@ -129,19 +129,17 @@ function DownloadAllImages() {
 }
 
 
-
 (function() {
     'use strict';
 
     document.querySelectorAll('a.fileThumb.image-link img').forEach(img => (img.className = 'post__image'));
 
-    // Replace all image links with their source URLs
     let A = document.querySelectorAll('a.fileThumb.image-link');
     let IMG = document.querySelectorAll('.post__image');
     for (let i = 0; i < A.length; i++) {
-      IMG[i].setAttribute('data-file-url', A[i].getAttribute('href')); // Set the data-file-url attribute to the image source URL
-      IMG[i].test = i;
-      A[i].outerHTML = A[i].innerHTML;
+        IMG[i].setAttribute('src', A[i].getAttribute('href'));
+        IMG[i].test = i;
+        A[i].outerHTML = A[i].innerHTML;
     }
 
     let DIV = document.querySelectorAll('.post__thumbnail');
