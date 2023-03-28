@@ -1,8 +1,7 @@
 // ==UserScript==
 // @name         Modified Kemono Galleries
-// @namespace    https://sleazyfork.org/en/users/1027300-ntf
 // @version      1.0
-// @description  Load original resolution, toggle fitted zoom views, remove photos. Use a plug-in for batch download, can't do cross-origin image downloads with JS alone.
+// @description  Load original resolution
 // @author       ntf
 // @author       Modified by Meri
 // @match        *://kemono.party/*/user/*/post/*
