@@ -1,37 +1,69 @@
 // ==UserScript==
 // @name         Modified Kemono Galleries
-// @namespace    https://sleazyfork.org/en/users/1027300-ntf
 // @version      1.0
 // @description  Load original resolution, toggle fitted zoom views, remove photos. Use a plug-in for batch download, can't do cross-origin image downloads with JS alone.
 // @author       ntf
-// @author       Modified by Meri/Tear
+// @author       Modified by Meri
 // @match        *://kemono.party/*/user/*/post/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=kemono.party
 // @grant        none
 // @license      Unlicense
 // ==/UserScript==
+
 // Define constants for button labels
 const DLALL = '【DL ALL】';
-const RM = '【REMOVE】';
 const DL = '【DOWNLOAD】';
+const WIDTH = '【FILL WIDTH】';
+const HEIGHT = '【FILL HEIGHT】';
+const FULL = '【FULL】';
+const RM = '【REMOVE】';
 
-// Helper function to create a new toggle button element
-function newToggle(name, action) {
-  const toggle = document.createElement('a');
-  toggle.textContent = name;
-  toggle.addEventListener('click', action);
-  toggle.style.cursor = 'pointer';
-  return toggle;
+function Height() {
+    document.querySelectorAll('.post__image').forEach(img => height(img));
 }
 
-// Function to remove an image from the page
+function height(img) {
+    img.style.maxHeight = '100vh';
+    img.style.maxWidth = '100%';
+}
+
+function Width() {
+    document.querySelectorAll('.post__image').forEach(img => width(img));
+}
+
+function width(img) {
+    img.style.maxHeight = '100%';
+    img.style.maxWidth = '100%';
+}
+
+function Full() {
+    document.querySelectorAll('.post__image').forEach(img => full(img));
+}
+
+function full(img) {
+    img.style.maxHeight = 'none';
+    img.style.maxWidth = 'none';
+}
+
+function newToggle(name, action) {
+    const toggle = document.createElement('a');
+    toggle.text = name;
+    toggle.addEventListener('click', action);
+    toggle.style.cursor = 'pointer';
+    return toggle;
+}
+
+function resizer(evt) {
+    const name = evt.currentTarget.text;
+    const img = evt.currentTarget.parentNode.nextSibling.lastElementChild;
+    if (name === WIDTH) width(img);
+    else if (name === HEIGHT) height(img);
+    else if (name === FULL) full(img);
+}
+
 function removeImg(evt) {
-  // Get the closest ancestor element with class 'post'
-  const post = evt.currentTarget.closest('.post');
-  // Remove the thumbnail image element from the post
-  post.querySelector('.post__thumbnail').remove();
-  // Remove the full-size image element from the post
-  post.querySelector('.post__image').remove();
+    evt.currentTarget.parentNode.nextSibling.remove();
+    evt.currentTarget.parentNode.remove();
 }
 
 // Function to download an image
@@ -96,55 +128,32 @@ function DownloadAllImages() {
   });
 }
 
-// Function to load full-resolution images
-function loadFullResolutionImages() {
-  setTimeout(function() {
-    // Get the total number of images in the post
-    let G = document.querySelector("#page > div > div.post__files").childElementCount;
-    // Iterate over each image in the post
-    for (let i = 1; i <= G; i++) {
-      // Get the image and link elements for the current image
-      let imgEl = document.querySelector("#page > div > div.post__files > div:nth-child("+i+") > a > img");
-      let linkEl = document.querySelector("#page > div > div.post__files > div:nth-child("+i+") > a");
-      // Check if both elements exist for the current image
-      if (imgEl && linkEl) {
-        // Set the source URL of the full-resolution image
-        imgEl.src = linkEl.href;
-        // Set the type attribute of the image element to "image/png"
-        imgEl.setAttribute("type", "image/png");
-      }
-    }
-  }, 500); // Add a delay of 500 milliseconds before running the function to ensure all images have loaded
-}
 
-// Main function to execute all other functions on the page
+
 (function() {
-  'use strict';
+    'use strict';
 
-  // Convert all image thumbnails to full-size images
-  document.querySelectorAll('a.fileThumb.image-link img').forEach(img => (img.className = 'post__image'));
+    document.querySelectorAll('a.fileThumb.image-link img').forEach(img => (img.className = 'post__image'));
 
-  // Replace all image links with their source URLs
-  let A = document.querySelectorAll('a.fileThumb.image-link');
-  let IMG = document.querySelectorAll('.post__image');
-  for (let i = 0; i < A.length; i++) {
-    IMG[i].setAttribute('data-file-url', A[i].getAttribute('href')); // Set the data-file-url attribute to the image source URL
-    IMG[i].test = i;
-    A[i].outerHTML = A[i].innerHTML;
-  }
+    // Replace all image links with their source URLs
+    let A = document.querySelectorAll('a.fileThumb.image-link');
+    let IMG = document.querySelectorAll('.post__image');
+    for (let i = 0; i < A.length; i++) {
+      IMG[i].setAttribute('data-file-url', A[i].getAttribute('href')); // Set the data-file-url attribute to the image source URL
+      IMG[i].test = i;
+      A[i].outerHTML = A[i].innerHTML;
+    }
 
-  // Add download and remove buttons to all images on the page
-  let DIV = document.querySelectorAll('.post__thumbnail');
-  let parentDiv = DIV[0].parentNode;
-  for (let i = 0; i < DIV.length; i++) {
-    let newDiv = document.createElement('div');
-    newDiv.append(newToggle(DL, downloadImg), newToggle(RM, removeImg)); // Add download and remove buttons to the new div
-    parentDiv.insertBefore(newDiv, DIV[i]);
-  }
+    let DIV = document.querySelectorAll('.post__thumbnail');
+    let parentDiv = DIV[0].parentNode;
+    for (let i = 0; i < DIV.length; i++) {
+        let newDiv = document.createElement('div');
+        newDiv.append(newToggle(WIDTH, resizer), newToggle(HEIGHT, resizer), newToggle(FULL, resizer), newToggle(DL, downloadImg), newToggle(RM, removeImg));
+        parentDiv.insertBefore(newDiv, DIV[i]);
+    }
 
-  // Add a download all button to the post actions section
-  document.querySelector('.post__actions').append(newToggle(DLALL, DownloadAllImages));
+    Full();
 
-  // Load full-resolution images on the page
-  loadFullResolutionImages();
+    document.querySelector('.post__actions').append(newToggle(WIDTH, Width), newToggle(HEIGHT, Height), newToggle(FULL, Full), newToggle(DLALL, DownloadAllImages));
+
 })();
