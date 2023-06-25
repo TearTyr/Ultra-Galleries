@@ -6,7 +6,7 @@
 // @author       Modified by Meri
 // @match        *://kemono.party/*/user/*/post/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=kemono.party
-// @grant        none
+// @grant        GM.xmlHttpRequest
 // @license      Unlicense
 // ==/UserScript==
 
@@ -66,65 +66,97 @@ function removeImg(evt) {
     evt.currentTarget.parentNode.remove();
 }
 
-// Function to download an image
-function downloadImg(evt) {
-  // Get the source URL of the image
-  const imgSrc = evt.currentTarget.parentNode.nextElementSibling.lastElementChild.getAttribute('src');
-  // Get the title and username information from the post
-  const titleElement = document.querySelector('.post__title');
-  const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
-  const username = document.querySelector('.post__user-name').textContent.trim();
-  // Construct a filename for the downloaded image
-  const imgName = `${title}_${username}.png`.replace("/[/\\?%*:|\"<>]/g", '-'); // replace invalid characters in filename
-  // Fetch the image data as a blob
-  fetch(imgSrc)
-    .then(response => response.blob())
-    .then(blob => {
-      // Create a download link for the image blob
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = imgName;
-      // Programmatically click the download link and then remove it from the document
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      // Revoke the object URL to free up memory
-      window.URL.revokeObjectURL(url);
-    });
-}
+// // Function to download an image
+// function downloadImg(evt) {
+//   // Get the source URL of the image
+//   const imgSrc = evt.currentTarget.parentNode.nextElementSibling.lastElementChild.getAttribute('src');
+//   // Get the title and username information from the post
+//   const titleElement = document.querySelector('.post__title');
+//   const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
+//   const username = document.querySelector('.post__user-name').textContent.trim();
+//   // Construct a filename for the downloaded image
+//   const imgName = `${title}_${username}.png`.replace(/[\\/:*?"<>|]/g, '-'); // replace invalid characters in filename with '-'
+//   // Fetch the image data as a blob
+//   fetch(imgSrc)
+//     .then(response => {
+//       if (!response.ok) {
+//         throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
+//       }
+//       return response.blob();
+//     })
+//     .then(blob => {
+//       // Create a download link for the image blob
+//       const url = window.URL.createObjectURL(blob);
+//       const a = document.createElement('a');
+//       a.href = url;
+//       a.download = imgName;
+//       // Programmatically click the download link and then remove it from the document
+//       document.body.appendChild(a);
+//       a.click();
+//       document.body.removeChild(a);
+//       // Revoke the object URL to free up memory
+//       window.URL.revokeObjectURL(url);
+//     })
+//     .catch(error => {
+//       console.error(error);
+//     });
+// }
 
-// Function to download all images on the page in their original resolution
-function DownloadAllImages() {
-  // Select all full-size image elements on the page
-  const images = document.querySelectorAll('.post__image');
-  // Iterate over the images and download each one with a delay between downloads
-  images.forEach((img, index) => {
-    // Get the source URL of the image
+function downloadImg(evt) {
+  evt.preventDefault();
+  const img = evt.currentTarget.parentNode.nextSibling?.lastElementChild;
+  if (img) {
     const imgSrc = img.getAttribute('src');
-    // Get the title and username information from the post
     const titleElement = document.querySelector('.post__title');
     const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
     const username = document.querySelector('.post__user-name').textContent.trim();
-    // Construct a filename for the downloaded image
-    const imgName = `${title}_${username}_${index}.png`.replace("/[/\\?%*:|\"<>]/g", '-'); // replace invalid characters in filename
-    // Fetch the image data as a blob with a delay based on the index
+    const imgName = `${title}_${username}.png`.replace(/[\\/:*?"<>|]/g, '-');
+    GM.xmlHttpRequest({
+      method: 'GET',
+      url: imgSrc,
+      responseType: 'blob',
+      onload: function (response) {
+        const url = window.URL.createObjectURL(response.response);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = imgName;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      },
+      onerror: function (error) {
+        console.error(error);
+      }
+    });
+  }
+}
+
+
+function DownloadAllImages() {
+  const images = document.querySelectorAll('.post__image');
+  images.forEach((img, index) => {
+    const imgSrc = img.getAttribute('src');
+    const titleElement = document.querySelector('.post__title');
+    const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
+    const username = document.querySelector('.post__user-name').textContent.trim();
+    const imgName = `${title}_${username}_${index}.png`.replace(/[\\/:*?"<>|]/g, '-');
     setTimeout(() => {
-      fetch(imgSrc)
-        .then(response => response.blob())
-        .then(blob => {
-          // Create a download link for the image blob
-          const url = window.URL.createObjectURL(blob);
+      GM.xmlHttpRequest({
+        method: 'GET',
+        url: imgSrc,
+        responseType: 'blob',
+        onload: function (response) {
+          const url = window.URL.createObjectURL(response.response);
           const a = document.createElement('a');
           a.href = url;
           a.download = imgName;
-          // Programmatically click the download link and then remove it from the document
-          document.body.appendChild(a);
           a.click();
-          document.body.removeChild(a);
           window.URL.revokeObjectURL(url);
-        });
-    }, 250 * index); // Add delay based on index
+        },
+        onerror: function (error) {
+          console.error(error);
+        }
+      });
+    }, 250 * index);
   });
 }
 
