@@ -5,6 +5,7 @@
 // @author       ntf
 // @author       Modified by Meri
 // @match        *://kemono.party/*/user/*/post/*
+// @match        *://coomer.party/*/user/*/post/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=kemono.party
 // @grant        GM.xmlHttpRequest
 // @license      Unlicense
