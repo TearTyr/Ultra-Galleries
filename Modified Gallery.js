@@ -6,7 +6,7 @@
 // @author       Modified by Meri
 // @match        *://kemono.party/*/user/*/post/*
 // @match        *://coomer.party/*/user/*/post/*
-// @icon         https://www.google.com/s2/favicons?sz=64&domain=kemono.party
+// @icon         https://kemono.party/static/menu/recent.svg
 // @grant        GM.xmlHttpRequest
 // @license      Unlicense
 // ==/UserScript==
@@ -67,41 +67,18 @@ function removeImg(evt) {
     evt.currentTarget.parentNode.remove();
 }
 
-// // Function to download an image
-// function downloadImg(evt) {
-//   // Get the source URL of the image
-//   const imgSrc = evt.currentTarget.parentNode.nextElementSibling.lastElementChild.getAttribute('src');
-//   // Get the title and username information from the post
-//   const titleElement = document.querySelector('.post__title');
-//   const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
-//   const username = document.querySelector('.post__user-name').textContent.trim();
-//   // Construct a filename for the downloaded image
-//   const imgName = `${title}_${username}.png`.replace(/[\\/:*?"<>|]/g, '-'); // replace invalid characters in filename with '-'
-//   // Fetch the image data as a blob
-//   fetch(imgSrc)
-//     .then(response => {
-//       if (!response.ok) {
-//         throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
-//       }
-//       return response.blob();
-//     })
-//     .then(blob => {
-//       // Create a download link for the image blob
-//       const url = window.URL.createObjectURL(blob);
-//       const a = document.createElement('a');
-//       a.href = url;
-//       a.download = imgName;
-//       // Programmatically click the download link and then remove it from the document
-//       document.body.appendChild(a);
-//       a.click();
-//       document.body.removeChild(a);
-//       // Revoke the object URL to free up memory
-//       window.URL.revokeObjectURL(url);
-//     })
-//     .catch(error => {
-//       console.error(error);
-//     });
-// }
+//image refresher
+function handleImageError(evt) {
+  const img = evt.currentTarget;
+  img.src = img.src;
+}
+
+
+const images = document.querySelectorAll('.post__image');
+
+images.forEach((img) => {
+  img.addEventListener('error', handleImageError);
+});
 
 function downloadImg(evt) {
   evt.preventDefault();
