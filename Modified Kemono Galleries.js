@@ -1,9 +1,7 @@
 // ==UserScript==
 // @name         Modified Kemono Galleries
-// @version      1.0
+// @version      1.2
 // @description  Load original resolution, toggle fitted zoom views, remove photos. Use a plug-in for batch download, can't do cross-origin image downloads with JS alone.
-// @author       ntf
-// @author       Modified by Meri
 // @match        *://kemono.party/*/user/*/post/*
 // @match        *://coomer.party/*/user/*/post/*
 // @icon         https://kemono.party/static/menu/recent.svg
@@ -34,7 +32,7 @@ function Width() {
 
 function width(img) {
   img.style.maxHeight = '100%';
-  img.style.maxWidth = '100%';
+  img.style.maxWidth = '100vw';
 }
 
 function Full() {
@@ -109,9 +107,15 @@ function DownloadAllImages() {
   const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
   const username = document.querySelector('.post__user-name').textContent.trim();
 
+  const downloadProgressText = document.createElement('span');
+  downloadProgressText.style.display = 'block';
+  downloadProgressText.style.marginTop = '5px';
+  document.querySelector('.post__actions').appendChild(downloadProgressText);
+
   const downloadImageAtIndex = (index) => {
     if (index >= images.length) {
       console.log('All images downloaded successfully.');
+      downloadProgressText.textContent = 'Download complete';
       return;
     }
 
@@ -125,10 +129,12 @@ function DownloadAllImages() {
         name: imgName,
         onload: function () {
           console.log('Image downloaded successfully:', imgName);
+          downloadProgressText.textContent = `Downloading... ${index + 1} / ${images.length}`;
           downloadImageAtIndex(index + 1); // Download the next image
         },
         onerror: function (error) {
           console.error('Failed to download image:', imgName, error);
+          downloadProgressText.textContent = `Downloading... ${index + 1} / ${images.length}`;
           downloadImageAtIndex(index + 1); // Download the next image
         },
       });
@@ -140,6 +146,7 @@ function DownloadAllImages() {
     tempImg.src = imgSrc;
   };
 
+  downloadProgressText.textContent = 'Downloading... 0 / ' + images.length;
   downloadImageAtIndex(0); // Start downloading from the first image
 }
 
@@ -148,11 +155,19 @@ function DownloadAllImages() {
 
   document.querySelectorAll('a.fileThumb.image-link img').forEach((img) => (img.className = 'post__image'));
 
+  // Match each picture card with its corresponding spot on the board
   let A = document.querySelectorAll('a.fileThumb.image-link');
   let IMG = document.querySelectorAll('.post__image');
+
+  // Loop through each picture card
   for (let i = 0; i < A.length; i++) {
+    // Step 1: Get the URL of the picture card and assign it to the corresponding spot on the board
     IMG[i].setAttribute('src', A[i].getAttribute('href'));
+
+    // Step 2a: Assign a special identifier to each spot on the board
     IMG[i].test = i;
+
+    // Step 2b: Replace the picture card's HTML with just the picture itself
     A[i].outerHTML = A[i].innerHTML;
   }
 
@@ -166,5 +181,11 @@ function DownloadAllImages() {
 
   Height();
 
-  document.querySelector('.post__actions').append(newToggle(WIDTH, Width), newToggle(HEIGHT, Height), newToggle(FULL, Full), newToggle(DLALL, DownloadAllImages));
+  const downloadAllButton = newToggle(DLALL, DownloadAllImages);
+  const downloadProgressText = document.createElement('span');
+  downloadProgressText.style.display = 'block';
+  downloadProgressText.style.marginTop = '5px';
+
+  const actionsContainer = document.querySelector('.post__actions');
+  actionsContainer.append(newToggle(WIDTH, Width), newToggle(HEIGHT, Height), newToggle(FULL, Full), downloadAllButton, downloadProgressText);
 })();
