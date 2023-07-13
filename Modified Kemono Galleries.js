@@ -1,6 +1,8 @@
 // ==UserScript==
 // @name         Modified Kemono Galleries
 // @version      1.2
+// @author       ntf
+// @author       Modified by Meri
 // @description  Load original resolution, toggle fitted zoom views, remove photos. Use a plug-in for batch download, can't do cross-origin image downloads with JS alone.
 // @match        *://kemono.party/*/user/*/post/*
 // @match        *://coomer.party/*/user/*/post/*
