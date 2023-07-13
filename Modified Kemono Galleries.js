@@ -9,7 +9,7 @@
 // @match        *://kemono.su/*/user/*/post/*
 // @match        *://coomer.party/*/user/*/post/*
 // @match        *://coomer.su/*/user/*/post/*
-	// @icon         https://kemono.party/static/menu/recent.svg
+// @icon         https://kemono.party/static/menu/recent.svg
 // @grant        GM_download
 // @license      Unlicense
 // ==/UserScript==
