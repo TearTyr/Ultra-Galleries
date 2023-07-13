@@ -1,23 +1,25 @@
 // ==UserScript==
-// @name         Modified Kemono Galleries
-// @version      1.2
+// @name         Ultra Kemono Galleries
+// @namespace    https://sleazyfork.org/en/users/1027300-ntf
+// @version      1.5
+// @description  Load original resolution, toggle fitted zoom views, remove photos, and batch download images. Can't do cross-origin image downloads with JS alone.
 // @author       ntf
-// @author       Modified by Meri
-// @description  Load original resolution, toggle fitted zoom views, remove photos. Use a plug-in for batch download, can't do cross-origin image downloads with JS alone.
+// MODIFIED BY MERI
 // @match        *://kemono.party/*/user/*/post/*
+// @match        *://kemono.su/*/user/*/post/*
 // @match        *://coomer.party/*/user/*/post/*
-// @icon         https://kemono.party/static/menu/recent.svg
+// @match        *://coomer.su/*/user/*/post/*
+	// @icon         https://kemono.party/static/menu/recent.svg
 // @grant        GM_download
 // @license      Unlicense
 // ==/UserScript==
 
-// Define constants for button labels
-const DLALL = '【DL ALL】';
-const DL = '【DOWNLOAD】';
 const WIDTH = '【FILL WIDTH】';
 const HEIGHT = '【FILL HEIGHT】';
 const FULL = '【FULL】';
 const RM = '【REMOVE】';
+const DL = '【DOWNLOAD】';
+const DLALL = '【DL ALL】';
 
 function Height() {
   document.querySelectorAll('.post__image').forEach(img => height(img));
@@ -65,12 +67,6 @@ function resizer(evt) {
 function removeImg(evt) {
   evt.currentTarget.parentNode.nextSibling.remove();
   evt.currentTarget.parentNode.remove();
-}
-
-// Image refresher
-function handleImageError(evt) {
-  const img = evt.currentTarget;
-  img.src = img.src;
 }
 
 function downloadImg(evt) {
@@ -157,19 +153,11 @@ function DownloadAllImages() {
 
   document.querySelectorAll('a.fileThumb.image-link img').forEach((img) => (img.className = 'post__image'));
 
-  // Match each picture card with its corresponding spot on the board
   let A = document.querySelectorAll('a.fileThumb.image-link');
   let IMG = document.querySelectorAll('.post__image');
-
-  // Loop through each picture card
   for (let i = 0; i < A.length; i++) {
-    // Step 1: Get the URL of the picture card and assign it to the corresponding spot on the board
     IMG[i].setAttribute('src', A[i].getAttribute('href'));
-
-    // Step 2a: Assign a special identifier to each spot on the board
     IMG[i].test = i;
-
-    // Step 2b: Replace the picture card's HTML with just the picture itself
     A[i].outerHTML = A[i].innerHTML;
   }
 
