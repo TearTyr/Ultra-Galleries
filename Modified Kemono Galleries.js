@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Kemono Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      1.6
+// @version      1.6.1
 // @description  Load original resolution, toggle fitted zoom views, remove photos, and batch download images and videos. Can't do cross-origin downloads with JS alone.
 // @author       ntf
 // MODIFIED BY MERI
@@ -24,7 +24,7 @@ const RM = '【REMOVE】';
 const WIDTH = '【FILL WIDTH】';
 
 function Height() {
-  document.querySelectorAll('.post__image').forEach(img => height(img));
+  document.querySelectorAll('.post__image').forEach((img) => height(img));
 }
 
 function height(img) {
@@ -33,7 +33,7 @@ function height(img) {
 }
 
 function Width() {
-  document.querySelectorAll('.post__image').forEach(img => width(img));
+  document.querySelectorAll('.post__image').forEach((img) => width(img));
 }
 
 function width(img) {
@@ -42,7 +42,7 @@ function width(img) {
 }
 
 function Full() {
-  document.querySelectorAll('.post__image').forEach(img => full(img));
+  document.querySelectorAll('.post__image').forEach((img) => full(img));
 }
 
 function full(img) {
@@ -71,12 +71,6 @@ function removeImg(evt) {
   evt.currentTarget.parentNode.remove();
 }
 
-// Image refresher
-function handleImageError(evt) {
-  const img = evt.currentTarget;
-  img.src = img.src;
-}
-
 function downloadImg(evt) {
   evt.preventDefault();
   const img = evt.currentTarget.parentNode.nextSibling?.lastElementChild;
@@ -87,25 +81,16 @@ function downloadImg(evt) {
     const username = document.querySelector('.post__user-name').textContent.trim();
     const imgName = `${title}_${username}.png`.replace(/[\\/:*?"<>|]/g, '-');
 
-    const downloadImage = () => {
-      GM_download({
-        url: imgSrc,
-        name: imgName,
-        onload: function () {
-          console.log('Image downloaded successfully:', imgName);
-          updateDownloadStatus(++count, total);
-        },
-        onerror: function (error) {
-          console.error('Failed to download image:', imgName, error);
-          updateDownloadStatus(++count, total);
-        },
-      });
-    };
-
-    // Create a new image element to wait for the image to load before downloading
-    const tempImg = new Image();
-    tempImg.addEventListener('load', downloadImage);
-    tempImg.src = imgSrc;
+    GM_download({
+      url: imgSrc,
+      name: imgName,
+      onload: function () {
+        console.log('Image downloaded successfully:', imgName);
+      },
+      onerror: function (error) {
+        console.error('Failed to download image:', imgName, error);
+      },
+    });
   }
 }
 
@@ -120,11 +105,9 @@ function downloadVideo(evt) {
     name: videoName,
     onload: function () {
       console.log('Video downloaded successfully:', videoName);
-      updateDownloadStatus(images.length + 1, images.length + attachmentLinks.length);
     },
     onerror: function (error) {
       console.error('Failed to download video:', videoName, error);
-      updateDownloadStatus(images.length + 1, images.length + attachmentLinks.length);
     },
   });
 }
@@ -143,33 +126,26 @@ function DownloadAllImagesAndVideos() {
     const imgSrc = img.getAttribute('src');
     const imgName = `${title}_${username}_${index}.png`.replace(/[\\/:*?"<>|]/g, '-');
 
-    const downloadImage = () => {
-      GM_download({
-        url: imgSrc,
-        name: imgName,
-        onload: function () {
-          console.log('Image downloaded successfully:', imgName);
-          updateDownloadStatus(++count, total);
+    GM_download({
+      url: imgSrc,
+      name: imgName,
+      onload: function () {
+        console.log('Image downloaded successfully:', imgName);
+        updateDownloadStatus(++count, total);
 
-          if (count === total) {
-            setDownloadComplete();
-          }
-        },
-        onerror: function (error) {
-          console.error('Failed to download image:', imgName, error);
-          updateDownloadStatus(++count, total);
+        if (count === total) {
+          setDownloadComplete();
+        }
+      },
+      onerror: function (error) {
+        console.error('Failed to download image:', imgName, error);
+        updateDownloadStatus(++count, total);
 
-          if (count === total) {
-            setDownloadComplete();
-          }
-        },
-      });
-    };
-
-    // Create a new image element to wait for the image to load before downloading
-    const tempImg = new Image();
-    tempImg.addEventListener('load', downloadImage);
-    tempImg.src = imgSrc;
+        if (count === total) {
+          setDownloadComplete();
+        }
+      },
+    });
   });
 
   // Download videos
@@ -203,8 +179,6 @@ function DownloadAllImagesAndVideos() {
   });
 }
 
-
-
 let refreshInterval;
 
 function refreshImages() {
@@ -221,7 +195,7 @@ function refreshImages() {
     }
   };
 
-  images.forEach(img => {
+  images.forEach((img) => {
     if (img.complete) {
       checkImageLoadStatus();
     } else {
@@ -257,26 +231,30 @@ function setDownloadComplete() {
   document.querySelectorAll('a.fileThumb.image-link img').forEach((img) => (img.className = 'post__image'));
 
   // Match each picture card with its corresponding spot on the board
-  let A = document.querySelectorAll('a.fileThumb.image-link');
-  let IMG = document.querySelectorAll('.post__image');
+  const A = document.querySelectorAll('a.fileThumb.image-link');
+  const IMG = document.querySelectorAll('.post__image');
 
   // Loop through each picture card
   for (let i = 0; i < A.length; i++) {
+    // Step 1: Get the URL of the picture card and assign it to the corresponding spot on the board
     IMG[i].setAttribute('src', A[i].getAttribute('href'));
+
+    // Step 2a: Assign a special identifier to each spot on the board
     IMG[i].test = i;
+
+    // Step 2b: Replace the picture card's HTML with just the picture itself
     A[i].outerHTML = A[i].innerHTML;
   }
 
   // Extract video attachment information
   const attachmentLinks = document.querySelectorAll('.post__attachment-link');
   attachmentLinks.forEach((link) => {
-    const fileName = link.textContent.trim();
+    const fileName = link.getAttribute('download');
     link.dataset.fileName = fileName;
-    link.textContent = '';
   });
 
-  let DIV = document.querySelectorAll('.post__thumbnail');
-  let parentDiv = DIV[0].parentNode;
+  const DIV = document.querySelectorAll('.post__thumbnail');
+  const parentDiv = DIV[0].parentNode;
 
   const downloadAllButton = newToggle(DLALL, DownloadAllImagesAndVideos);
   const downloadStatus = document.createElement('span');
@@ -284,21 +262,19 @@ function setDownloadComplete() {
   downloadStatus.textContent = 'Waiting for images to load';
 
   const downloadAllContainer = document.createElement('div');
-  downloadAllContainer.style.display = 'inline-flex'; // Set display property to inline-flex
+  downloadAllContainer.style.display = 'inline-flex';
   downloadAllContainer.append(downloadAllButton, downloadStatus);
 
   for (let i = 0; i < DIV.length; i++) {
-    let newDiv = document.createElement('div');
+    const newDiv = document.createElement('div');
     newDiv.append(newToggle(WIDTH, resizer), newToggle(HEIGHT, resizer), newToggle(FULL, resizer), newToggle(DL, downloadImg), newToggle(RM, removeImg));
     parentDiv.insertBefore(newDiv, DIV[i]);
   }
 
   Height();
-  refreshInterval = setInterval(refreshImages, 3); // Refresh images every 3 second
+  refreshInterval = setInterval(refreshImages, 3000);
 
   const postActions = document.querySelector('.post__actions');
   postActions.append(newToggle(WIDTH, Width), newToggle(HEIGHT, Height), newToggle(FULL, Full));
-  postActions.insertAdjacentElement('beforeend', downloadAllContainer); // Append the downloadAllContainer to the postActions
-
-
+  postActions.insertAdjacentElement('beforeend', downloadAllContainer);
 })();
