@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Kemono Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      1.6.1
+// @version      1.6.2
 // @description  Load original resolution, toggle fitted zoom views, remove photos, and batch download images and videos. Can't do cross-origin downloads with JS alone.
 // @author       ntf
 // MODIFIED BY MERI
@@ -12,8 +12,12 @@
 // @icon         https://kemono.party/static/menu/recent.svg
 // @grant        GM_download
 // @grant        GM_info
+// @grant        GM_setValue
+// @grant        GM_getValue
+// @grant        GM_xmlhttpRequest
 // @license      Unlicense
 // ==/UserScript==
+
 
 // Define constants for button labels
 const DL = '【DOWNLOAD】';
@@ -78,8 +82,10 @@ function downloadImg(evt) {
     const imgSrc = img.getAttribute('src');
     const titleElement = document.querySelector('.post__title');
     const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
-    const username = document.querySelector('.post__user-name').textContent.trim();
-    const imgName = `${title}_${username}.png`.replace(/[\\/:*?"<>|]/g, '-');
+    const artistName = document.querySelector('.post__user-name').textContent.trim();
+
+
+    const imgName = `${artistName}-${title}.png`.replace(/[\\/:*?"<>|]/g, '-');
 
     GM_download({
       url: imgSrc,
@@ -93,7 +99,6 @@ function downloadImg(evt) {
     });
   }
 }
-
 function downloadVideo(evt) {
   evt.preventDefault();
   const videoLink = evt.currentTarget;
@@ -116,7 +121,8 @@ function DownloadAllImagesAndVideos() {
   const images = document.querySelectorAll('.post__image');
   const titleElement = document.querySelector('.post__title');
   const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
-  const username = document.querySelector('.post__user-name').textContent.trim();
+  const artistName = document.querySelector('.post__user-name').textContent.trim();
+
 
   let total = images.length;
   let count = 0;
@@ -124,7 +130,7 @@ function DownloadAllImagesAndVideos() {
   // Download images
   images.forEach((img, index) => {
     const imgSrc = img.getAttribute('src');
-    const imgName = `${title}_${username}_${index}.png`.replace(/[\\/:*?"<>|]/g, '-');
+    const imgName = `${title}_${artistName}_${index}.png`.replace(/[\\/:*?"<>|]/g, '-');
 
     GM_download({
       url: imgSrc,
@@ -236,13 +242,8 @@ function setDownloadComplete() {
 
   // Loop through each picture card
   for (let i = 0; i < A.length; i++) {
-    // Step 1: Get the URL of the picture card and assign it to the corresponding spot on the board
     IMG[i].setAttribute('src', A[i].getAttribute('href'));
-
-    // Step 2a: Assign a special identifier to each spot on the board
     IMG[i].test = i;
-
-    // Step 2b: Replace the picture card's HTML with just the picture itself
     A[i].outerHTML = A[i].innerHTML;
   }
 
