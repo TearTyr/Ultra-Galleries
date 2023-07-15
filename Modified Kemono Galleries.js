@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Kemono Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      1.6.4
+// @version      1.6.5
 // @description  Load original resolution, toggle fitted zoom views, remove photos, and batch download images and videos. Can't do cross-origin downloads with JS alone.
 // @author       ntf
 // MODIFIED BY MERI
@@ -12,9 +12,9 @@
 // @icon         https://kemono.party/static/menu/recent.svg
 // @grant        GM_download
 // @grant        GM_info
+// @grant        GM_xmlhttpRequest
 // @license      Unlicense
 // ==/UserScript==
-
 
 // Define constants for button labels
 const DL = '【DOWNLOAD】';
@@ -80,8 +80,6 @@ function downloadImg(evt) {
     const titleElement = document.querySelector('.post__title');
     const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
     const artistName = document.querySelector('.post__user-name').textContent.trim();
-
-
     const imgName = `${artistName}-${title}.png`.replace(/[\\/:*?"<>|]/g, '-');
 
     GM_download({
@@ -92,45 +90,10 @@ function downloadImg(evt) {
       },
       onerror: function (error) {
         console.error('Failed to download image:', imgName, error);
-        // Retry downloading the image
-        retryDownload(imgSrc, imgName);
       },
     });
   }
 }
-
-function retryDownload(url, name) {
-  let retryCount = 0;
-  const maxRetries = 3;
-
-  const retry = () => {
-    retryCount++;
-    console.log(`Retrying download: ${name} (Attempt ${retryCount})`);
-
-    GM_download({
-      url: url,
-      name: name,
-      onload: function (details) {
-        if (details.totalBytes && details.totalBytes > 1024) {
-          console.log('Image downloaded successfully:', name);
-        } else {
-          console.error(`Image size is too small: ${name}`);
-        }
-      },
-      onerror: function (error) {
-        console.error('Failed to download image:', name, error);
-        if (retryCount < maxRetries) {
-          retry();
-        } else {
-          console.error(`Max retries exceeded for image: ${name}`);
-        }
-      },
-    });
-  };
-
-  retry();
-}
-
 
 function DownloadAllImagesAndVideos() {
   const images = document.querySelectorAll('.post__image');
@@ -145,7 +108,6 @@ function DownloadAllImagesAndVideos() {
   images.forEach((img, index) => {
     const imgSrc = img.getAttribute('src');
     const extension = imgSrc.split('.').pop(); // Get the file extension
-
     let imgName;
     if (extension.toLowerCase() === 'gif') {
       imgName = `${artistName}-${title}_${index}.gif`.replace(/[\\/:*?"<>|]/g, '-');
@@ -159,7 +121,6 @@ function DownloadAllImagesAndVideos() {
       onload: function () {
         console.log('Image downloaded successfully:', imgName);
         updateDownloadStatus(++count, total);
-
         if (count === total) {
           setDownloadComplete();
         }
@@ -167,7 +128,6 @@ function DownloadAllImagesAndVideos() {
       onerror: function (error) {
         console.error('Failed to download image:', imgName, error);
         updateDownloadStatus(++count, total);
-
         if (count === total) {
           setDownloadComplete();
         }
@@ -189,7 +149,6 @@ function DownloadAllImagesAndVideos() {
       onload: function () {
         console.log('Video downloaded successfully:', videoName);
         updateDownloadStatus(++count, total);
-
         if (count === total) {
           setDownloadComplete();
         }
@@ -197,61 +156,11 @@ function DownloadAllImagesAndVideos() {
       onerror: function (error) {
         console.error('Failed to download video:', videoName, error);
         updateDownloadStatus(++count, total);
-
         if (count === total) {
           setDownloadComplete();
         }
       },
     });
-  });
-}
-
-
-let refreshInterval;
-
-function refreshImages() {
-  const images = document.querySelectorAll('.post__image');
-  const totalImages = images.length;
-  let loadedImages = 0;
-
-  const checkImageLoadStatus = () => {
-    loadedImages++;
-    updateDownloadStatus(loadedImages, totalImages);
-
-    if (loadedImages === totalImages) {
-      clearInterval(refreshInterval);
-    }
-  };
-
-  images.forEach((img) => {
-    if (img.complete) {
-      checkImageLoadStatus();
-    } else {
-      img.addEventListener('load', checkImageLoadStatus);
-      img.addEventListener('error', checkImageLoadStatus);
-    }
-  });
-
-  const gifs = document.querySelectorAll('.post__image[src$=".gif"]');
-  const totalGifs = gifs.length;
-  let loadedGifs = 0;
-
-  const checkGifLoadStatus = () => {
-    loadedGifs++;
-    updateDownloadStatus(loadedImages + loadedGifs, totalImages + totalGifs);
-
-    if (loadedGifs === totalGifs) {
-      clearInterval(refreshInterval);
-    }
-  };
-
-  gifs.forEach((gif) => {
-    if (gif.complete) {
-      checkGifLoadStatus();
-    } else {
-      gif.addEventListener('load', checkGifLoadStatus);
-      gif.addEventListener('error', checkGifLoadStatus);
-    }
   });
 }
 
@@ -320,7 +229,6 @@ function setDownloadComplete() {
   }
 
   Height();
-  refreshInterval = setInterval(refreshImages, 5000);
 
   const postActions = document.querySelector('.post__actions');
   postActions.append(newToggle(WIDTH, Width), newToggle(HEIGHT, Height), newToggle(FULL, Full));
