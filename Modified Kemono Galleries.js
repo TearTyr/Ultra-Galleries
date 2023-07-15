@@ -1,10 +1,9 @@
 // ==UserScript==
 // @name         Ultra Kemono Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      1.6.5
+// @version      1.6.7
 // @description  Load original resolution, toggle fitted zoom views, remove photos, and batch download images and videos. Can't do cross-origin downloads with JS alone.
-// @author       ntf
-// MODIFIED BY MERI
+// @author       Meri
 // @match        *://kemono.party/*/user/*/post/*
 // @match        *://kemono.su/*/user/*/post/*
 // @match        *://coomer.party/*/user/*/post/*
@@ -14,6 +13,8 @@
 // @grant        GM_info
 // @grant        GM_xmlhttpRequest
 // @license      Unlicense
+// @source       https://sleazyfork.org/en/scripts/460064-better-kemono-galleries
+// @source       https://sleazyfork.org/en/scripts/469063-%E8%BC%89%E5%85%A5kemono-party%E8%88%87coomer-party%E5%8E%9F%E5%A7%8B%E5%9C%96%E6%AA%94
 // ==/UserScript==
 
 // Define constants for button labels
@@ -120,14 +121,14 @@ function DownloadAllImagesAndVideos() {
       name: imgName,
       onload: function () {
         console.log('Image downloaded successfully:', imgName);
-        updateDownloadStatus(++count, total);
+        updateStatus(++count, total);
         if (count === total) {
           setDownloadComplete();
         }
       },
       onerror: function (error) {
         console.error('Failed to download image:', imgName, error);
-        updateDownloadStatus(++count, total);
+        updateStatus(++count, total);
         if (count === total) {
           setDownloadComplete();
         }
@@ -148,14 +149,14 @@ function DownloadAllImagesAndVideos() {
       name: videoName,
       onload: function () {
         console.log('Video downloaded successfully:', videoName);
-        updateDownloadStatus(++count, total);
+        updateStatus(++count, total);
         if (count === total) {
           setDownloadComplete();
         }
       },
       onerror: function (error) {
         console.error('Failed to download video:', videoName, error);
-        updateDownloadStatus(++count, total);
+        updateStatus(++count, total);
         if (count === total) {
           setDownloadComplete();
         }
@@ -164,61 +165,89 @@ function DownloadAllImagesAndVideos() {
   });
 }
 
-function updateDownloadStatus(count, total) {
-  const downloadStatus = document.getElementById('downloadStatus');
-  if (downloadStatus) {
-    if (count === 0) {
-      downloadStatus.textContent = 'Waiting for images to load';
-    } else if (count === total) {
-      downloadStatus.textContent = `Download Ready!`;
+function updateStatus(count, total) {
+  const Status = document.getElementById('Status');
+  if (Status) {
+    if (count === total) {
+      Status.textContent = 'Images Done Loading!';
+    } else if (count > 0) {
+      Status.textContent = `Loading images (${count}/${total})...`;
     } else {
-      downloadStatus.textContent = `Downloading: ${count} / ${total}`;
+      Status.textContent = `Downloading images (${count}/${total})...`;
     }
   }
 }
 
 function setDownloadComplete() {
-  const downloadStatus = document.getElementById('downloadStatus');
-  if (downloadStatus) {
-    downloadStatus.textContent = 'Download Complete';
+  const Status = document.getElementById('Status');
+  if (Status) {
+    Status.textContent = 'Download Complete!';
   }
 }
+
+function loadImages() {
+  const images = document.querySelectorAll('.post__image');
+  const totalImages = images.length;
+  let count = 0;
+
+  images.forEach((img) => {
+    img.addEventListener('load', function () {
+      count++;
+      updateStatus(count, totalImages);
+      if (count === totalImages) {
+        updateStatus();
+      }
+    });
+
+    img.addEventListener('error', function () {
+      count++;
+      updateStatus(count, totalImages);
+      if (count === totalImages) {
+        updateStatus();
+      }
+    });
+
+    const originalUrl = img.src;
+
+    if (
+      originalUrl.includes('static') ||
+      originalUrl.includes('icon') ||
+      originalUrl.includes('icons') ||
+      originalUrl.includes('banners')
+    ) {
+      count++;
+      updateStatus(count, totalImages);
+      if (count === totalImages) {
+        updateStatus();
+      }
+    } else {
+      const convertedUrl = originalUrl.replace('/thumbnail/', '/').replace('img.', '');
+      img.src = convertedUrl;
+    }
+  });
+}
+
 
 (function () {
   'use strict';
 
   document.querySelectorAll('a.fileThumb.image-link img').forEach((img) => (img.className = 'post__image'));
 
-  // Match each picture card with its corresponding spot on the board
-  const A = document.querySelectorAll('a.fileThumb.image-link');
-  const IMG = document.querySelectorAll('.post__image');
-
-  // Loop through each picture card
-  for (let i = 0; i < A.length; i++) {
-    IMG[i].setAttribute('src', A[i].getAttribute('href'));
-    IMG[i].test = i;
-    A[i].outerHTML = A[i].innerHTML;
-  }
-
-  // Extract video attachment information
-  const attachmentLinks = document.querySelectorAll('.post__attachment-link');
-  attachmentLinks.forEach((link) => {
-    const fileName = link.getAttribute('download');
-    link.dataset.fileName = fileName;
-  });
-
   const DIV = document.querySelectorAll('.post__thumbnail');
   const parentDiv = DIV[0]?.parentNode;
 
-  const downloadAllContainer = document.createElement('div');
-  downloadAllContainer.style.display = 'inline-flex';
+  const ContainerStatus = document.createElement('div');
+  ContainerStatus.style.display = 'inline-flex';
 
   const downloadAllButton = newToggle(DLALL, DownloadAllImagesAndVideos);
-  const downloadStatus = document.createElement('span');
-  downloadStatus.id = 'downloadStatus';
-  downloadStatus.textContent = 'Waiting for images to load';
+  const Status = document.createElement('span');
+  Status.id = 'Status';
+  Status.textContent = '';
 
-  downloadAllContainer.append(downloadAllButton, downloadStatus);
+  ContainerStatus.append(downloadAllButton, Status);
+
+  loadImages();
+  Height();
 
   if (parentDiv) {
     for (let i = 0; i < DIV.length; i++) {
@@ -228,9 +257,7 @@ function setDownloadComplete() {
     }
   }
 
-  Height();
-
   const postActions = document.querySelector('.post__actions');
   postActions.append(newToggle(WIDTH, Width), newToggle(HEIGHT, Height), newToggle(FULL, Full));
-  postActions.append(downloadAllContainer);
+  postActions.append(ContainerStatus);
 })();
