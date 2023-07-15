@@ -25,6 +25,12 @@ const HEIGHT = '【FILL HEIGHT】';
 const RM = '【REMOVE】';
 const WIDTH = '【FILL WIDTH】';
 
+// Define variables for counts
+let imageCount = 0;
+let downloadedCount = 0;
+let totalImages = 0;
+let imageStatusUpdated = false; // Track whether the image status has been updated
+
 function Height() {
   document.querySelectorAll('.post__image').forEach((img) => height(img));
 }
@@ -102,8 +108,14 @@ function DownloadAllImagesAndVideos() {
   const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
   const artistName = document.querySelector('.post__user-name').textContent.trim();
 
-  let total = images.length; // Start with the number of images
-  let count = 0;
+  let total = totalImages; // Use the totalImages variable instead of images.length
+  downloadedCount = 0; // Reset the downloaded count
+
+  // Update the status to show "Downloading images"
+  const Status = document.getElementById('Status');
+  if (Status) {
+    Status.textContent = `Downloading images (${downloadedCount}/${total})...`;
+  }
 
   // Download images and GIFs
   images.forEach((img, index) => {
@@ -121,16 +133,18 @@ function DownloadAllImagesAndVideos() {
       name: imgName,
       onload: function () {
         console.log('Image downloaded successfully:', imgName);
-        updateStatus(++count, total);
-        if (count === total) {
-          setDownloadComplete();
+        downloadedCount++; // Increment downloaded count
+        updateStatusDownload(); // Update status after each download
+        if (downloadedCount === total) {
+          updateStatusDownload();
         }
       },
       onerror: function (error) {
         console.error('Failed to download image:', imgName, error);
-        updateStatus(++count, total);
-        if (count === total) {
-          setDownloadComplete();
+        downloadedCount++; // Increment downloaded count even on error
+        updateStatusDownload(); // Update status after each download
+        if (downloadedCount === total) {
+          updateStatusDownload();
         }
       },
     });
@@ -149,54 +163,127 @@ function DownloadAllImagesAndVideos() {
       name: videoName,
       onload: function () {
         console.log('Video downloaded successfully:', videoName);
-        updateStatus(++count, total);
-        if (count === total) {
-          setDownloadComplete();
+        downloadedCount++; // Increment downloaded count
+        updateStatusDownload(); // Update status after each download
+        if (downloadedCount === total) {
+          updateStatusDownload();
         }
       },
       onerror: function (error) {
         console.error('Failed to download video:', videoName, error);
-        updateStatus(++count, total);
-        if (count === total) {
-          setDownloadComplete();
+        downloadedCount++; // Increment downloaded count even on error
+        updateStatusDownload(); // Update status after each download
+        if (downloadedCount === total) {
+          updateStatusDownload();
         }
       },
     });
   });
 }
 
-function updateStatus(count, total) {
+function updateStatusImage() {
   const Status = document.getElementById('Status');
   if (Status) {
-    if (count === total) {
-      Status.textContent = 'Images Done Loading!';
-    } else if (count > 0) {
-      Status.textContent = `Loading images (${count}/${total})...`;
+    if (imageCount === totalImages || imageStatusUpdated === true) {
+      Status.textContent = `Images Done Loading! Total: ${totalImages}`;
+      if (!imageStatusUpdated){
+        imageStatusUpdated = false;
+      }
     } else {
-      Status.textContent = `Downloading images (${count}/${total})...`;
+      Status.textContent = `Loading images (${imageCount}/${totalImages})...`;
+      if (imageCount === totalImages) {
+        imageStatusUpdated = true;
+      }
+    }
+    
+  }
+}
+
+function updateStatusDownload() {
+  const Status = document.getElementById('Status');
+  if (Status) {
+    if (downloadedCount === totalImages) {
+      Status.textContent = `Done Downloading! Total: ${totalImages}`;
+    } else {
+      Status.textContent = `Downloading images (${downloadedCount}/${totalImages})...`;
     }
   }
 }
 
-function setDownloadComplete() {
-  const Status = document.getElementById('Status');
-  if (Status) {
-    Status.textContent = 'Download Complete!';
+function loadImage(img, retryCount) {
+  const imgSrc = img.getAttribute('src');
+  GM_xmlhttpRequest({
+    method: 'HEAD',
+    url: imgSrc,
+    onload: function (response) {
+      const status = response.status;
+      if (status === 200) {
+        console.log('Image loaded successfully:', imgSrc);
+        imageCount++; // Increment image count on successful load
+      } else if (status === 429) {
+        console.warn('Image rate limited:', imgSrc);
+        retryLoadImage(img, retryCount + 1);
+      } else {
+        console.error('Failed to load image:', imgSrc, 'Status:', status);
+      }
+      updateStatusImage(); // Update status after each image load
+    },
+    onerror: function (error) {
+      console.error('Failed to load image:', imgSrc, error);
+      updateStatusImage(); // Update status even if there's an error
+    },
+  });
+}
+
+function retryLoadImage(img, retryCount) {
+  const maxRetries = 10;
+  if (retryCount <= maxRetries) {
+    console.log(`Retrying image load: ${img.getAttribute('src')} (Attempt ${retryCount})`);
+    setTimeout(function () {
+      loadImage(img, retryCount);
+    }, 50);
+  } else {
+    console.error(`Max retries exceeded for image: ${img.getAttribute('src')}`);
+    showRetryOption(img);
+    updateStatusImage(); // Update status even if max retries exceeded
   }
+}
+
+function loadImages() {
+  const images = document.querySelectorAll('.post__image');
+  totalImages = images.length; // Update the total number of images
+
+  images.forEach((img) => {
+    loadImage(img, 1);
+  });
+
+  downloadedCount = totalImages; // Set downloaded count to total images initially
 }
 
 (function () {
   'use strict';
 
-    document.querySelectorAll('a.fileThumb.image-link img').forEach(img => (img.className = 'post__image'));
+  document.querySelectorAll('a.fileThumb.image-link img').forEach((img) => (img.className = 'post__image'));
 
-    let A = document.querySelectorAll('a.fileThumb.image-link');
-    let IMG = document.querySelectorAll('.post__image');
-    for (let i = 0; i < A.length; i++) {
-        IMG[i].setAttribute('src', A[i].getAttribute('href'));
-        IMG[i].test = i;
-        A[i].outerHTML = A[i].innerHTML;
-    }
+  // Match each picture card with its corresponding spot on the board
+  const A = document.querySelectorAll('a.fileThumb.image-link');
+  const IMG = document.querySelectorAll('.post__image');
+
+  // Loop through each picture card to load the full image
+  for (let i = 0; i < A.length; i++) {
+    setTimeout(function (index) {
+      IMG[index].setAttribute('src', A[index].getAttribute('href'));
+      IMG[index].test = index;
+      A[index].outerHTML = A[index].innerHTML;
+    }, i * 300, i);
+  }
+
+  // Extract video attachment information
+  const attachmentLinks = document.querySelectorAll('.post__attachment-link');
+  attachmentLinks.forEach((link) => {
+    const fileName = link.getAttribute('download');
+    link.dataset.fileName = fileName;
+  });
 
   const DIV = document.querySelectorAll('.post__thumbnail');
   const parentDiv = DIV[0]?.parentNode;
@@ -211,8 +298,6 @@ function setDownloadComplete() {
 
   ContainerStatus.append(downloadAllButton, Status);
 
-  Height();
-
   if (parentDiv) {
     for (let i = 0; i < DIV.length; i++) {
       const newDiv = document.createElement('div');
@@ -220,6 +305,9 @@ function setDownloadComplete() {
       parentDiv.insertBefore(newDiv, DIV[i]);
     }
   }
+
+  Height();
+  loadImages();
 
   const postActions = document.querySelector('.post__actions');
   postActions.append(newToggle(WIDTH, Width), newToggle(HEIGHT, Height), newToggle(FULL, Full));
