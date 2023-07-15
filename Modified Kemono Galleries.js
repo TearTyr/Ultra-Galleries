@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Kemono Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      1.6.3
+// @version      1.6.4
 // @description  Load original resolution, toggle fitted zoom views, remove photos, and batch download images and videos. Can't do cross-origin downloads with JS alone.
 // @author       ntf
 // MODIFIED BY MERI
@@ -92,40 +92,45 @@ function downloadImg(evt) {
       },
       onerror: function (error) {
         console.error('Failed to download image:', imgName, error);
+        // Retry downloading the image
+        retryDownload(imgSrc, imgName);
       },
     });
   }
 }
 
-function downloadImg(evt) {
-  evt.preventDefault();
-  const img = evt.currentTarget.parentNode.nextSibling?.lastElementChild;
-  if (img) {
-    const imgSrc = img.getAttribute('src');
-    const titleElement = document.querySelector('.post__title');
-    const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
-    const artistName = document.querySelector('.post__user-name').textContent.trim();
-    const extension = imgSrc.split('.').pop(); // Get the file extension
+function retryDownload(url, name) {
+  let retryCount = 0;
+  const maxRetries = 3;
 
-    let imgName;
-    if (extension.toLowerCase() === 'gif') {
-      imgName = `${artistName}-${title}.gif`.replace(/[\\/:*?"<>|]/g, '-');
-    } else {
-      imgName = `${artistName}-${title}.png`.replace(/[\\/:*?"<>|]/g, '-');
-    }
+  const retry = () => {
+    retryCount++;
+    console.log(`Retrying download: ${name} (Attempt ${retryCount})`);
 
     GM_download({
-      url: imgSrc,
-      name: imgName,
-      onload: function () {
-        console.log('Image downloaded successfully:', imgName);
+      url: url,
+      name: name,
+      onload: function (details) {
+        if (details.totalBytes && details.totalBytes > 1024) {
+          console.log('Image downloaded successfully:', name);
+        } else {
+          console.error(`Image size is too small: ${name}`);
+        }
       },
       onerror: function (error) {
-        console.error('Failed to download image:', imgName, error);
+        console.error('Failed to download image:', name, error);
+        if (retryCount < maxRetries) {
+          retry();
+        } else {
+          console.error(`Max retries exceeded for image: ${name}`);
+        }
       },
     });
-  }
+  };
+
+  retry();
 }
+
 
 function DownloadAllImagesAndVideos() {
   const images = document.querySelectorAll('.post__image');
@@ -133,8 +138,7 @@ function DownloadAllImagesAndVideos() {
   const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
   const artistName = document.querySelector('.post__user-name').textContent.trim();
 
-
-  let total = images.length;
+  let total = images.length; // Start with the number of images
   let count = 0;
 
   // Download images and GIFs
@@ -295,27 +299,30 @@ function setDownloadComplete() {
   });
 
   const DIV = document.querySelectorAll('.post__thumbnail');
-  const parentDiv = DIV[0].parentNode;
+  const parentDiv = DIV[0]?.parentNode;
+
+  const downloadAllContainer = document.createElement('div');
+  downloadAllContainer.style.display = 'inline-flex';
 
   const downloadAllButton = newToggle(DLALL, DownloadAllImagesAndVideos);
   const downloadStatus = document.createElement('span');
   downloadStatus.id = 'downloadStatus';
   downloadStatus.textContent = 'Waiting for images to load';
 
-  const downloadAllContainer = document.createElement('div');
-  downloadAllContainer.style.display = 'inline-flex';
   downloadAllContainer.append(downloadAllButton, downloadStatus);
 
-  for (let i = 0; i < DIV.length; i++) {
-    const newDiv = document.createElement('div');
-    newDiv.append(newToggle(WIDTH, resizer), newToggle(HEIGHT, resizer), newToggle(FULL, resizer), newToggle(DL, downloadImg), newToggle(RM, removeImg));
-    parentDiv.insertBefore(newDiv, DIV[i]);
+  if (parentDiv) {
+    for (let i = 0; i < DIV.length; i++) {
+      const newDiv = document.createElement('div');
+      newDiv.append(newToggle(WIDTH, resizer), newToggle(HEIGHT, resizer), newToggle(FULL, resizer), newToggle(DL, downloadImg), newToggle(RM, removeImg));
+      parentDiv.insertBefore(newDiv, DIV[i]);
+    }
   }
 
   Height();
-  refreshInterval = setInterval(refreshImages, 3000);
+  refreshInterval = setInterval(refreshImages, 5000);
 
   const postActions = document.querySelector('.post__actions');
   postActions.append(newToggle(WIDTH, Width), newToggle(HEIGHT, Height), newToggle(FULL, Full));
-  postActions.insertAdjacentElement('beforeend', downloadAllContainer);
+  postActions.append(downloadAllContainer);
 })();
