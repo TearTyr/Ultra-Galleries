@@ -185,53 +185,18 @@ function setDownloadComplete() {
   }
 }
 
-function loadImages() {
-  const images = document.querySelectorAll('.post__image');
-  const totalImages = images.length;
-  let count = 0;
-
-  images.forEach((img) => {
-    img.addEventListener('load', function () {
-      count++;
-      updateStatus(count, totalImages);
-      if (count === totalImages) {
-        updateStatus();
-      }
-    });
-
-    img.addEventListener('error', function () {
-      count++;
-      updateStatus(count, totalImages);
-      if (count === totalImages) {
-        updateStatus();
-      }
-    });
-
-    const originalUrl = img.src;
-
-    if (
-      originalUrl.includes('static') ||
-      originalUrl.includes('icon') ||
-      originalUrl.includes('icons') ||
-      originalUrl.includes('banners')
-    ) {
-      count++;
-      updateStatus(count, totalImages);
-      if (count === totalImages) {
-        updateStatus();
-      }
-    } else {
-      const convertedUrl = originalUrl.replace('/thumbnail/', '/').replace('img.', '');
-      img.src = convertedUrl;
-    }
-  });
-}
-
-
 (function () {
   'use strict';
 
-  document.querySelectorAll('a.fileThumb.image-link img').forEach((img) => (img.className = 'post__image'));
+    document.querySelectorAll('a.fileThumb.image-link img').forEach(img => (img.className = 'post__image'));
+
+    let A = document.querySelectorAll('a.fileThumb.image-link');
+    let IMG = document.querySelectorAll('.post__image');
+    for (let i = 0; i < A.length; i++) {
+        IMG[i].setAttribute('src', A[i].getAttribute('href'));
+        IMG[i].test = i;
+        A[i].outerHTML = A[i].innerHTML;
+    }
 
   const DIV = document.querySelectorAll('.post__thumbnail');
   const parentDiv = DIV[0]?.parentNode;
@@ -246,7 +211,6 @@ function loadImages() {
 
   ContainerStatus.append(downloadAllButton, Status);
 
-  loadImages();
   Height();
 
   if (parentDiv) {
