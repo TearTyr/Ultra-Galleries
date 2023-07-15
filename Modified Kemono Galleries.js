@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Kemono Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      1.6.2
+// @version      1.6.3
 // @description  Load original resolution, toggle fitted zoom views, remove photos, and batch download images and videos. Can't do cross-origin downloads with JS alone.
 // @author       ntf
 // MODIFIED BY MERI
@@ -12,9 +12,6 @@
 // @icon         https://kemono.party/static/menu/recent.svg
 // @grant        GM_download
 // @grant        GM_info
-// @grant        GM_setValue
-// @grant        GM_getValue
-// @grant        GM_xmlhttpRequest
 // @license      Unlicense
 // ==/UserScript==
 
@@ -99,22 +96,35 @@ function downloadImg(evt) {
     });
   }
 }
-function downloadVideo(evt) {
-  evt.preventDefault();
-  const videoLink = evt.currentTarget;
-  const videoSrc = videoLink.getAttribute('href');
-  const videoName = videoLink.dataset.fileName.replace(/[\\/:*?"<>|]/g, '-');
 
-  GM_download({
-    url: videoSrc,
-    name: videoName,
-    onload: function () {
-      console.log('Video downloaded successfully:', videoName);
-    },
-    onerror: function (error) {
-      console.error('Failed to download video:', videoName, error);
-    },
-  });
+function downloadImg(evt) {
+  evt.preventDefault();
+  const img = evt.currentTarget.parentNode.nextSibling?.lastElementChild;
+  if (img) {
+    const imgSrc = img.getAttribute('src');
+    const titleElement = document.querySelector('.post__title');
+    const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
+    const artistName = document.querySelector('.post__user-name').textContent.trim();
+    const extension = imgSrc.split('.').pop(); // Get the file extension
+
+    let imgName;
+    if (extension.toLowerCase() === 'gif') {
+      imgName = `${artistName}-${title}.gif`.replace(/[\\/:*?"<>|]/g, '-');
+    } else {
+      imgName = `${artistName}-${title}.png`.replace(/[\\/:*?"<>|]/g, '-');
+    }
+
+    GM_download({
+      url: imgSrc,
+      name: imgName,
+      onload: function () {
+        console.log('Image downloaded successfully:', imgName);
+      },
+      onerror: function (error) {
+        console.error('Failed to download image:', imgName, error);
+      },
+    });
+  }
 }
 
 function DownloadAllImagesAndVideos() {
@@ -127,10 +137,17 @@ function DownloadAllImagesAndVideos() {
   let total = images.length;
   let count = 0;
 
-  // Download images
+  // Download images and GIFs
   images.forEach((img, index) => {
     const imgSrc = img.getAttribute('src');
-    const imgName = `${title}_${artistName}_${index}.png`.replace(/[\\/:*?"<>|]/g, '-');
+    const extension = imgSrc.split('.').pop(); // Get the file extension
+
+    let imgName;
+    if (extension.toLowerCase() === 'gif') {
+      imgName = `${artistName}-${title}_${index}.gif`.replace(/[\\/:*?"<>|]/g, '-');
+    } else {
+      imgName = `${artistName}-${title}_${index}.png`.replace(/[\\/:*?"<>|]/g, '-');
+    }
 
     GM_download({
       url: imgSrc,
@@ -185,6 +202,7 @@ function DownloadAllImagesAndVideos() {
   });
 }
 
+
 let refreshInterval;
 
 function refreshImages() {
@@ -207,6 +225,28 @@ function refreshImages() {
     } else {
       img.addEventListener('load', checkImageLoadStatus);
       img.addEventListener('error', checkImageLoadStatus);
+    }
+  });
+
+  const gifs = document.querySelectorAll('.post__image[src$=".gif"]');
+  const totalGifs = gifs.length;
+  let loadedGifs = 0;
+
+  const checkGifLoadStatus = () => {
+    loadedGifs++;
+    updateDownloadStatus(loadedImages + loadedGifs, totalImages + totalGifs);
+
+    if (loadedGifs === totalGifs) {
+      clearInterval(refreshInterval);
+    }
+  };
+
+  gifs.forEach((gif) => {
+    if (gif.complete) {
+      checkGifLoadStatus();
+    } else {
+      gif.addEventListener('load', checkGifLoadStatus);
+      gif.addEventListener('error', checkGifLoadStatus);
     }
   });
 }
