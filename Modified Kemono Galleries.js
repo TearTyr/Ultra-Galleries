@@ -195,7 +195,7 @@ function updateStatusImage() {
         imageStatusUpdated = true;
       }
     }
-    
+
   }
 }
 
@@ -236,12 +236,12 @@ function loadImage(img, retryCount) {
 }
 
 function retryLoadImage(img, retryCount) {
-  const maxRetries = 10;
+  const maxRetries = 3;
   if (retryCount <= maxRetries) {
     console.log(`Retrying image load: ${img.getAttribute('src')} (Attempt ${retryCount})`);
     setTimeout(function () {
       loadImage(img, retryCount);
-    }, 50);
+    }, 1250);
   } else {
     console.error(`Max retries exceeded for image: ${img.getAttribute('src')}`);
     showRetryOption(img);
@@ -253,12 +253,15 @@ function loadImages() {
   const images = document.querySelectorAll('.post__image');
   totalImages = images.length; // Update the total number of images
 
-  images.forEach((img) => {
-    loadImage(img, 1);
+  images.forEach((img, index) => {
+    setTimeout(function () {
+      loadImage(img, 1);
+    }, index * 2500); // Adjust the delay value as needed (e.g., 2500 milliseconds for a 2.5-second delay)
   });
 
   downloadedCount = totalImages; // Set downloaded count to total images initially
 }
+
 
 (function () {
   'use strict';
@@ -275,7 +278,7 @@ function loadImages() {
       IMG[index].setAttribute('src', A[index].getAttribute('href'));
       IMG[index].test = index;
       A[index].outerHTML = A[index].innerHTML;
-    }, i * 300, i);
+    }, i * 3500, i);
   }
 
   // Extract video attachment information
