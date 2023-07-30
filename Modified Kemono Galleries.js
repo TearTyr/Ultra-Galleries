@@ -12,14 +12,22 @@
 // @grant        GM_download
 // @grant        GM_info
 // @grant        GM_addValueChangeListener
-// @grant        GM_xmlhttpRequest
-// @require      https://cdn.bootcdn.net/ajax/libs/jquery/2.2.4/jquery.min.js
-// @require      https://cdn.bootcss.com/jszip/3.1.4/jszip.min.js
+// @grant       unsafeWindow
+// @grant       GM.xmlHttpRequest
+// @grant       GM.setClipboard
+// @grant       GM.setValue
+// @grant       GM.getValue
+// @grant       GM_addStyle
+// @grant       GM_xmlhttpRequest
+// @grant       GM_setClipboard
+// @grant       GM_setValue
+// @grant       GM_getValue
+// @require     https://cdn.bootcdn.net/ajax/libs/jquery/2.2.4/jquery.min.js
+// @require     https://cdn.bootcss.com/jszip/3.1.4/jszip.min.js
+// @require     https://cdn.bootcss.com/FileSaver.js/1.3.2/FileSaver.min.js
 // @run-at      document-end
-// @source       https://sleazyfork.org/en/scripts/460064-better-kemono-galleries
-// @source       https://sleazyfork.org/en/scripts/469063-%E8%BC%89%E5%85%A5kemono-party%E8%88%87coomer-party%E5%8E%9F%E5%A7%8B%E5%9C%96%E6%AA%94\
+// @noframes
 // ==/UserScript==
-//
 // Define constants for button labels
 const DL = '【DOWNLOAD】';
 const DLALL = '【DL ALL】';
@@ -323,7 +331,7 @@ function loadImages() {
       IMG[index].setAttribute('src', A[index].getAttribute('href'));
       IMG[index].test = index;
       A[index].outerHTML = A[index].innerHTML;
-    }, i * 3500, i);
+    }, i * 200, i);
   }
 
   // Extract video attachment information
