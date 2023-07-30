@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Kemono Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      1.6.7
+// @version      1.7
 // @description  Load original resolution, toggle fitted zoom views, remove photos, and batch download images and videos. Can't do cross-origin downloads with JS alone.
 // @author       Meri
 // @match        *://kemono.party/*/user/*/post/*
@@ -13,10 +13,16 @@
 // @grant        GM_info
 // @grant        GM_xmlhttpRequest
 // @license      Unlicense
+// @grant       unsafeWindow
+// @require     https://cdn.bootcdn.net/ajax/libs/jquery/2.2.4/jquery.min.js
+// @require     https://cdn.bootcss.com/jszip/3.1.4/jszip.min.js
+// @require     https://cdn.bootcss.com/FileSaver.js/1.3.2/FileSaver.min.js
+// @run-at      document-end
 // @source       https://sleazyfork.org/en/scripts/460064-better-kemono-galleries
 // @source       https://sleazyfork.org/en/scripts/469063-%E8%BC%89%E5%85%A5kemono-party%E8%88%87coomer-party%E5%8E%9F%E5%A7%8B%E5%9C%96%E6%AA%94
+// @noframes
 // ==/UserScript==
-
+//
 // Define constants for button labels
 const DL = '【DOWNLOAD】';
 const DLALL = '【DL ALL】';
@@ -102,84 +108,126 @@ function downloadImg(evt) {
   }
 }
 
-function DownloadAllImagesAndVideos() {
-  const images = document.querySelectorAll('.post__image');
-  const titleElement = document.querySelector('.post__title');
-  const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
-  const artistName = document.querySelector('.post__user-name').textContent.trim();
-
-  let total = totalImages; // Use the totalImages variable instead of images.length
-  downloadedCount = 0; // Reset the downloaded count
-
-  // Update the status to show "Downloading images"
-  const Status = document.getElementById('Status');
-  if (Status) {
-    Status.textContent = `Downloading images (${downloadedCount}/${total})...`;
-  }
-
-  // Download images and GIFs
-  images.forEach((img, index) => {
-    const imgSrc = img.getAttribute('src');
-    const extension = imgSrc.split('.').pop(); // Get the file extension
-    let imgName;
-    if (extension.toLowerCase() === 'gif') {
-      imgName = `${artistName}-${title}_${index}.gif`.replace(/[\\/:*?"<>|]/g, '-');
-    } else {
-      imgName = `${artistName}-${title}_${index}.png`.replace(/[\\/:*?"<>|]/g, '-');
-    }
-
-    GM_download({
+// Function to add an image as a file to the ZIP
+function addImageToZip(zip, imgSrc, fileName) {
+  return new Promise((resolve, reject) => {
+    GM.xmlHttpRequest({
+      method: 'GET',
       url: imgSrc,
-      name: imgName,
-      onload: function () {
-        console.log('Image downloaded successfully:', imgName);
-        downloadedCount++; // Increment downloaded count
-        updateStatusDownload(); // Update status after each download
-        if (downloadedCount === total) {
-          updateStatusDownload();
+      responseType: 'blob',
+      headers: { referer: 'https://kemono.party/' }, // Modify the referer accordingly
+      onload: function (response) {
+        if (response.status === 200) {
+          zip.file(fileName, response.response); // Add the image as a file to the ZIP
+          resolve();
+        } else {
+          reject(new Error(`Failed to download image: ${imgSrc}`));
         }
       },
       onerror: function (error) {
-        console.error('Failed to download image:', imgName, error);
-        downloadedCount++; // Increment downloaded count even on error
-        updateStatusDownload(); // Update status after each download
-        if (downloadedCount === total) {
-          updateStatusDownload();
-        }
-      },
-    });
-  });
-
-  // Download videos
-  const attachmentLinks = document.querySelectorAll('.post__attachment-link');
-  total += attachmentLinks.length;
-
-  attachmentLinks.forEach((link) => {
-    const videoSrc = link.getAttribute('href');
-    const videoName = link.dataset.fileName.replace(/[\\/:*?"<>|]/g, '-');
-
-    GM_download({
-      url: videoSrc,
-      name: videoName,
-      onload: function () {
-        console.log('Video downloaded successfully:', videoName);
-        downloadedCount++; // Increment downloaded count
-        updateStatusDownload(); // Update status after each download
-        if (downloadedCount === total) {
-          updateStatusDownload();
-        }
-      },
-      onerror: function (error) {
-        console.error('Failed to download video:', videoName, error);
-        downloadedCount++; // Increment downloaded count even on error
-        updateStatusDownload(); // Update status after each download
-        if (downloadedCount === total) {
-          updateStatusDownload();
-        }
+        reject(error);
       },
     });
   });
 }
+
+// Function to add a video as a file to the ZIP
+function addVideoToZip(zip, videoSrc, fileName) {
+  return new Promise((resolve, reject) => {
+    GM.xmlHttpRequest({
+      method: 'GET',
+      url: videoSrc,
+      responseType: 'blob',
+      headers: { referer: 'https://kemono.party/' }, // Modify the referer accordingly
+      onload: function (response) {
+        if (response.status === 200) {
+          zip.file(fileName, response.response); // Add the video as a file to the ZIP
+          resolve();
+        } else {
+          reject(new Error(`Failed to download video: ${videoSrc}`));
+        }
+      },
+      onerror: function (error) {
+        reject(error);
+      },
+    });
+  });
+}
+
+function DownloadAllImagesAndVideos() {
+  const images = document.querySelectorAll('.post__image');
+  const attachmentLinks = document.querySelectorAll('.post__attachment-link');
+  const titleElement = document.querySelector('.post__title');
+  const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
+  const artistName = document.querySelector('.post__user-name').textContent.trim();
+
+  let total = images.length + attachmentLinks.length;
+  let downloadedCount = 0;
+
+  // Create a new instance of JSZip
+  const zip = new JSZip();
+
+  // Function to add an image as a file to the ZIP
+  function addImageToZip(imgSrc, fileName) {
+    return new Promise((resolve, reject) => {
+      GM.xmlHttpRequest({
+        method: 'GET',
+        url: imgSrc,
+        responseType: 'blob',
+        headers: { referer: 'https://kemono.party/' }, // Modify the referer accordingly
+        onload: function (response) {
+          if (response.status === 200) {
+            zip.file(fileName, response.response); // Add the image as a file to the ZIP
+            resolve();
+          } else {
+            reject(new Error(`Failed to download image: ${imgSrc}`));
+          }
+        },
+        onerror: function (error) {
+          reject(error);
+        },
+      });
+    });
+  }
+
+  // Add each image to the ZIP
+  const imagePromises = [];
+  images.forEach((img, index) => {
+    const imgSrc = img.getAttribute('src');
+    const extension = imgSrc.split('.').pop();
+    let imgName = `${artistName}-${title}_${index}.${extension}`.replace(/[\\/:*?"<>|]/g, '-');
+
+    imagePromises.push(addImageToZip(imgSrc, imgName));
+  });
+
+  // Add each video to the ZIP
+  const videoPromises = [];
+  attachmentLinks.forEach((link, index) => {
+    const videoSrc = link.getAttribute('href');
+    const videoName = link.dataset.fileName.replace(/[\\/:*?"<>|]/g, '-');
+
+    videoPromises.push(addImageToZip(videoSrc, videoName));
+  });
+
+  // Update the status to show "Downloading images"
+  updateStatusDownload(downloadedCount, total);
+
+  // Wait for all images and videos to be added to the ZIP
+  Promise.all([...imagePromises, ...videoPromises])
+    .then(() => {
+      // Save the ZIP file when all files are added
+      zip.generateAsync({ type: 'blob' })
+        .then(function (content) {
+          const zipFileName = `${artistName}-${title}.zip`.replace(/[\\/:*?"<>|]/g, '-');
+          saveAs(content, zipFileName);
+        });
+    })
+    .catch((error) => {
+      console.error(error);
+      updateStatusDownload(downloadedCount, total);
+    });
+}
+
 
 function updateStatusImage() {
   const Status = document.getElementById('Status');
