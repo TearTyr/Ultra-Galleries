@@ -90,31 +90,8 @@ function removeImg(evt) {
   evt.currentTarget.parentNode.remove();
 }
 
-function downloadImg(evt) {
-  evt.preventDefault();
-  const img = evt.currentTarget.parentNode.nextSibling?.lastElementChild;
-  if (img) {
-    const imgSrc = img.getAttribute('src');
-    const titleElement = document.querySelector('.post__title');
-    const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
-    const artistName = document.querySelector('.post__user-name').textContent.trim();
-    const imgName = `${artistName}-${title}.png`.replace(/[\\/:*?"<>|]/g, '-');
-
-    GM_download({
-      url: imgSrc,
-      name: imgName,
-      onload: function () {
-        console.log('Image downloaded successfully:', imgName);
-      },
-      onerror: function (error) {
-        console.error('Failed to download image:', imgName, error);
-      },
-    });
-  }
-}
-
-// Function to add an image as a file to the ZIP
-function addImageToZip(zip, imgSrc, fileName) {
+// add image to zip v2 now retires to download failed images
+function addImageToZip(imgSrc, fileName, retryCount = 0, maxRetries = 3) {
   return new Promise((resolve, reject) => {
     GM.xmlHttpRequest({
       method: 'GET',
@@ -124,13 +101,23 @@ function addImageToZip(zip, imgSrc, fileName) {
       onload: function (response) {
         if (response.status === 200) {
           zip.file(fileName, response.response); // Add the image as a file to the ZIP
+          downloadedCount++; // Increment downloaded count on successful add
           resolve();
         } else {
           reject(new Error(`Failed to download image: ${imgSrc}`));
         }
       },
       onerror: function (error) {
-        reject(error);
+        if (retryCount < maxRetries) {
+          console.warn(`Failed to download image: ${imgSrc}, retrying... (Attempt ${retryCount + 1})`);
+          setTimeout(function () {
+            addImageToZip(imgSrc, fileName, retryCount + 1, maxRetries)
+              .then(resolve)
+              .catch(reject);
+          }, 1250);
+        } else {
+          reject(error);
+        }
       },
     });
   });
@@ -157,6 +144,35 @@ function addVideoToZip(zip, videoSrc, fileName) {
       },
     });
   });
+}
+
+
+// =================================[idk what to add i just needed a sperator]================================= \\
+
+
+function downloadImg(evt) {
+  evt.preventDefault();
+  const img = evt.currentTarget.parentNode.nextSibling?.lastElementChild;
+  if (img) {
+    const imgSrc = img.getAttribute('src');
+    const titleElement = document.querySelector('.post__title');
+    const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
+    const artistName = document.querySelector('.post__user-name').textContent.trim();
+    const imgName = `${artistName}-${title}.png`.replace(/[\\/:*?"<>|]/g, '-');
+
+    GM_download({
+      url: imgSrc,
+      name: imgName,
+      onload: function () {
+        console.log('Image downloaded successfully:', imgName);
+        downloadedCount++; // Increment downloaded count on successful download
+        updateDownloadStatus();
+      },
+      onerror: function (error) {
+        console.error('Failed to download image:', imgName, error);
+      },
+    });
+  }
 }
 
 function DownloadAllImagesAndVideos() {
@@ -200,7 +216,7 @@ function DownloadAllImagesAndVideos() {
   images.forEach((img, index) => {
     const imgSrc = img.getAttribute('src');
     const extension = imgSrc.split('.').pop();
-    let imgName = `${artistName}-${title}_${index}.${extension}`.replace(/[\\/:*?"<>|]/g, '-');
+    let imgName = `${artistName}-${title}-${index}.${extension}`.replace(/[\\/:*?"<>|]/g, '-');
 
     imagePromises.push(addImageToZip(imgSrc, imgName));
   });
@@ -214,9 +230,6 @@ function DownloadAllImagesAndVideos() {
     videoPromises.push(addImageToZip(videoSrc, videoName));
   });
 
-  // Update the status to show "Downloading images"
-  updateStatusDownload(downloadedCount, total);
-
   // Wait for all images and videos to be added to the ZIP
   Promise.all([...imagePromises, ...videoPromises])
     .then(() => {
@@ -225,46 +238,49 @@ function DownloadAllImagesAndVideos() {
         .then(function (content) {
           const zipFileName = `${artistName}-${title}.zip`.replace(/[\\/:*?"<>|]/g, '-');
           saveAs(content, zipFileName);
+        })
+        .finally(() => {
+          updateStatus(`Done Downloading and adding to a zip! Total: ${total}`);
         });
     })
     .catch((error) => {
       console.error(error);
-      updateStatusDownload(downloadedCount, total);
+      updateStatus(`Failed to download and add to zip.`);
     });
 }
 
-
-function updateStatusImage() {
+// =================================[Status bar]============================= \\
+function updateStatus(text) {
   const Status = document.getElementById('Status');
   if (Status) {
-    if (imageCount === totalImages || imageStatusUpdated === true) {
-      Status.textContent = `Images Done Loading! Total: ${totalImages}`;
-      if (!imageStatusUpdated){
-        imageStatusUpdated = false;
-      }
-    } else {
-      Status.textContent = `Loading images (${imageCount}/${totalImages})...`;
-      if (imageCount === totalImages) {
-        imageStatusUpdated = true;
-      }
-    }
-
+    Status.textContent = text;
   }
 }
 
-function updateStatusDownload() {
-  const Status = document.getElementById('Status');
-  if (Status) {
-    if (downloadedCount === totalImages) {
-      Status.textContent = `Done Downloading! Total: ${totalImages}`;
-    } else {
-      Status.textContent = `Downloading images (${downloadedCount}/${totalImages})...`;
-    }
-  }
+// To update the image Progress
+function updateImageLoadingStatus() {
+  const imageLoadingStatus = imageCount === totalImages || imageStatusUpdated === true
+    ? `Images Done Loading! Total: ${totalImages}`
+    : `Loading images (${imageCount}/${totalImages})...`;
+
+  updateStatus(imageLoadingStatus);
 }
 
-function loadImage(img, retryCount) {
+// To update the DL progress
+function updateDownloadStatus() {
+  const downloadStatus = downloadedCount === totalImages
+    ? `Downloading...`
+    : `Done Downloading!`;
+
+  updateStatus(downloadStatus);
+}
+
+// =================================[img loader thingy]================================= \\
+
+function loadImageWithRetries(img, retryCount) {
+  const maxRetries = 3;
   const imgSrc = img.getAttribute('src');
+
   GM_xmlhttpRequest({
     method: 'HEAD',
     url: imgSrc,
@@ -273,34 +289,36 @@ function loadImage(img, retryCount) {
       if (status === 200) {
         console.log('Image loaded successfully:', imgSrc);
         imageCount++; // Increment image count on successful load
+        updateImageLoadingStatus();
       } else if (status === 429) {
         console.warn('Image rate limited:', imgSrc);
-        retryLoadImage(img, retryCount + 1);
+        if (retryCount <= maxRetries) {
+          const delay = Math.pow(2, retryCount) * 1000; // Exponential backoff with seconds
+          console.log(`Retrying image load: ${img.getAttribute('src')} in ${delay / 1000} seconds (Attempt ${retryCount})`);
+          setTimeout(function () {
+            loadImageWithRetries(img, retryCount + 1);
+          }, delay);
+        } else {
+          console.error(`Max retries exceeded for image: ${img.getAttribute('src')}`);
+          showRetryOption(img);
+          updateStatus(`Image loading failed: ${img.getAttribute('src')}`);
+        }
       } else {
         console.error('Failed to load image:', imgSrc, 'Status:', status);
+        updateImageLoadingStatus();
+        // Try to force load the image on error
+        forceLoadImage(imgSrc);
       }
-      updateStatusImage(); // Update status after each image load
     },
     onerror: function (error) {
       console.error('Failed to load image:', imgSrc, error);
-      updateStatusImage(); // Update status even if there's an error
+      updateImageLoadingStatus();
+      // Try to force load the image on error
+      forceLoadImage(imgSrc);
     },
   });
 }
 
-function retryLoadImage(img, retryCount) {
-  const maxRetries = 3;
-  if (retryCount <= maxRetries) {
-    console.log(`Retrying image load: ${img.getAttribute('src')} (Attempt ${retryCount})`);
-    setTimeout(function () {
-      loadImage(img, retryCount);
-    }, 1250);
-  } else {
-    console.error(`Max retries exceeded for image: ${img.getAttribute('src')}`);
-    showRetryOption(img);
-    updateStatusImage(); // Update status even if max retries exceeded
-  }
-}
 
 function loadImages() {
   const images = document.querySelectorAll('.post__image');
@@ -308,13 +326,12 @@ function loadImages() {
 
   images.forEach((img, index) => {
     setTimeout(function () {
-      loadImage(img, 1);
-    }, index * 2500); // Adjust the delay value as needed (e.g., 2500 milliseconds for a 2.5-second delay)
+      loadImageWithRetries(img, 1);
+    }, index * 2500); // Adjust the delay value as needed
   });
-
-  downloadedCount = totalImages; // Set downloaded count to total images initially
 }
 
+// =================================[END]================================= \\
 
 (function () {
   'use strict';
@@ -331,7 +348,7 @@ function loadImages() {
       IMG[index].setAttribute('src', A[index].getAttribute('href'));
       IMG[index].test = index;
       A[index].outerHTML = A[index].innerHTML;
-    }, i * 200, i);
+    }, i * 10, i);
   }
 
   // Extract video attachment information
@@ -347,12 +364,13 @@ function loadImages() {
   const ContainerStatus = document.createElement('div');
   ContainerStatus.style.display = 'inline-flex';
 
+  // Create the download all button and status elements
   const downloadAllButton = newToggle(DLALL, DownloadAllImagesAndVideos);
-  const Status = document.createElement('span');
-  Status.id = 'Status';
-  Status.textContent = '';
+  const statusElement = document.createElement('span');
+  statusElement.id = 'Status';
+  statusElement.textContent = '';
 
-  ContainerStatus.append(downloadAllButton, Status);
+  ContainerStatus.append(downloadAllButton, statusElement);
 
   if (parentDiv) {
     for (let i = 0; i < DIV.length; i++) {
