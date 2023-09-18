@@ -1,10 +1,9 @@
 // ==UserScript==
 // @name         Ultra Kemono Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      1.6.3
+// @version      1.7
 // @description  Load original resolution, toggle fitted zoom views, remove photos, and batch download images and videos. Can't do cross-origin downloads with JS alone.
-// @author       ntf
-// MODIFIED BY MERI
+// @author       Meri
 // @match        *://kemono.party/*/user/*/post/*
 // @match        *://kemono.su/*/user/*/post/*
 // @match        *://coomer.party/*/user/*/post/*
@@ -12,10 +11,23 @@
 // @icon         https://kemono.party/static/menu/recent.svg
 // @grant        GM_download
 // @grant        GM_info
-// @license      Unlicense
+// @grant        GM_addValueChangeListener
+// @grant       unsafeWindow
+// @grant       GM.xmlHttpRequest
+// @grant       GM.setClipboard
+// @grant       GM.setValue
+// @grant       GM.getValue
+// @grant       GM_addStyle
+// @grant       GM_xmlhttpRequest
+// @grant       GM_setClipboard
+// @grant       GM_setValue
+// @grant       GM_getValue
+// @require     https://cdn.bootcdn.net/ajax/libs/jquery/2.2.4/jquery.min.js
+// @require     https://cdn.bootcss.com/jszip/3.1.4/jszip.min.js
+// @require     https://cdn.bootcss.com/FileSaver.js/1.3.2/FileSaver.min.js
+// @run-at      document-end
+// @noframes
 // ==/UserScript==
-
-
 // Define constants for button labels
 const DL = '【DOWNLOAD】';
 const DLALL = '【DL ALL】';
@@ -23,6 +35,12 @@ const FULL = '【FULL】';
 const HEIGHT = '【FILL HEIGHT】';
 const RM = '【REMOVE】';
 const WIDTH = '【FILL WIDTH】';
+
+// Define variables for counts
+let imageCount = 0;
+let downloadedCount = 0;
+let totalImages = 0;
+let imageStatusUpdated = false; // Track whether the image status has been updated
 
 function Height() {
   document.querySelectorAll('.post__image').forEach((img) => height(img));
@@ -72,6 +90,66 @@ function removeImg(evt) {
   evt.currentTarget.parentNode.remove();
 }
 
+// add image to zip v2 now retires to download failed images
+function addImageToZip(imgSrc, fileName, retryCount = 0, maxRetries = 3) {
+  return new Promise((resolve, reject) => {
+    GM.xmlHttpRequest({
+      method: 'GET',
+      url: imgSrc,
+      responseType: 'blob',
+      headers: { referer: 'https://kemono.party/' }, // Modify the referer accordingly
+      onload: function (response) {
+        if (response.status === 200) {
+          zip.file(fileName, response.response); // Add the image as a file to the ZIP
+          downloadedCount++; // Increment downloaded count on successful add
+          resolve();
+        } else {
+          reject(new Error(`Failed to download image: ${imgSrc}`));
+        }
+      },
+      onerror: function (error) {
+        if (retryCount < maxRetries) {
+          console.warn(`Failed to download image: ${imgSrc}, retrying... (Attempt ${retryCount + 1})`);
+          setTimeout(function () {
+            addImageToZip(imgSrc, fileName, retryCount + 1, maxRetries)
+              .then(resolve)
+              .catch(reject);
+          }, 1250);
+        } else {
+          reject(error);
+        }
+      },
+    });
+  });
+}
+
+// Function to add a video as a file to the ZIP
+function addVideoToZip(zip, videoSrc, fileName) {
+  return new Promise((resolve, reject) => {
+    GM.xmlHttpRequest({
+      method: 'GET',
+      url: videoSrc,
+      responseType: 'blob',
+      headers: { referer: 'https://kemono.party/' }, // Modify the referer accordingly
+      onload: function (response) {
+        if (response.status === 200) {
+          zip.file(fileName, response.response); // Add the video as a file to the ZIP
+          resolve();
+        } else {
+          reject(new Error(`Failed to download video: ${videoSrc}`));
+        }
+      },
+      onerror: function (error) {
+        reject(error);
+      },
+    });
+  });
+}
+
+
+// =================================[idk what to add i just needed a sperator]================================= \\
+
+
 function downloadImg(evt) {
   evt.preventDefault();
   const img = evt.currentTarget.parentNode.nextSibling?.lastElementChild;
@@ -80,8 +158,6 @@ function downloadImg(evt) {
     const titleElement = document.querySelector('.post__title');
     const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
     const artistName = document.querySelector('.post__user-name').textContent.trim();
-
-
     const imgName = `${artistName}-${title}.png`.replace(/[\\/:*?"<>|]/g, '-');
 
     GM_download({
@@ -89,36 +165,8 @@ function downloadImg(evt) {
       name: imgName,
       onload: function () {
         console.log('Image downloaded successfully:', imgName);
-      },
-      onerror: function (error) {
-        console.error('Failed to download image:', imgName, error);
-      },
-    });
-  }
-}
-
-function downloadImg(evt) {
-  evt.preventDefault();
-  const img = evt.currentTarget.parentNode.nextSibling?.lastElementChild;
-  if (img) {
-    const imgSrc = img.getAttribute('src');
-    const titleElement = document.querySelector('.post__title');
-    const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
-    const artistName = document.querySelector('.post__user-name').textContent.trim();
-    const extension = imgSrc.split('.').pop(); // Get the file extension
-
-    let imgName;
-    if (extension.toLowerCase() === 'gif') {
-      imgName = `${artistName}-${title}.gif`.replace(/[\\/:*?"<>|]/g, '-');
-    } else {
-      imgName = `${artistName}-${title}.png`.replace(/[\\/:*?"<>|]/g, '-');
-    }
-
-    GM_download({
-      url: imgSrc,
-      name: imgName,
-      onload: function () {
-        console.log('Image downloaded successfully:', imgName);
+        downloadedCount++; // Increment downloaded count on successful download
+        updateDownloadStatus();
       },
       onerror: function (error) {
         console.error('Failed to download image:', imgName, error);
@@ -129,147 +177,161 @@ function downloadImg(evt) {
 
 function DownloadAllImagesAndVideos() {
   const images = document.querySelectorAll('.post__image');
+  const attachmentLinks = document.querySelectorAll('.post__attachment-link');
   const titleElement = document.querySelector('.post__title');
   const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
   const artistName = document.querySelector('.post__user-name').textContent.trim();
 
+  let total = images.length + attachmentLinks.length;
+  let downloadedCount = 0;
 
-  let total = images.length;
-  let count = 0;
+  // Create a new instance of JSZip
+  const zip = new JSZip();
 
-  // Download images and GIFs
+  // Function to add an image as a file to the ZIP
+  function addImageToZip(imgSrc, fileName) {
+    return new Promise((resolve, reject) => {
+      GM.xmlHttpRequest({
+        method: 'GET',
+        url: imgSrc,
+        responseType: 'blob',
+        headers: { referer: 'https://kemono.party/' }, // Modify the referer accordingly
+        onload: function (response) {
+          if (response.status === 200) {
+            zip.file(fileName, response.response); // Add the image as a file to the ZIP
+            resolve();
+          } else {
+            reject(new Error(`Failed to download image: ${imgSrc}`));
+          }
+        },
+        onerror: function (error) {
+          reject(error);
+        },
+      });
+    });
+  }
+
+  // Add each image to the ZIP
+  const imagePromises = [];
   images.forEach((img, index) => {
     const imgSrc = img.getAttribute('src');
-    const extension = imgSrc.split('.').pop(); // Get the file extension
+    const extension = imgSrc.split('.').pop();
+    let imgName = `${artistName}-${title}-${index}.${extension}`.replace(/[\\/:*?"<>|]/g, '-');
 
-    let imgName;
-    if (extension.toLowerCase() === 'gif') {
-      imgName = `${artistName}-${title}_${index}.gif`.replace(/[\\/:*?"<>|]/g, '-');
-    } else {
-      imgName = `${artistName}-${title}_${index}.png`.replace(/[\\/:*?"<>|]/g, '-');
-    }
-
-    GM_download({
-      url: imgSrc,
-      name: imgName,
-      onload: function () {
-        console.log('Image downloaded successfully:', imgName);
-        updateDownloadStatus(++count, total);
-
-        if (count === total) {
-          setDownloadComplete();
-        }
-      },
-      onerror: function (error) {
-        console.error('Failed to download image:', imgName, error);
-        updateDownloadStatus(++count, total);
-
-        if (count === total) {
-          setDownloadComplete();
-        }
-      },
-    });
+    imagePromises.push(addImageToZip(imgSrc, imgName));
   });
 
-  // Download videos
-  const attachmentLinks = document.querySelectorAll('.post__attachment-link');
-  total += attachmentLinks.length;
-
-  attachmentLinks.forEach((link) => {
+  // Add each video to the ZIP
+  const videoPromises = [];
+  attachmentLinks.forEach((link, index) => {
     const videoSrc = link.getAttribute('href');
     const videoName = link.dataset.fileName.replace(/[\\/:*?"<>|]/g, '-');
 
-    GM_download({
-      url: videoSrc,
-      name: videoName,
-      onload: function () {
-        console.log('Video downloaded successfully:', videoName);
-        updateDownloadStatus(++count, total);
+    videoPromises.push(addImageToZip(videoSrc, videoName));
+  });
 
-        if (count === total) {
-          setDownloadComplete();
-        }
-      },
-      onerror: function (error) {
-        console.error('Failed to download video:', videoName, error);
-        updateDownloadStatus(++count, total);
-
-        if (count === total) {
-          setDownloadComplete();
-        }
-      },
+  // Wait for all images and videos to be added to the ZIP
+  Promise.all([...imagePromises, ...videoPromises])
+    .then(() => {
+      // Save the ZIP file when all files are added
+      zip.generateAsync({ type: 'blob' })
+        .then(function (content) {
+          const zipFileName = `${artistName}-${title}.zip`.replace(/[\\/:*?"<>|]/g, '-');
+          saveAs(content, zipFileName);
+        })
+        .finally(() => {
+          updateStatus(`Done Downloading and adding to a zip! Total: ${total}`);
+        });
+    })
+    .catch((error) => {
+      console.error(error);
+      updateStatus(`Failed to download and add to zip.`);
     });
+}
+
+// =================================[Status bar]============================= \\
+function updateStatus(text) {
+  const Status = document.getElementById('Status');
+  if (Status) {
+    Status.textContent = text;
+  }
+}
+
+// To update the image Progress
+function updateImageLoadingStatus() {
+  const imageLoadingStatus = imageCount === totalImages || imageStatusUpdated === true
+    ? `Images Done Loading! Total: ${totalImages}`
+    : `Loading images (${imageCount}/${totalImages})...`;
+
+  updateStatus(imageLoadingStatus);
+}
+
+// To update the DL progress
+function updateDownloadStatus() {
+  const downloadStatus = downloadedCount === totalImages
+    ? `Downloading...`
+    : `Done Downloading!`;
+
+  updateStatus(downloadStatus);
+}
+
+// =================================[img loader thingy]================================= \\
+
+function loadImageWithRetries(img, retryCount) {
+  const maxRetries = 3;
+  const imgSrc = img.getAttribute('src');
+
+  GM_xmlhttpRequest({
+    method: 'HEAD',
+    url: imgSrc,
+    onload: function (response) {
+      const status = response.status;
+      if (status === 200) {
+        console.log('Image loaded successfully:', imgSrc);
+        imageCount++; // Increment image count on successful load
+        updateImageLoadingStatus();
+      } else if (status === 429) {
+        console.warn('Image rate limited:', imgSrc);
+        if (retryCount <= maxRetries) {
+          const delay = Math.pow(2, retryCount) * 1000; // Exponential backoff with seconds
+          console.log(`Retrying image load: ${img.getAttribute('src')} in ${delay / 1000} seconds (Attempt ${retryCount})`);
+          setTimeout(function () {
+            loadImageWithRetries(img, retryCount + 1);
+          }, delay);
+        } else {
+          console.error(`Max retries exceeded for image: ${img.getAttribute('src')}`);
+          showRetryOption(img);
+          updateStatus(`Image loading failed: ${img.getAttribute('src')}`);
+        }
+      } else {
+        console.error('Failed to load image:', imgSrc, 'Status:', status);
+        updateImageLoadingStatus();
+        // Try to force load the image on error
+        forceLoadImage(imgSrc);
+      }
+    },
+    onerror: function (error) {
+      console.error('Failed to load image:', imgSrc, error);
+      updateImageLoadingStatus();
+      // Try to force load the image on error
+      forceLoadImage(imgSrc);
+    },
   });
 }
 
 
-let refreshInterval;
-
-function refreshImages() {
+function loadImages() {
   const images = document.querySelectorAll('.post__image');
-  const totalImages = images.length;
-  let loadedImages = 0;
+  totalImages = images.length; // Update the total number of images
 
-  const checkImageLoadStatus = () => {
-    loadedImages++;
-    updateDownloadStatus(loadedImages, totalImages);
-
-    if (loadedImages === totalImages) {
-      clearInterval(refreshInterval);
-    }
-  };
-
-  images.forEach((img) => {
-    if (img.complete) {
-      checkImageLoadStatus();
-    } else {
-      img.addEventListener('load', checkImageLoadStatus);
-      img.addEventListener('error', checkImageLoadStatus);
-    }
-  });
-
-  const gifs = document.querySelectorAll('.post__image[src$=".gif"]');
-  const totalGifs = gifs.length;
-  let loadedGifs = 0;
-
-  const checkGifLoadStatus = () => {
-    loadedGifs++;
-    updateDownloadStatus(loadedImages + loadedGifs, totalImages + totalGifs);
-
-    if (loadedGifs === totalGifs) {
-      clearInterval(refreshInterval);
-    }
-  };
-
-  gifs.forEach((gif) => {
-    if (gif.complete) {
-      checkGifLoadStatus();
-    } else {
-      gif.addEventListener('load', checkGifLoadStatus);
-      gif.addEventListener('error', checkGifLoadStatus);
-    }
+  images.forEach((img, index) => {
+    setTimeout(function () {
+      loadImageWithRetries(img, 1);
+    }, index * 2500); // Adjust the delay value as needed
   });
 }
 
-function updateDownloadStatus(count, total) {
-  const downloadStatus = document.getElementById('downloadStatus');
-  if (downloadStatus) {
-    if (count === 0) {
-      downloadStatus.textContent = 'Waiting for images to load';
-    } else if (count === total) {
-      downloadStatus.textContent = `Download Ready!`;
-    } else {
-      downloadStatus.textContent = `Downloading: ${count} / ${total}`;
-    }
-  }
-}
-
-function setDownloadComplete() {
-  const downloadStatus = document.getElementById('downloadStatus');
-  if (downloadStatus) {
-    downloadStatus.textContent = 'Download Complete';
-  }
-}
+// =================================[END]================================= \\
 
 (function () {
   'use strict';
@@ -280,11 +342,13 @@ function setDownloadComplete() {
   const A = document.querySelectorAll('a.fileThumb.image-link');
   const IMG = document.querySelectorAll('.post__image');
 
-  // Loop through each picture card
+  // Loop through each picture card to load the full image
   for (let i = 0; i < A.length; i++) {
-    IMG[i].setAttribute('src', A[i].getAttribute('href'));
-    IMG[i].test = i;
-    A[i].outerHTML = A[i].innerHTML;
+    setTimeout(function (index) {
+      IMG[index].setAttribute('src', A[index].getAttribute('href'));
+      IMG[index].test = index;
+      A[index].outerHTML = A[index].innerHTML;
+    }, i * 10, i);
   }
 
   // Extract video attachment information
@@ -295,27 +359,31 @@ function setDownloadComplete() {
   });
 
   const DIV = document.querySelectorAll('.post__thumbnail');
-  const parentDiv = DIV[0].parentNode;
+  const parentDiv = DIV[0]?.parentNode;
 
+  const ContainerStatus = document.createElement('div');
+  ContainerStatus.style.display = 'inline-flex';
+
+  // Create the download all button and status elements
   const downloadAllButton = newToggle(DLALL, DownloadAllImagesAndVideos);
-  const downloadStatus = document.createElement('span');
-  downloadStatus.id = 'downloadStatus';
-  downloadStatus.textContent = 'Waiting for images to load';
+  const statusElement = document.createElement('span');
+  statusElement.id = 'Status';
+  statusElement.textContent = '';
 
-  const downloadAllContainer = document.createElement('div');
-  downloadAllContainer.style.display = 'inline-flex';
-  downloadAllContainer.append(downloadAllButton, downloadStatus);
+  ContainerStatus.append(downloadAllButton, statusElement);
 
-  for (let i = 0; i < DIV.length; i++) {
-    const newDiv = document.createElement('div');
-    newDiv.append(newToggle(WIDTH, resizer), newToggle(HEIGHT, resizer), newToggle(FULL, resizer), newToggle(DL, downloadImg), newToggle(RM, removeImg));
-    parentDiv.insertBefore(newDiv, DIV[i]);
+  if (parentDiv) {
+    for (let i = 0; i < DIV.length; i++) {
+      const newDiv = document.createElement('div');
+      newDiv.append(newToggle(WIDTH, resizer), newToggle(HEIGHT, resizer), newToggle(FULL, resizer), newToggle(DL, downloadImg), newToggle(RM, removeImg));
+      parentDiv.insertBefore(newDiv, DIV[i]);
+    }
   }
 
   Height();
-  refreshInterval = setInterval(refreshImages, 3000);
+  loadImages();
 
   const postActions = document.querySelector('.post__actions');
   postActions.append(newToggle(WIDTH, Width), newToggle(HEIGHT, Height), newToggle(FULL, Full));
-  postActions.insertAdjacentElement('beforeend', downloadAllContainer);
+  postActions.append(ContainerStatus);
 })();
