@@ -1,4 +1,4 @@
-# Scrape or Ultra Kemono Galleries
+# Ultra Kemono Galleries
 
 Ultra Kemono Galleries, also known as Scrape, is a modified version of [Better Kemono Galleries](https://sleazyfork.org/en/scripts/460064-better-kemono-galleries) with improved image downloading features.
 
