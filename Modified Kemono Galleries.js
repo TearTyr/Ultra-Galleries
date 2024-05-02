@@ -4,9 +4,7 @@
 // @version      1.9
 // @description  Load original resolution, toggle fitted zoom views, remove photos, and batch download images and videos. Can't do cross-origin downloads with JS alone.
 // @author       Meri
-// @match        *://kemono.party/*/user/*/post/*
 // @match        *://kemono.su/*/user/*/post/*
-// @match        *://coomer.party/*/user/*/post/*
 // @match        *://coomer.su/*/user/*/post/*
 // @icon         https://kemono.party/static/menu/recent.svg
 // @grant        GM_download
