@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Kemono Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      1.9
+// @version      1.8.1
 // @description  Load original resolution, toggle fitted zoom views, remove photos, and batch download images and videos. Can't do cross-origin downloads with JS alone.
 // @author       Meri
 // @match        *://kemono.su/*/user/*/post/*
@@ -84,14 +84,14 @@
       img.style.maxWidth = '100%';
     }
   }
-  
+
   function setImageWidth(img) {
     if (img) {
       img.style.maxHeight = '100%';
       img.style.maxWidth = '100vw';
     }
   }
-  
+
   function setFullSize(img) {
     if (img) {
       img.style.maxHeight = 'none';
@@ -107,7 +107,7 @@
       else if (name === HEIGHT) setImageHeight(img);
       else if (name === FULL) setFullSize(img);
     }
-}
+  }
 
   function removeImage(evt) {
     evt.currentTarget.parentNode.nextSibling.remove();
@@ -121,7 +121,7 @@
         method: 'GET',
         url: imgSrc,
         responseType: 'blob',
-        headers: { referer: 'https://kemono.party/' },
+        headers: { referer: 'https://kemono.su/' },
         onload: function (response) {
           if (response.status === 200) {
             zip.file(fileName, response.response);
@@ -153,7 +153,7 @@
         method: 'GET',
         url: videoSrc,
         responseType: 'blob',
-        headers: { referer: 'https://kemono.party/' },
+        headers: { referer: 'https://kemono.su/' },
         onload: function (response) {
           if (response.status === 200) {
             zip.file(fileName, response.response);
@@ -171,26 +171,38 @@
 
   function downloadImage(evt) {
     evt.preventDefault();
-    const img = evt.currentTarget.parentNode.nextSibling?.lastElementChild;
+    const button = evt.target;
+    const thumbnail = button.parentNode.nextElementSibling;
+    const img = thumbnail.querySelector('.post__image');
     if (img) {
       const imgSrc = img.getAttribute('src');
-      const titleElement = document.querySelector('.post__title');
-      const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
-      const artistName = document.querySelector('.post__user-name').textContent.trim();
-      const imgName = `${artistName}-${title}.png`.replace(/[\\/:*?"<>|]/g, '-');
+      try {
+        const url = new URL(imgSrc, document.baseURI);
+        const fileName = url.pathname.split('/').pop();
+        const fileExtension = fileName.split('.').pop();
+        const baseFileName = fileName.replace(`.${fileExtension}`, '');
+        const titleElement = document.querySelector('.post__title');
+        const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
+        const artistName = document.querySelector('.post__user-name').textContent.trim();
+        const imgName = `${artistName}-${baseFileName}.${fileExtension}`;
 
-      GM_download({
-        url: imgSrc,
-        name: imgName,
-        onload: function () {
-          console.log('Image downloaded successfully:', imgName);
-          downloadedCount++;
-          updateDownloadStatus();
-        },
-        onerror: function (error) {
-          console.error('Failed to download image:', imgName, error);
-        },
-      });
+        GM_download({
+          url: imgSrc,
+          name: imgName,
+          onload: function () {
+            console.log('Image downloaded successfully:', imgName);
+            downloadedCount++;
+            updateDownloadStatus();
+          },
+          onerror: function (error) {
+            console.error('Failed to download image:', imgName, error);
+          },
+        });
+      } catch (error) {
+        console.error('Error processing image source:', imgSrc, error);
+      }
+    } else {
+      console.error('Image source is empty:', button);
     }
   }
 
@@ -208,14 +220,16 @@
 
     const imagePromises = Array.from(images).map((img, index) => {
       const imgSrc = img.getAttribute('src');
-      const extension = imgSrc.split('.').pop();
-      const imgName = `${artistName}-${title}-${index}.${extension}`.replace(/[\\/:*?"<>|]/g, '-');
-      return addImageToZip(zip, imgSrc, imgName);
+      const fileName = imgSrc.split('/').pop();
+      const fileExtension = fileName.split('.').pop();
+      const baseFileName = fileName.replace(`.${fileExtension}`, '');
+      const imgName = `${artistName}-${title.replace(/[/\\:*?"<>|]/g, '-')}-${baseFileName}`;
+      return addImageToZip(zip, imgSrc, `${imgName}.${fileExtension}`);
     });
 
     const videoPromises = Array.from(attachmentLinks).map((link) => {
       const videoSrc = link.getAttribute('href');
-      const videoName = link.dataset.fileName.replace(/[\\/:*?"<>|]/g, '-');
+      const videoName = link.dataset.fileName.replace(/[/\\:*?"<>|]/g, '-');
       return addVideoToZip(zip, videoSrc, videoName);
     });
 
@@ -223,7 +237,7 @@
       .then(() => {
         zip.generateAsync({ type: 'blob' })
           .then((content) => {
-            const zipFileName = `${artistName}-${title}.zip`.replace(/[\\/:*?"<>|]/g, '-');
+            const zipFileName = `${artistName}-${title.replace(/[/\\:*?"<>|]/g, '-')}.zip`;
             saveAs(content, zipFileName);
           })
           .finally(() => {
@@ -282,7 +296,6 @@
             }, delay);
           } else {
             console.error(`Max retries exceeded for image: ${img.getAttribute('src')}`);
-            showRetryOption(a); // Implement this function
             updateStatus(`Image loading failed: ${img.getAttribute('src')}`);
           }
         } else {
@@ -335,7 +348,6 @@
                   setTimeout(loadImageWithRetry, delay);
                 } else {
                   console.error(`Max retries exceeded for image: ${imgSrc}`);
-                  showRetryOption(a); // Implement this function
                   updateStatus(`Image loading failed: ${imgSrc}`);
                   reject(new Error(`Max retries exceeded for image: ${imgSrc}`));
                 }
@@ -410,9 +422,9 @@
   postActions.append(
     createToggleButton(WIDTH, setImageWidth),
     createToggleButton(HEIGHT, setImageHeight),
-    createToggleButton(FULL, setFullSize)
+    createToggleButton(FULL, setFullSize),
+    ContainerStatus
   );
-  postActions.append(ContainerStatus);
 
   loadImages();
 })();
