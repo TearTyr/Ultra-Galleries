@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Kemono Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      1.8.1
+// @version      1.8.2
 // @description  Load original resolution, toggle fitted zoom views, remove photos, and batch download images and videos. Can't do cross-origin downloads with JS alone.
 // @author       Meri
 // @match        *://kemono.su/*/user/*/post/*
@@ -78,10 +78,14 @@
   }
 
   // Image manipulation functions
+  // pictures
   function setImageHeight(img) {
     if (img) {
       img.style.maxHeight = '100vh';
       img.style.maxWidth = '100%';
+      img.style.width = 'auto';
+    } else {
+      console.error('Image element is undefined or null:', img);
     }
   }
 
@@ -89,6 +93,9 @@
     if (img) {
       img.style.maxHeight = '100%';
       img.style.maxWidth = '100vw';
+      img.style.height = 'auto';
+    } else {
+      console.error('Image element is undefined or null:', img);
     }
   }
 
@@ -96,22 +103,44 @@
     if (img) {
       img.style.maxHeight = 'none';
       img.style.maxWidth = 'none';
-    }
-  }
-
-  function resizeImage(evt) {
-    const name = evt.currentTarget.textContent;
-    const img = evt.currentTarget.parentNode.nextSibling.lastElementChild;
-    if (img) {
-      if (name === WIDTH) setImageWidth(img);
-      else if (name === HEIGHT) setImageHeight(img);
-      else if (name === FULL) setFullSize(img);
+      img.style.height = 'auto';
+      img.style.width = 'auto';
+    } else {
+      console.error('Image element is undefined or null:', img);
     }
   }
 
   function removeImage(evt) {
     evt.currentTarget.parentNode.nextSibling.remove();
     evt.currentTarget.parentNode.remove();
+  }
+
+  function resizeImage(evt) {
+    const name = evt.currentTarget.textContent;
+    const imgContainer = evt.currentTarget.parentNode.nextElementSibling;
+
+    if (imgContainer) {
+      const img = imgContainer.querySelector('.post__image');
+
+      if (img) {
+        if (name === WIDTH) setImageWidth(img);
+        else if (name === HEIGHT) setImageHeight(img);
+        else if (name === FULL) setFullSize(img);
+      } else {
+        console.error('Image element not found in container:', imgContainer);
+      }
+    } else {
+      console.error('Image container not found for resize:', evt.currentTarget.parentNode);
+    }
+  }
+
+  function resizeAllImages(actionName) {
+    const imgs = document.querySelectorAll('.post__image');
+    imgs.forEach(img => {
+      if (actionName === WIDTH) setImageWidth(img);
+      else if (actionName === HEIGHT) setImageHeight(img);
+      else if (actionName === FULL) setFullSize(img);
+    });
   }
 
   // Zip archive creation
@@ -126,6 +155,7 @@
           if (response.status === 200) {
             zip.file(fileName, response.response);
             downloadedCount++;
+            updateDownloadStatus();
             resolve();
           } else {
             reject(new Error(`Failed to download image: ${imgSrc}`));
@@ -185,14 +215,11 @@
         const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
         const artistName = document.querySelector('.post__user-name').textContent.trim();
         const imgName = `${artistName}-${baseFileName}.${fileExtension}`;
-
         GM_download({
           url: imgSrc,
           name: imgName,
           onload: function () {
             console.log('Image downloaded successfully:', imgName);
-            downloadedCount++;
-            updateDownloadStatus();
           },
           onerror: function (error) {
             console.error('Failed to download image:', imgName, error);
@@ -271,113 +298,69 @@
     }
   }
 
-  function loadImageWithRetriesAndReplace(img, a, retryCount) {
-    const imgSrc = a.getAttribute('href');
-
-    GM_xmlhttpRequest({
-      method: 'HEAD',
-      url: imgSrc,
-      onload: function (response) {
-        const status = response.status;
-        if (status === 200) {
-          console.log('Image loaded successfully:', imgSrc);
-          img.setAttribute('src', imgSrc);
-          img.test = a.test;
-          a.outerHTML = a.innerHTML;
-          imageCount++;
-          updateImageLoadingStatus();
-        } else if (status === 429) {
-          console.warn('Image rate limited:', imgSrc);
-          if (retryCount <= MAX_RETRIES) {
-            const delay = Math.pow(2, retryCount) * 1000;
-            console.log(`Retrying image load: ${img.getAttribute('src')} in ${delay / 1000} seconds (Attempt ${retryCount + 1})`);
-            setTimeout(function () {
-              loadImageWithRetriesAndReplace(img, a, retryCount + 1);
-            }, delay);
-          } else {
-            console.error(`Max retries exceeded for image: ${img.getAttribute('src')}`);
-            updateStatus(`Image loading failed: ${img.getAttribute('src')}`);
-          }
-        } else {
-          console.error('Failed to load image:', imgSrc, 'Status:', status);
-          updateImageLoadingStatus();
-          forceLoadImage(imgSrc, status);
-        }
-      },
-      onerror: function (error) {
-        console.error('Failed to load image:', imgSrc, error);
-        updateImageLoadingStatus();
-        forceLoadImage(imgSrc);
-      },
-    });
-  }
-
-  function loadImages() {
+  async function loadImages() {
     const A = document.querySelectorAll('a.fileThumb.image-link');
     const IMG = document.querySelectorAll('.post__image');
 
     totalImages = A.length;
 
-    const loadImagePromises = Array.from(A).map((a, index) => {
-      return new Promise((resolve, reject) => {
-        const img = IMG[index];
-        const imgSrc = a.getAttribute('href');
+    for (let i = 0; i < A.length; i++) {
+      const a = A[i];
+      const img = IMG[i];
+      const imgSrc = a.getAttribute('href');
 
-        let retryCount = 0;
+      let retryCount = 0;
 
-        function loadImageWithRetry() {
-          GM_xmlhttpRequest({
-            method: 'HEAD',
-            url: imgSrc,
-            onload: function (response) {
-              const status = response.status;
-              if (status === 200) {
-                console.log('Image loaded successfully:', imgSrc);
-                img.setAttribute('src', imgSrc);
-                img.test = a.test;
-                a.outerHTML = a.innerHTML;
-                imageCount++;
-                updateImageLoadingStatus();
-                resolve();
-              } else if (status === 429) {
-                console.warn('Image rate limited:', imgSrc);
-                if (retryCount <= MAX_RETRIES) {
-                  const delay = Math.pow(2, retryCount) * 1000;
-                  console.log(`Retrying image load: ${imgSrc} in ${delay / 1000} seconds (Attempt ${retryCount + 1})`);
-                  retryCount++;
-                  setTimeout(loadImageWithRetry, delay);
-                } else {
-                  console.error(`Max retries exceeded for image: ${imgSrc}`);
-                  updateStatus(`Image loading failed: ${imgSrc}`);
-                  reject(new Error(`Max retries exceeded for image: ${imgSrc}`));
-                }
-              } else {
-                console.error('Failed to load image:', imgSrc, 'Status:', status);
-                updateImageLoadingStatus();
-                forceLoadImage(imgSrc, status);
-                reject(new Error(`Failed to load image: ${imgSrc}, Status: ${status}`));
-              }
-            },
-            onerror: function (error) {
-              console.error('Failed to load image:', imgSrc, error);
-              updateImageLoadingStatus();
-              forceLoadImage(imgSrc);
-              reject(error);
-            },
-          });
+      while (retryCount <= MAX_RETRIES) {
+        try {
+          await loadImageWithRetry(img, imgSrc);
+          imageCount++;
+          updateImageLoadingStatus();
+          break;
+        } catch (error) {
+          retryCount++;
+          console.error('Failed to load image:', imgSrc, error);
+          if (retryCount > MAX_RETRIES) {
+            updateStatus(`Image loading failed: ${imgSrc}`);
+          } else {
+            const delay = Math.pow(2, retryCount) * 1000;
+            console.log(`Retrying image load: ${imgSrc} in ${delay / 1000} seconds (Attempt ${retryCount})`);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+          }
         }
+      }
+    }
 
-        loadImageWithRetry();
+    console.log('All images loaded successfully');
+  }
+
+  async function loadImageWithRetry(img, imgSrc) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: 'HEAD',
+        url: imgSrc,
+        onload: function (response) {
+          const status = response.status;
+          if (status === 200) {
+            console.log('Image loaded successfully:', imgSrc);
+            img.src = imgSrc;
+            resolve();
+          } else if (status === 429) {
+            console.warn('Image rate limited:', imgSrc);
+            reject(new Error(`Image rate limited: ${imgSrc}`));
+          } else {
+            console.error('Failed to load image:', imgSrc, 'Status:', status);
+            forceLoadImage(imgSrc, status);
+            reject(new Error(`Failed to load image: ${imgSrc}, Status: ${status}`));
+          }
+        },
+        onerror: function (error) {
+          console.error('Failed to load image:', imgSrc, error);
+          forceLoadImage(imgSrc);
+          reject(error);
+        },
       });
     });
-
-    Promise.all(loadImagePromises)
-      .then(() => {
-        console.log('All images loaded successfully');
-      })
-      .catch((error) => {
-        console.error('Error loading images:', error);
-      });
   }
 
   // Main script execution
@@ -389,7 +372,7 @@
     link.dataset.fileName = fileName;
   });
 
-  const DIV = document.querySelectorAll('.post__thumbnail');
+  const DIV = document.querySelectorAll('.post__files');
   const parentDiv = DIV[0]?.parentNode;
 
   const ContainerStatus = document.createElement('div');
@@ -420,9 +403,9 @@
 
   const postActions = document.querySelector('.post__actions');
   postActions.append(
-    createToggleButton(WIDTH, setImageWidth),
-    createToggleButton(HEIGHT, setImageHeight),
-    createToggleButton(FULL, setFullSize),
+    createToggleButton(WIDTH, () => resizeAllImages(WIDTH)),
+    createToggleButton(HEIGHT, () => resizeAllImages(HEIGHT)),
+    createToggleButton(FULL, () => resizeAllImages(FULL)),
     ContainerStatus
   );
 
