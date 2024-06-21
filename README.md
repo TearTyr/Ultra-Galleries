@@ -11,7 +11,7 @@ This userscript enhances the browsing and downloading experience on kemono.su an
 ### Image Viewing and Manipulation
 
 - **Original Resolution Loading:** Directly loads images in their original resolution.
-- **Resize Options:** 
+- **Resize Options:**
   - Toggle to resize individual or all images in a gallery to fit:
     - Vertical height (`FILL HEIGHT`)
     - Horizontal width (`FILL WIDTH`)
@@ -22,11 +22,11 @@ This userscript enhances the browsing and downloading experience on kemono.su an
 
 - **Individual Image Download:** Download single images with a click.
 - **Batch Downloading:** Download all images and videos from a post, packaged in a zip file.
-- **Custom Naming:** Downloaded files are named using the artist name, post title, and original filename.
+- **Custom Naming:** Downloaded files are named using the artist's name, post title, and original filename.
 
 ### Performance and User Experience
 
-- **Improved Image Loading:** Modified image loading mechanism to prevent rate limiting issues.
+- **Improved Image Loading:** Modified image loading mechanism to prevent rate-limiting issues.
 - **Retry Mechanism:** Implements exponential backoff for failed image loads.
 - **Status Updates:** Provides real-time status updates for image loading and download progress.
 
