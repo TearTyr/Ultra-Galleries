@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Ultra Kemono Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      1.8.2
-// @description  Load original resolution, toggle fitted zoom views, remove photos, and batch download images and videos. Can't do cross-origin downloads with JS alone.
+// @version      1.8.3
+// @description  Load original resolution, toggle fitted zoom views, remove photos, and batch download images and videos.
 // @author       Meri
 // @match        *://kemono.su/*/user/*/post/*
 // @match        *://coomer.su/*/user/*/post/*
@@ -31,260 +31,217 @@
   'use strict';
 
   // Constants
-  const DL = '【DOWNLOAD】';
-  const DLALL = '【DL ALL】';
-  const FULL = '【FULL】';
-  const HEIGHT = '【FILL HEIGHT】';
-  const RM = '【REMOVE】';
-  const WIDTH = '【FILL WIDTH】';
+  const BUTTONS = {
+    DOWNLOAD: '【DOWNLOAD】',
+    DOWNLOAD_ALL: '【DL ALL】',
+    FULL: '【FULL】',
+    HEIGHT: '【FILL HEIGHT】',
+    REMOVE: '【REMOVE】',
+    WIDTH: '【FILL WIDTH】'
+  };
   const MAX_RETRIES = 10;
+  const RETRY_DELAY = 1250;
 
-  // Variables
-  let imageCount = 0;
-  let downloadedCount = 0;
-  let totalImages = 0;
-  let imageStatusUpdated = false;
+  // State
+  const state = {
+    imageCount: 0,
+    downloadedCount: 0,
+    totalImages: 0,
+    imageStatusUpdated: false
+  };
+
+  // DOM Elements
+  const elements = {
+    statusElement: null,
+    postActions: null
+  };
 
   // Helper functions
-  function createToggleButton(name, action) {
+  const createToggleButton = (name, action) => {
     const toggle = document.createElement('a');
     toggle.textContent = name;
     toggle.addEventListener('click', action);
     toggle.style.cursor = 'pointer';
     return toggle;
-  }
+  };
 
-  function updateStatus(text) {
-    const statusElement = document.getElementById('Status');
-    if (statusElement) {
-      statusElement.textContent = text;
+  const updateStatus = (text) => {
+    if (elements.statusElement) {
+      elements.statusElement.textContent = text;
     }
-  }
+  };
 
-  function updateImageLoadingStatus() {
-    const imageLoadingStatus = imageCount === totalImages || imageStatusUpdated === true
+  const updateImageLoadingStatus = () => {
+    const { imageCount, totalImages, imageStatusUpdated } = state;
+    const status = imageCount === totalImages || imageStatusUpdated
       ? `Images Done Loading! Total: ${totalImages}`
       : `Loading images (${imageCount}/${totalImages})...`;
+    updateStatus(status);
+  };
 
-    updateStatus(imageLoadingStatus);
-  }
-
-  function updateDownloadStatus() {
-    const downloadStatus = downloadedCount === totalImages
-      ? `Downloading...`
-      : `Done Downloading!`;
-
-    updateStatus(downloadStatus);
-  }
+  const updateDownloadStatus = () => {
+    const { downloadedCount, totalImages } = state;
+    const status = downloadedCount === totalImages
+      ? 'Done Downloading!'
+      : 'Downloading...';
+    updateStatus(status);
+  };
 
   // Image manipulation functions
-  // pictures
-  function setImageHeight(img) {
+  const setImageStyle = (img, styles) => {
     if (img) {
-      img.style.maxHeight = '100vh';
-      img.style.maxWidth = '100%';
-      img.style.width = 'auto';
+      Object.assign(img.style, styles);
     } else {
       console.error('Image element is undefined or null:', img);
     }
-  }
+  };
 
-  function setImageWidth(img) {
-    if (img) {
-      img.style.maxHeight = '100%';
-      img.style.maxWidth = '100vw';
-      img.style.height = 'auto';
-    } else {
-      console.error('Image element is undefined or null:', img);
-    }
-  }
+  const imageActions = {
+    setHeight: (img) => setImageStyle(img, { maxHeight: '100vh', maxWidth: '100%', width: 'auto' }),
+    setWidth: (img) => setImageStyle(img, { maxHeight: '100%', maxWidth: '100vw', height: 'auto' }),
+    setFull: (img) => setImageStyle(img, { maxHeight: 'none', maxWidth: 'none', height: 'auto', width: 'auto' })
+  };
 
-  function setFullSize(img) {
-    if (img) {
-      img.style.maxHeight = 'none';
-      img.style.maxWidth = 'none';
-      img.style.height = 'auto';
-      img.style.width = 'auto';
-    } else {
-      console.error('Image element is undefined or null:', img);
-    }
-  }
+  const removeImage = (evt) => {
+    const parent = evt.currentTarget.parentNode;
+    parent.nextSibling.remove();
+    parent.remove();
+  };
 
-  function removeImage(evt) {
-    evt.currentTarget.parentNode.nextSibling.remove();
-    evt.currentTarget.parentNode.remove();
-  }
-
-  function resizeImage(evt) {
+  const resizeImage = (evt) => {
     const name = evt.currentTarget.textContent;
     const imgContainer = evt.currentTarget.parentNode.nextElementSibling;
+    const img = imgContainer?.querySelector('.post__image');
 
-    if (imgContainer) {
-      const img = imgContainer.querySelector('.post__image');
-
-      if (img) {
-        if (name === WIDTH) setImageWidth(img);
-        else if (name === HEIGHT) setImageHeight(img);
-        else if (name === FULL) setFullSize(img);
-      } else {
-        console.error('Image element not found in container:', imgContainer);
+    if (img) {
+      const action = Object.entries(BUTTONS).find(([_, value]) => value === name)?.[0].toLowerCase();
+      if (action && imageActions[`set${action.charAt(0).toUpperCase() + action.slice(1)}`]) {
+        imageActions[`set${action.charAt(0).toUpperCase() + action.slice(1)}`](img);
       }
     } else {
-      console.error('Image container not found for resize:', evt.currentTarget.parentNode);
+      console.error('Image element not found for resize:', evt.currentTarget.parentNode);
     }
-  }
+  };
 
-  function resizeAllImages(actionName) {
+  const resizeAllImages = (actionName) => {
     const imgs = document.querySelectorAll('.post__image');
-    imgs.forEach(img => {
-      if (actionName === WIDTH) setImageWidth(img);
-      else if (actionName === HEIGHT) setImageHeight(img);
-      else if (actionName === FULL) setFullSize(img);
-    });
-  }
+    const action = Object.entries(BUTTONS).find(([_, value]) => value === actionName)?.[0].toLowerCase();
+    if (action && imageActions[`set${action.charAt(0).toUpperCase() + action.slice(1)}`]) {
+      imgs.forEach(img => imageActions[`set${action.charAt(0).toUpperCase() + action.slice(1)}`](img));
+    }
+  };
 
   // Zip archive creation
-  function addImageToZip(zip, imgSrc, fileName, retryCount = 0) {
+  const addToZip = (zip, src, fileName, type) => {
     return new Promise((resolve, reject) => {
       GM.xmlHttpRequest({
         method: 'GET',
-        url: imgSrc,
+        url: src,
         responseType: 'blob',
         headers: { referer: 'https://kemono.su/' },
-        onload: function (response) {
+        onload: (response) => {
           if (response.status === 200) {
             zip.file(fileName, response.response);
-            downloadedCount++;
-            updateDownloadStatus();
+            if (type === 'image') {
+              state.downloadedCount++;
+              updateDownloadStatus();
+            }
             resolve();
           } else {
-            reject(new Error(`Failed to download image: ${imgSrc}`));
+            reject(new Error(`Failed to download ${type}: ${src}`));
           }
         },
-        onerror: function (error) {
-          if (retryCount < MAX_RETRIES) {
-            console.warn(`Failed to download image: ${imgSrc}, retrying... (Attempt ${retryCount + 1})`);
-            setTimeout(function () {
-              addImageToZip(zip, imgSrc, fileName, retryCount + 1)
-                .then(resolve)
-                .catch(reject);
-            }, 1250);
-          } else {
-            reject(error);
-          }
-        },
+        onerror: (error) => reject(error)
       });
     });
-  }
+  };
 
-  function addVideoToZip(zip, videoSrc, fileName) {
-    return new Promise((resolve, reject) => {
-      GM.xmlHttpRequest({
-        method: 'GET',
-        url: videoSrc,
-        responseType: 'blob',
-        headers: { referer: 'https://kemono.su/' },
-        onload: function (response) {
-          if (response.status === 200) {
-            zip.file(fileName, response.response);
-            resolve();
-          } else {
-            reject(new Error(`Failed to download video: ${videoSrc}`));
-          }
-        },
-        onerror: function (error) {
-          reject(error);
-        },
-      });
-    });
-  }
+  const addToZipWithRetry = async (zip, src, fileName, type, retryCount = 0) => {
+    try {
+      await addToZip(zip, src, fileName, type);
+    } catch (error) {
+      if (retryCount < MAX_RETRIES) {
+        console.warn(`Failed to download ${type}: ${src}, retrying... (Attempt ${retryCount + 1})`);
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        await addToZipWithRetry(zip, src, fileName, type, retryCount + 1);
+      } else {
+        throw error;
+      }
+    }
+  };
 
-  function downloadImage(evt) {
+  const downloadImage = (evt) => {
     evt.preventDefault();
-    const button = evt.target;
-    const thumbnail = button.parentNode.nextElementSibling;
-    const img = thumbnail.querySelector('.post__image');
+    const img = evt.target.parentNode.nextElementSibling.querySelector('.post__image');
     if (img) {
       const imgSrc = img.getAttribute('src');
       try {
         const url = new URL(imgSrc, document.baseURI);
         const fileName = url.pathname.split('/').pop();
-        const fileExtension = fileName.split('.').pop();
-        const baseFileName = fileName.replace(`.${fileExtension}`, '');
-        const titleElement = document.querySelector('.post__title');
-        const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
+        const [baseFileName, fileExtension] = fileName.split('.');
+        const title = document.querySelector('.post__title').textContent.trim();
         const artistName = document.querySelector('.post__user-name').textContent.trim();
         const imgName = `${artistName}-${baseFileName}.${fileExtension}`;
         GM_download({
           url: imgSrc,
           name: imgName,
-          onload: function () {
-            console.log('Image downloaded successfully:', imgName);
-          },
-          onerror: function (error) {
-            console.error('Failed to download image:', imgName, error);
-          },
+          onload: () => console.log('Image downloaded successfully:', imgName),
+          onerror: (error) => console.error('Failed to download image:', imgName, error)
         });
       } catch (error) {
         console.error('Error processing image source:', imgSrc, error);
       }
     } else {
-      console.error('Image source is empty:', button);
+      console.error('Image source is empty:', evt.target);
     }
-  }
+  };
 
-  function downloadAllImagesAndVideos() {
+  const downloadAllImagesAndVideos = async () => {
     const images = document.querySelectorAll('.post__image');
     const attachmentLinks = document.querySelectorAll('.post__attachment-link');
-    const titleElement = document.querySelector('.post__title');
-    const title = `${titleElement.querySelector('span:first-child').textContent.trim()} ${titleElement.querySelector('span:last-child').textContent.trim()}`;
+    const title = document.querySelector('.post__title').textContent.trim();
     const artistName = document.querySelector('.post__user-name').textContent.trim();
 
     const total = images.length + attachmentLinks.length;
-    let downloadedCount = 0;
-
     const zip = new JSZip();
 
-    const imagePromises = Array.from(images).map((img, index) => {
-      const imgSrc = img.getAttribute('src');
-      const fileName = imgSrc.split('/').pop();
-      const fileExtension = fileName.split('.').pop();
-      const baseFileName = fileName.replace(`.${fileExtension}`, '');
-      const imgName = `${artistName}-${title.replace(/[/\\:*?"<>|]/g, '-')}-${baseFileName}`;
-      return addImageToZip(zip, imgSrc, `${imgName}.${fileExtension}`);
-    });
+    const sanitizeFileName = (name) => name.replace(/[/\\:*?"<>|]/g, '-');
 
-    const videoPromises = Array.from(attachmentLinks).map((link) => {
-      const videoSrc = link.getAttribute('href');
-      const videoName = link.dataset.fileName.replace(/[/\\:*?"<>|]/g, '-');
-      return addVideoToZip(zip, videoSrc, videoName);
-    });
-
-    Promise.all([...imagePromises, ...videoPromises])
-      .then(() => {
-        zip.generateAsync({ type: 'blob' })
-          .then((content) => {
-            const zipFileName = `${artistName}-${title.replace(/[/\\:*?"<>|]/g, '-')}.zip`;
-            saveAs(content, zipFileName);
-          })
-          .finally(() => {
-            updateStatus(`Done Downloading and adding to a zip! Total: ${total}`);
-          });
+    const downloadPromises = [
+      ...Array.from(images).map((img, index) => {
+        const imgSrc = img.getAttribute('src');
+        const fileName = imgSrc.split('/').pop();
+        const [baseFileName, fileExtension] = fileName.split('.');
+        const imgName = `${artistName}-${sanitizeFileName(title)}-${baseFileName}.${fileExtension}`;
+        return addToZipWithRetry(zip, imgSrc, imgName, 'image');
+      }),
+      ...Array.from(attachmentLinks).map((link) => {
+        const videoSrc = link.getAttribute('href');
+        const videoName = sanitizeFileName(link.dataset.fileName);
+        return addToZipWithRetry(zip, videoSrc, videoName, 'video');
       })
-      .catch((error) => {
-        console.error(error);
-        updateStatus(`Failed to download and add to zip.`);
-      });
-  }
+    ];
+
+    try {
+      await Promise.all(downloadPromises);
+      const content = await zip.generateAsync({ type: 'blob' });
+      const zipFileName = `${artistName}-${sanitizeFileName(title)}.zip`;
+      saveAs(content, zipFileName);
+      updateStatus(`Done Downloading and adding to a zip! Total: ${total}`);
+    } catch (error) {
+      console.error(error);
+      updateStatus(`Failed to download and add to zip.`);
+    }
+  };
 
   // Force image load
-  function forceLoadImage(imgSrc, status) {
+  const forceLoadImage = (imgSrc, status) => {
     if (status === 429) {
       fetch(imgSrc, { method: 'HEAD' })
         .then((response) => {
           if (response.status === 200) {
             console.log('Force loaded image:', imgSrc);
-            imageCount++;
+            state.imageCount++;
             updateImageLoadingStatus();
           } else {
             console.error('Failed to force load image:', imgSrc, response.status);
@@ -296,118 +253,111 @@
           updateImageLoadingStatus();
         });
     }
-  }
+  };
 
-  async function loadImages() {
-    const A = document.querySelectorAll('a.fileThumb.image-link');
-    const IMG = document.querySelectorAll('.post__image');
+  const loadImageWithRetry = async (img, imgSrc, retryCount = 0) => {
+    try {
+      const response = await new Promise((resolve, reject) => {
+        GM_xmlhttpRequest({
+          method: 'HEAD',
+          url: imgSrc,
+          onload: resolve,
+          onerror: reject
+        });
+      });
 
-    totalImages = A.length;
+      const status = response.status;
+      if (status === 200) {
+        console.log('Image loaded successfully:', imgSrc);
+        img.src = imgSrc;
+      } else if (status === 429) {
+        console.warn('Image rate limited:', imgSrc);
+        throw new Error(`Image rate limited: ${imgSrc}`);
+      } else {
+        console.error('Failed to load image:', imgSrc, 'Status:', status);
+        forceLoadImage(imgSrc, status);
+        throw new Error(`Failed to load image: ${imgSrc}, Status: ${status}`);
+      }
+    } catch (error) {
+      if (retryCount < MAX_RETRIES) {
+        const delay = Math.pow(2, retryCount) * 1000;
+        console.log(`Retrying image load: ${imgSrc} in ${delay / 1000} seconds (Attempt ${retryCount + 1})`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        await loadImageWithRetry(img, imgSrc, retryCount + 1);
+      } else {
+        throw error;
+      }
+    }
+  };
 
-    for (let i = 0; i < A.length; i++) {
-      const a = A[i];
-      const img = IMG[i];
+  const loadImages = async () => {
+    const images = document.querySelectorAll('a.fileThumb.image-link');
+    state.totalImages = images.length;
+
+    for (const a of images) {
+      const img = a.querySelector('img');
       const imgSrc = a.getAttribute('href');
 
-      let retryCount = 0;
-
-      while (retryCount <= MAX_RETRIES) {
-        try {
-          await loadImageWithRetry(img, imgSrc);
-          imageCount++;
-          updateImageLoadingStatus();
-          break;
-        } catch (error) {
-          retryCount++;
-          console.error('Failed to load image:', imgSrc, error);
-          if (retryCount > MAX_RETRIES) {
-            updateStatus(`Image loading failed: ${imgSrc}`);
-          } else {
-            const delay = Math.pow(2, retryCount) * 1000;
-            console.log(`Retrying image load: ${imgSrc} in ${delay / 1000} seconds (Attempt ${retryCount})`);
-            await new Promise((resolve) => setTimeout(resolve, delay));
-          }
-        }
+      try {
+        await loadImageWithRetry(img, imgSrc);
+        state.imageCount++;
+        updateImageLoadingStatus();
+      } catch (error) {
+        console.error('Failed to load image after all retries:', imgSrc, error);
+        updateStatus(`Image loading failed: ${imgSrc}`);
       }
     }
 
     console.log('All images loaded successfully');
-  }
-
-  async function loadImageWithRetry(img, imgSrc) {
-    return new Promise((resolve, reject) => {
-      GM_xmlhttpRequest({
-        method: 'HEAD',
-        url: imgSrc,
-        onload: function (response) {
-          const status = response.status;
-          if (status === 200) {
-            console.log('Image loaded successfully:', imgSrc);
-            img.src = imgSrc;
-            resolve();
-          } else if (status === 429) {
-            console.warn('Image rate limited:', imgSrc);
-            reject(new Error(`Image rate limited: ${imgSrc}`));
-          } else {
-            console.error('Failed to load image:', imgSrc, 'Status:', status);
-            forceLoadImage(imgSrc, status);
-            reject(new Error(`Failed to load image: ${imgSrc}, Status: ${status}`));
-          }
-        },
-        onerror: function (error) {
-          console.error('Failed to load image:', imgSrc, error);
-          forceLoadImage(imgSrc);
-          reject(error);
-        },
-      });
-    });
-  }
+  };
 
   // Main script execution
-  document.querySelectorAll('a.fileThumb.image-link img').forEach((img) => (img.className = 'post__image'));
+  const init = () => {
+    document.querySelectorAll('a.fileThumb.image-link img').forEach((img) => (img.className = 'post__image'));
 
-  const attachmentLinks = document.querySelectorAll('.post__attachment-link');
-  attachmentLinks.forEach((link) => {
-    const fileName = link.getAttribute('download');
-    link.dataset.fileName = fileName;
-  });
+    document.querySelectorAll('.post__attachment-link').forEach((link) => {
+      link.dataset.fileName = link.getAttribute('download');
+    });
 
-  const DIV = document.querySelectorAll('.post__files');
-  const parentDiv = DIV[0]?.parentNode;
+    const fileDivs = document.querySelectorAll('.post__thumbnail');
+    const parentDiv = fileDivs[0]?.parentNode;
 
-  const ContainerStatus = document.createElement('div');
-  ContainerStatus.style.display = 'inline-flex';
+    const containerStatus = document.createElement('div');
+    containerStatus.style.display = 'inline-flex';
 
-  const downloadAllButton = createToggleButton(DLALL, downloadAllImagesAndVideos);
-  const statusElement = document.createElement('span');
-  statusElement.id = 'Status';
-  statusElement.textContent = '';
+    const downloadAllButton = createToggleButton(BUTTONS.DOWNLOAD_ALL, downloadAllImagesAndVideos);
+    elements.statusElement = document.createElement('span');
+    elements.statusElement.id = 'Status';
+    elements.statusElement.textContent = '';
 
-  ContainerStatus.append(downloadAllButton, statusElement);
+    containerStatus.append(downloadAllButton, elements.statusElement);
 
-  if (parentDiv) {
-    for (let i = 0; i < DIV.length; i++) {
-      const newDiv = document.createElement('div');
-      newDiv.append(
-        createToggleButton(WIDTH, resizeImage),
-        createToggleButton(HEIGHT, resizeImage),
-        createToggleButton(FULL, resizeImage),
-        createToggleButton(DL, downloadImage),
-        createToggleButton(RM, removeImage)
-      );
-      parentDiv.insertBefore(newDiv, DIV[i]);
+    if (parentDiv) {
+      fileDivs.forEach((div) => {
+        const newDiv = document.createElement('div');
+        newDiv.append(
+          createToggleButton(BUTTONS.WIDTH, resizeImage),
+          createToggleButton(BUTTONS.HEIGHT, resizeImage),
+          createToggleButton(BUTTONS.FULL, resizeImage),
+          createToggleButton(BUTTONS.DOWNLOAD, downloadImage),
+          createToggleButton(BUTTONS.REMOVE, removeImage)
+        );
+        parentDiv.insertBefore(newDiv, div);
+      });
     }
-  }
 
-  setImageHeight();
+    imageActions.setHeight();
 
-  const postActions = document.querySelector('.post__actions');
-  postActions.append(
-    createToggleButton(WIDTH, () => resizeAllImages(WIDTH)),
-    createToggleButton(HEIGHT, () => resizeAllImages(HEIGHT)),
-    createToggleButton(FULL, () => resizeAllImages(FULL)),
-    ContainerStatus
-  );
+    elements.postActions = document.querySelector('.post__actions');
+    elements.postActions.append(
+      createToggleButton(BUTTONS.WIDTH, () => resizeAllImages(BUTTONS.WIDTH)),
+      createToggleButton(BUTTONS.HEIGHT, () => resizeAllImages(BUTTONS.HEIGHT)),
+      createToggleButton(BUTTONS.FULL, () => resizeAllImages(BUTTONS.FULL)),
+      containerStatus
+    );
 
-  loadImages();
+    loadImages();
+  };
+
+  init();
 })();
