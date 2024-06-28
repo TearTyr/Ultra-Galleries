@@ -107,13 +107,23 @@
   };
 
   const removeImage = (evt) => {
-    const parent = evt.currentTarget.closest('.gallery-item');
-    parent.remove();
+    const buttonContainer = evt.currentTarget.closest('div');
+    if (buttonContainer) {
+      const imageContainer = buttonContainer.nextElementSibling;
+      if (imageContainer) {
+        imageContainer.remove();
+        buttonContainer.remove();
+      } else {
+        console.error('Could not find image container to remove');
+      }
+    } else {
+      console.error('Could not find button container to remove');
+    }
   };
 
   const resizeImage = (evt) => {
     const name = evt.currentTarget.textContent;
-    const imgContainer = evt.currentTarget.closest('.gallery-item') || evt.currentTarget.closest('.expanded-view');
+    const imgContainer = evt.currentTarget.closest('.gallery-item') || evt.currentTarget.closest('.expanded-view') || evt.currentTarget.closest('.post__files');
     const img = imgContainer?.querySelector('img');
 
     if (img) {
@@ -175,27 +185,48 @@
 
   const downloadImage = (evt) => {
     evt.preventDefault();
-    const img = evt.target.closest('.gallery-item, .expanded-view').querySelector('img');
-    if (img) {
-      const imgSrc = img.getAttribute('src');
-      try {
-        const url = new URL(imgSrc, document.baseURI);
-        const fileName = url.pathname.split('/').pop();
-        const [baseFileName, fileExtension] = fileName.split('.');
-        const title = document.querySelector('.post__title').textContent.trim();
-        const artistName = document.querySelector('.post__user-name').textContent.trim();
-        const imgName = `${artistName}-${baseFileName}.${fileExtension}`;
-        GM_download({
-          url: imgSrc,
-          name: imgName,
-          onload: () => console.log('Image downloaded successfully:', imgName),
-          onerror: (error) => console.error('Failed to download image:', imgName, error)
-        });
-      } catch (error) {
-        console.error('Error processing image source:', imgSrc, error);
-      }
-    } else {
-      console.error('Image source is empty:', evt.target);
+  
+    // Find the closest parent element with class 'post__files'
+    const container = evt.target.closest('.post__files');
+    if (!container) {
+      console.error('Could not find container element');
+      return;
+    }
+  
+    // Find the img element within the container
+    const img = container.querySelector('.post__image');
+    if (!img) {
+      console.error('Could not find image element');
+      return;
+    }
+  
+    const imgSrc = img.getAttribute('src');
+    if (!imgSrc) {
+      console.error('Image source is empty');
+      return;
+    }
+  
+    try {
+      const url = new URL(imgSrc, document.baseURI);
+      const fileName = url.pathname.split('/').pop();
+      const [baseFileName, fileExtension] = fileName.split('.');
+  
+      // Use optional chaining and nullish coalescing for safer access
+      const title = document.querySelector('.post__title')?.textContent?.trim() ?? 'Untitled';
+      const artistName = document.querySelector('.post__user-name')?.textContent?.trim() ?? 'Unknown';
+  
+      // Use the 'download' attribute value if available, otherwise use the constructed name
+      const downloadLink = container.querySelector('.fileThumb');
+      const imgName = downloadLink?.getAttribute('download') || `${artistName}-${baseFileName}.${fileExtension}`;
+  
+      GM_download({
+        url: imgSrc,
+        name: imgName,
+        onload: () => console.log('Image downloaded successfully:', imgName),
+        onerror: (error) => console.error('Failed to download image:', imgName, error)
+      });
+    } catch (error) {
+      console.error('Error processing image source:', imgSrc, error);
     }
   };
 
