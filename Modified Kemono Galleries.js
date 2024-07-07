@@ -1,9 +1,8 @@
 // ==UserScript==
 // @name         Ultra Kemono Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      2.0.1
-// @description  Load original resolution, toggle fitted zoom views, remove photos, batch download images and videos, and view images in a modern, scalable gallery.
-// @author       Meri
+// @version      2.0.2
+// @author       ntf (original), Meri (updates)
 // @match        *://kemono.su/*/user/*/post/*
 // @match        *://coomer.su/*/user/*/post/*
 // @icon         https://kemono.party/static/menu/recent.svg
@@ -79,6 +78,7 @@
         elements.galleryButton.disabled = false;
         elements.galleryButton.style.opacity = '1';
         elements.galleryButton.style.cursor = 'pointer';
+        elements.galleryButton.addEventListener('click', showGallery); // Add click event listener
       }
     }
   };
@@ -187,6 +187,7 @@
     evt.preventDefault();
   
     // Find the closest parent element with class 'post__files'
+
     const container = evt.target.closest('.post__files');
     if (!container) {
       console.error('Could not find container element');
@@ -194,31 +195,34 @@
     }
   
     // Find the img element within the container
+
     const img = container.querySelector('.post__image');
     if (!img) {
       console.error('Could not find image element');
       return;
     }
-  
+
     const imgSrc = img.getAttribute('src');
     if (!imgSrc) {
       console.error('Image source is empty');
       return;
     }
-  
+
     try {
       const url = new URL(imgSrc, document.baseURI);
       const fileName = url.pathname.split('/').pop();
       const [baseFileName, fileExtension] = fileName.split('.');
   
       // Use optional chaining and nullish coalescing for safer access
+
       const title = document.querySelector('.post__title')?.textContent?.trim() ?? 'Untitled';
       const artistName = document.querySelector('.post__user-name')?.textContent?.trim() ?? 'Unknown';
   
       // Use the 'download' attribute value if available, otherwise use the constructed name
+
       const downloadLink = container.querySelector('.fileThumb');
       const imgName = downloadLink?.getAttribute('download') || `${artistName}-${baseFileName}.${fileExtension}`;
-  
+
       GM_download({
         url: imgSrc,
         name: imgName,
@@ -395,7 +399,7 @@
       document.body.removeChild(overlay);
     });
 
-    const galleryContent = document.createElement('div');
+const galleryContent = document.createElement('div');
     galleryContent.style.cssText = `
       flex: 1;
       display: grid;
@@ -422,8 +426,8 @@
 
     const expandedImage = document.createElement('img');
     expandedImage.style.cssText = `
-      max-width: 90%;
-      max-height: 80%;
+      max-width: 90vw;
+      max-height: 80vh;
       object-fit: contain;
     `;
 
@@ -484,6 +488,27 @@
     return button;
   };
 
+  const createLoadingOverlay = () => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 12;
+    `;
+    const loadingText = document.createElement('div');
+    loadingText.textContent = 'Loading...';
+    loadingText.style.color = 'white';
+    overlay.appendChild(loadingText);
+    return overlay;
+  };
+
   const showGallery = () => {
     console.log("Entering showGallery function");
     const overlay = createGalleryOverlay();
@@ -507,11 +532,35 @@
 
     let currentIndex = 0;
 
+    const pageNumber = document.createElement('div');
+    pageNumber.style.cssText = `
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: white;
+      font-size: 16px;
+    `;
+    expandedView.appendChild(pageNumber);
+
     const showExpandedImage = (index) => {
       if (expandedImage && expandedView) {
+        const loadingOverlay = createLoadingOverlay();
+        expandedView.appendChild(loadingOverlay);
+
+        expandedImage.onload = () => {
+          expandedView.removeChild(loadingOverlay);
+          expandedView.style.display = 'flex';
+        };
+
+        expandedImage.onerror = () => {
+          expandedView.removeChild(loadingOverlay);
+          // Handle error, maybe show an error message
+        };
+
         expandedImage.src = images[index].src;
-        expandedView.style.display = 'flex';
         currentIndex = index;
+        pageNumber.textContent = `${index + 1} / ${images.length}`;
 
         // Update thumbnail selection
         if (thumbnailContainer) {
@@ -632,7 +681,7 @@
     containerStatus.append(downloadAllButton, elements.statusElement);
 
     elements.postActions = document.querySelector('.post__actions');
-    elements.galleryButton = createToggleButton(BUTTONS.GALLERY, showGallery);
+    elements.galleryButton = createToggleButton(BUTTONS.GALLERY, null); // Remove click handler
     elements.galleryButton.disabled = true;
     elements.galleryButton.style.opacity = '0.6';
     elements.galleryButton.style.cursor = 'not-allowed';
@@ -644,6 +693,7 @@
       containerStatus,
       elements.galleryButton
     );
+
 
     const fileDivs = document.querySelectorAll('.post__thumbnail');
     const parentDiv = fileDivs[0]?.parentNode;
