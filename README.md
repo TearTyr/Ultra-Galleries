@@ -58,4 +58,4 @@ After installation, navigate to a post on kemono.su or coomer.su. You'll see new
 
 ## Version
 
-Current version: 1.8.2
+Current version: 2.0.2
