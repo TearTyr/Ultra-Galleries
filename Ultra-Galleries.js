@@ -1,7 +1,8 @@
 // ==UserScript==
 // @name         Ultra Kemono Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      2.0.2
+// @version      2.0.3
+// @description  Load original resolution, toggle fitted zoom views, remove photos, batch download images and videos, and view images in a modern, scalable gallery with new features.
 // @author       ntf (original), Meri (updates)
 // @match        *://kemono.su/*/user/*/post/*
 // @match        *://coomer.su/*/user/*/post/*
@@ -185,16 +186,12 @@
 
   const downloadImage = (evt) => {
     evt.preventDefault();
-  
-    // Find the closest parent element with class 'post__files'
 
     const container = evt.target.closest('.post__files');
     if (!container) {
       console.error('Could not find container element');
       return;
     }
-  
-    // Find the img element within the container
 
     const img = container.querySelector('.post__image');
     if (!img) {
@@ -212,13 +209,9 @@
       const url = new URL(imgSrc, document.baseURI);
       const fileName = url.pathname.split('/').pop();
       const [baseFileName, fileExtension] = fileName.split('.');
-  
-      // Use optional chaining and nullish coalescing for safer access
 
       const title = document.querySelector('.post__title')?.textContent?.trim() ?? 'Untitled';
       const artistName = document.querySelector('.post__user-name')?.textContent?.trim() ?? 'Unknown';
-  
-      // Use the 'download' attribute value if available, otherwise use the constructed name
 
       const downloadLink = container.querySelector('.fileThumb');
       const imgName = downloadLink?.getAttribute('download') || `${artistName}-${baseFileName}.${fileExtension}`;
@@ -245,9 +238,10 @@
 
     const sanitizeFileName = (name) => name.replace(/[/\\:*?"<>|]/g, '-');
 
-    const downloadPromises = [
+    let downloadPromises = [
       ...Array.from(images).map((img, index) => {
-        const imgSrc = img.getAttribute('src');
+        let imgSrc = img.getAttribute('src');
+        imgSrc = imgSrc.split('?')[0];
         const fileName = imgSrc.split('/').pop();
         const [baseFileName, fileExtension] = fileName.split('.');
         const imgName = `${artistName}-${sanitizeFileName(title)}-${baseFileName}.${fileExtension}`;
@@ -255,8 +249,8 @@
       }),
       ...Array.from(attachmentLinks).map((link) => {
         const videoSrc = link.getAttribute('href');
-        const videoName = sanitizeFileName(link.dataset.fileName);
-        return addToZipWithRetry(zip, videoSrc, videoName, 'video');
+        const videoName = link.textContent.trim().replace('Download ', '');
+        return addToZipWithRetry(zip, videoSrc, videoName, 'Attachment');
       })
     ];
 
@@ -514,7 +508,6 @@ const galleryContent = document.createElement('div');
     const overlay = createGalleryOverlay();
     console.log("Gallery overlay created:", overlay);
 
-    // Use a more specific selector to find the gallery content
     const galleryContent = overlay.querySelector('#gallery-overlay > div > div:first-of-type');
     console.log("Gallery content element:", galleryContent);
 
