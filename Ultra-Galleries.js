@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Kemono Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      2.0.3
+// @version      2.0.6
 // @description  Load original resolution, toggle fitted zoom views, remove photos, batch download images and videos, and view images in a modern, scalable gallery with new features.
 // @author       ntf (original), Meri (updates)
 // @match        *://kemono.su/*/user/*/post/*
@@ -38,7 +38,6 @@
     imageCount: 0,
     downloadedCount: 0,
     totalImages: 0,
-    imageStatusUpdated: false,
     imagesLoaded: false
   };
 
@@ -46,8 +45,7 @@
   const elements = {
     statusElement: null,
     postActions: null,
-    galleryButton: null,
-    galleryOverlay: null
+    galleryButton: null
   };
 
   // Helper functions
@@ -66,21 +64,15 @@
   };
 
   const updateImageLoadingStatus = () => {
-    const { imageCount, totalImages, imageStatusUpdated } = state;
-    const status = imageCount === totalImages || imageStatusUpdated
+    const { imageCount, totalImages } = state;
+    const status = imageCount === totalImages
       ? `Images Done Loading! Total: ${totalImages}`
       : `Loading images (${imageCount}/${totalImages})...`;
     updateStatus(status);
 
     if (imageCount === totalImages) {
       state.imagesLoaded = true;
-      if (elements.galleryButton) {
-        elements.galleryButton.textContent = 'Click for Gallery';
-        elements.galleryButton.disabled = false;
-        elements.galleryButton.style.opacity = '1';
-        elements.galleryButton.style.cursor = 'pointer';
-        elements.galleryButton.addEventListener('click', showGallery); // Add click event listener
-      }
+      enableGalleryButton();
     }
   };
 
@@ -90,6 +82,16 @@
       ? 'Done Downloading!'
       : 'Downloading...';
     updateStatus(status);
+  };
+
+  const enableGalleryButton = () => {
+    if (elements.galleryButton) {
+      elements.galleryButton.textContent = 'Click for Gallery';
+      elements.galleryButton.disabled = false;
+      elements.galleryButton.style.opacity = '1';
+      elements.galleryButton.style.cursor = 'pointer';
+      elements.galleryButton.addEventListener('click', showGallery);
+    }
   };
 
   // Image manipulation functions
@@ -102,47 +104,36 @@
   };
 
   const imageActions = {
-    setHeight: (img) => setImageStyle(img, { maxHeight: '100vh', maxWidth: '100%', width: 'auto' }),
-    setWidth: (img) => setImageStyle(img, { maxHeight: '100%', maxWidth: '100vw', height: 'auto' }),
-    setFull: (img) => setImageStyle(img, { maxHeight: 'none', maxWidth: 'none', height: 'auto', width: 'auto' })
+    height: (img) => setImageStyle(img, { maxHeight: '100vh', maxWidth: '100%', width: 'auto' }),
+    width: (img) => setImageStyle(img, { maxHeight: '100%', maxWidth: '100vw', height: 'auto' }),
+    full: (img) => setImageStyle(img, { maxHeight: 'none', maxWidth: 'none', height: 'auto', width: 'auto' })
   };
 
   const removeImage = (evt) => {
     const buttonContainer = evt.currentTarget.closest('div');
-    if (buttonContainer) {
-      const imageContainer = buttonContainer.nextElementSibling;
-      if (imageContainer) {
-        imageContainer.remove();
-        buttonContainer.remove();
-      } else {
-        console.error('Could not find image container to remove');
-      }
+    const imageContainer = buttonContainer?.nextElementSibling;
+    if (imageContainer) {
+      imageContainer.remove();
+      buttonContainer.remove();
     } else {
-      console.error('Could not find button container to remove');
+      console.error('Could not find image container to remove');
     }
   };
 
   const resizeImage = (evt) => {
-    const name = evt.currentTarget.textContent;
+    const action = Object.keys(BUTTONS).find(key => BUTTONS[key] === evt.currentTarget.textContent)?.toLowerCase();
     const imgContainer = evt.currentTarget.closest('.gallery-item') || evt.currentTarget.closest('.expanded-view') || evt.currentTarget.closest('.post__files');
     const img = imgContainer?.querySelector('img');
 
-    if (img) {
-      const action = Object.entries(BUTTONS).find(([_, value]) => value === name)?.[0].toLowerCase();
-      if (action && imageActions[`set${action.charAt(0).toUpperCase() + action.slice(1)}`]) {
-        imageActions[`set${action.charAt(0).toUpperCase() + action.slice(1)}`](img);
-      }
+    if (img && imageActions[action]) {
+      imageActions[action](img);
     } else {
-      console.error('Image element not found for resize:', imgContainer);
+      console.error('Image element or action not found for resize:', imgContainer, action);
     }
   };
 
-  const resizeAllImages = (actionName) => {
-    const imgs = document.querySelectorAll('.post__image');
-    const action = Object.entries(BUTTONS).find(([_, value]) => value === actionName)?.[0].toLowerCase();
-    if (action && imageActions[`set${action.charAt(0).toUpperCase() + action.slice(1)}`]) {
-      imgs.forEach(img => imageActions[`set${action.charAt(0).toUpperCase() + action.slice(1)}`](img));
-    }
+  const resizeAllImages = (action) => {
+    document.querySelectorAll('.post__image').forEach(img => imageActions[action](img));
   };
 
   // Zip archive creation
@@ -188,20 +179,11 @@
     evt.preventDefault();
 
     const container = evt.target.closest('.post__files');
-    if (!container) {
-      console.error('Could not find container element');
-      return;
-    }
+    const img = container?.querySelector('.post__image');
+    const imgSrc = img?.getAttribute('src');
 
-    const img = container.querySelector('.post__image');
-    if (!img) {
-      console.error('Could not find image element');
-      return;
-    }
-
-    const imgSrc = img.getAttribute('src');
     if (!imgSrc) {
-      console.error('Image source is empty');
+      console.error('Could not find image source to download');
       return;
     }
 
@@ -213,15 +195,26 @@
       const title = document.querySelector('.post__title')?.textContent?.trim() ?? 'Untitled';
       const artistName = document.querySelector('.post__user-name')?.textContent?.trim() ?? 'Unknown';
 
-      const downloadLink = container.querySelector('.fileThumb');
+      const downloadLink = container?.querySelector('.fileThumb');
       const imgName = downloadLink?.getAttribute('download') || `${artistName}-${baseFileName}.${fileExtension}`;
 
-      GM_download({
-        url: imgSrc,
-        name: imgName,
-        onload: () => console.log('Image downloaded successfully:', imgName),
-        onerror: (error) => console.error('Failed to download image:', imgName, error)
-      });
+      // Firefox fix: Use GM.download instead of GM_download
+      if (typeof GM_download === 'undefined' && typeof GM.download === 'function') {
+        GM.download({
+          url: imgSrc,
+          name: imgName,
+          onload: () => console.log('Image downloaded successfully:', imgName),
+          onerror: (error) => console.error('Failed to download image:', imgName, error),
+          headers: { referer: 'https://kemono.su/' } // Add referer header for Firefox
+        });
+      } else {
+        GM_download({
+          url: imgSrc,
+          name: imgName,
+          onload: () => console.log('Image downloaded successfully:', imgName),
+          onerror: (error) => console.error('Failed to download image:', imgName, error)
+        });
+      }
     } catch (error) {
       console.error('Error processing image source:', imgSrc, error);
     }
@@ -239,11 +232,10 @@
     const sanitizeFileName = (name) => name.replace(/[/\\:*?"<>|]/g, '-');
 
     let downloadPromises = [
-      ...Array.from(images).map((img, index) => {
-        let imgSrc = img.getAttribute('src');
-        imgSrc = imgSrc.split('?')[0];
+      ...Array.from(images).map((img) => {
+        let imgSrc = img.getAttribute('src').split('?')[0];
         const fileName = imgSrc.split('/').pop();
-        const [baseFileName, fileExtension] = fileName.split('.');
+        const [baseFileName, fileExtension] = fileName.split('.'); // Fixed: fileExtension was not defined
         const imgName = `${artistName}-${sanitizeFileName(title)}-${baseFileName}.${fileExtension}`;
         return addToZipWithRetry(zip, imgSrc, imgName, 'image');
       }),
@@ -266,25 +258,22 @@
     }
   };
 
-  // Force image load
-  const forceLoadImage = (imgSrc, status) => {
-    if (status === 429) {
-      fetch(imgSrc, { method: 'HEAD' })
-        .then((response) => {
-          if (response.status === 200) {
-            console.log('Force loaded image:', imgSrc);
-            state.imageCount++;
-            updateImageLoadingStatus();
-          } else {
-            console.error('Failed to force load image:', imgSrc, response.status);
-            updateImageLoadingStatus();
-          }
-        })
-        .catch((error) => {
-          console.error('Failed to force load image:', imgSrc, error);
+  // Force image load (for rate limiting)
+  const forceLoadImage = (imgSrc) => {
+    fetch(imgSrc, { method: 'HEAD' })
+      .then((response) => {
+        if (response.status === 200) {
+          console.log('Force loaded image:', imgSrc);
+          state.imageCount++;
           updateImageLoadingStatus();
-        });
-    }
+        } else {
+          console.error('Failed to force load image:', imgSrc, response.status);
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to force load image:', imgSrc, error);
+      })
+      .finally(() => updateImageLoadingStatus());
   };
 
   const loadImageWithRetry = async (img, imgSrc, retryCount = 0) => {
@@ -298,17 +287,15 @@
         });
       });
 
-      const status = response.status;
-      if (status === 200) {
+      if (response.status === 200) {
         console.log('Image loaded successfully:', imgSrc);
         img.src = imgSrc;
-      } else if (status === 429) {
+      } else if (response.status === 429) {
         console.warn('Image rate limited:', imgSrc);
         throw new Error(`Image rate limited: ${imgSrc}`);
       } else {
-        console.error('Failed to load image:', imgSrc, 'Status:', status);
-        forceLoadImage(imgSrc, status);
-        throw new Error(`Failed to load image: ${imgSrc}, Status: ${status}`);
+        console.error('Failed to load image:', imgSrc, 'Status:', response.status);
+        throw new Error(`Failed to load image: ${imgSrc}, Status: ${response.status}`);
       }
     } catch (error) {
       if (retryCount < MAX_RETRIES) {
@@ -317,8 +304,12 @@
         await new Promise((resolve) => setTimeout(resolve, delay));
         await loadImageWithRetry(img, imgSrc, retryCount + 1);
       } else {
-        throw error;
+        console.error('Failed to load image after all retries:', imgSrc, error);
+        forceLoadImage(imgSrc); // Try force loading after retries fail
       }
+    } finally {
+      state.imageCount++;
+      updateImageLoadingStatus();
     }
   };
 
@@ -332,15 +323,12 @@
 
       try {
         await loadImageWithRetry(img, imgSrc);
-        state.imageCount++;
-        updateImageLoadingStatus();
       } catch (error) {
-        console.error('Failed to load image after all retries:', imgSrc, error);
-        updateStatus(`Image loading failed: ${imgSrc}`);
+        console.error('Failed to load image:', imgSrc, error);
       }
     }
 
-    console.log('All images loaded successfully');
+    console.log('All images loaded');
   };
 
   // Gallery functions
@@ -393,7 +381,7 @@
       document.body.removeChild(overlay);
     });
 
-const galleryContent = document.createElement('div');
+    const galleryContent = document.createElement('div');
     galleryContent.style.cssText = `
       flex: 1;
       display: grid;
@@ -504,24 +492,12 @@ const galleryContent = document.createElement('div');
   };
 
   const showGallery = () => {
-    console.log("Entering showGallery function");
     const overlay = createGalleryOverlay();
-    console.log("Gallery overlay created:", overlay);
-
     const galleryContent = overlay.querySelector('#gallery-overlay > div > div:first-of-type');
-    console.log("Gallery content element:", galleryContent);
-
     const expandedView = overlay.querySelector('#gallery-overlay > div > div:last-of-type');
-    console.log("Expanded view element:", expandedView);
-
-    const expandedImage = expandedView ? expandedView.querySelector('img') : null;
-    console.log("Expanded image element:", expandedImage);
-
-    const thumbnailContainer = expandedView ? expandedView.querySelector('div') : null;
-    console.log("Thumbnail container element:", thumbnailContainer);
-
+    const expandedImage = expandedView?.querySelector('img');
+    const thumbnailContainer = expandedView?.querySelector('div');
     const images = Array.from(document.querySelectorAll('.post__image'));
-    console.log("Number of images found:", images.length);
 
     let currentIndex = 0;
 
@@ -556,22 +532,16 @@ const galleryContent = document.createElement('div');
         pageNumber.textContent = `${index + 1} / ${images.length}`;
 
         // Update thumbnail selection
-        if (thumbnailContainer) {
-          thumbnailContainer.querySelectorAll('.thumbnail').forEach((thumb, i) => {
-            thumb.style.opacity = i === index ? '1' : '0.5';
-          });
-        }
+        thumbnailContainer?.querySelectorAll('.thumbnail').forEach((thumb, i) => {
+          thumb.style.opacity = i === index ? '1' : '0.5';
+        });
       } else {
         console.error("Unable to show expanded image. Missing elements:", { expandedImage, expandedView });
       }
     };
 
     const hideExpandedImage = () => {
-      if (expandedView) {
-        expandedView.style.display = 'none';
-      } else {
-        console.error("Unable to hide expanded view. Element not found.");
-      }
+      expandedView.style.display = 'none';
     };
 
     images.forEach((img, index) => {
@@ -585,72 +555,53 @@ const galleryContent = document.createElement('div');
         cursor: pointer;
         transition: transform 0.3s ease;
       `;
-      thumbnail.addEventListener('click', () => {
-        showExpandedImage(index);
-      });
-      thumbnail.addEventListener('mouseover', () => {
-        thumbnail.style.transform = 'scale(1.05)';
-      });
-      thumbnail.addEventListener('mouseout', () => {
-        thumbnail.style.transform = 'scale(1)';
-      });
+      thumbnail.addEventListener('click', () => showExpandedImage(index));
+      thumbnail.addEventListener('mouseover', () => thumbnail.style.transform = 'scale(1.05)');
+      thumbnail.addEventListener('mouseout', () => thumbnail.style.transform = 'scale(1)');
 
-      if (galleryContent) {
-        galleryContent.appendChild(thumbnail);
-      } else {
-        console.error("Unable to append thumbnail to gallery content. Element not found.");
-      }
+      galleryContent.appendChild(thumbnail);
 
       // Create thumbnails for the expanded view
-      if (thumbnailContainer) {
-        const expandedThumbnail = thumbnail.cloneNode(true);
-        expandedThumbnail.style.cssText = `
-          width: 60px;
-          height: 60px;
-          object-fit: cover;
-          margin: 0 5px;
-          cursor: pointer;
-          opacity: 0.5;
-          transition: opacity 0.3s ease;
-        `;
-        expandedThumbnail.addEventListener('click', () => {
-          showExpandedImage(index);
-        });
-        thumbnailContainer.appendChild(expandedThumbnail);
-      } else {
-        console.error("Unable to create expanded view thumbnails. Container not found.");
+      const expandedThumbnail = thumbnail.cloneNode(true);
+      expandedThumbnail.style.cssText = `
+        width: 60px;
+        height: 60px;
+        object-fit: cover;
+        margin: 0 5px;
+        cursor: pointer;
+        opacity: 0.5;
+        transition: opacity 0.3s ease;
+        /* Fix for scaling issue: Add vertical-align */
+        vertical-align: top;
+      `;
+      expandedThumbnail.addEventListener('click', () => showExpandedImage(index));
+      thumbnailContainer.appendChild(expandedThumbnail);
+    });
+
+    const prevButton = createNavigationButton('prev');
+    const nextButton = createNavigationButton('next');
+
+    prevButton.addEventListener('click', () => {
+      currentIndex = (currentIndex - 1 + images.length) % images.length;
+      showExpandedImage(currentIndex);
+    });
+
+    nextButton.addEventListener('click', () => {
+      currentIndex = (currentIndex + 1) % images.length;
+      showExpandedImage(currentIndex);
+    });
+
+    expandedView.appendChild(prevButton);
+    expandedView.appendChild(nextButton);
+
+    // Close expanded view when clicking outside the image
+    expandedView.addEventListener('click', (e) => {
+      if (e.target === expandedView) {
+        hideExpandedImage();
       }
     });
 
-    if (expandedView) {
-      const prevButton = createNavigationButton('prev');
-      const nextButton = createNavigationButton('next');
-
-      prevButton.addEventListener('click', () => {
-        currentIndex = (currentIndex - 1 + images.length) % images.length;
-        showExpandedImage(currentIndex);
-      });
-
-      nextButton.addEventListener('click', () => {
-        currentIndex = (currentIndex + 1) % images.length;
-        showExpandedImage(currentIndex);
-      });
-
-      expandedView.appendChild(prevButton);
-      expandedView.appendChild(nextButton);
-
-      // Close expanded view when clicking outside the image
-      expandedView.addEventListener('click', (e) => {
-        if (e.target === expandedView) {
-          hideExpandedImage();
-        }
-      });
-    } else {
-      console.error("Unable to add navigation buttons. Expanded view not found.");
-    }
-
     document.body.appendChild(overlay);
-    console.log("Gallery overlay added to document body");
   };
 
   const init = () => {
@@ -674,15 +625,15 @@ const galleryContent = document.createElement('div');
     containerStatus.append(downloadAllButton, elements.statusElement);
 
     elements.postActions = document.querySelector('.post__actions');
-    elements.galleryButton = createToggleButton(BUTTONS.GALLERY, null); // Remove click handler
+    elements.galleryButton = createToggleButton(BUTTONS.GALLERY, null);
     elements.galleryButton.disabled = true;
     elements.galleryButton.style.opacity = '0.6';
     elements.galleryButton.style.cursor = 'not-allowed';
 
     elements.postActions.append(
-      createToggleButton(BUTTONS.WIDTH, () => resizeAllImages(BUTTONS.WIDTH)),
-      createToggleButton(BUTTONS.HEIGHT, () => resizeAllImages(BUTTONS.HEIGHT)),
-      createToggleButton(BUTTONS.FULL, () => resizeAllImages(BUTTONS.FULL)),
+      createToggleButton(BUTTONS.WIDTH, () => resizeAllImages('width')),
+      createToggleButton(BUTTONS.HEIGHT, () => resizeAllImages('height')),
+      createToggleButton(BUTTONS.FULL, () => resizeAllImages('full')),
       containerStatus,
       elements.galleryButton
     );
