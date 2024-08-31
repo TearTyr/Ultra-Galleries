@@ -35,6 +35,12 @@ This userscript enhances the browsing and downloading experience on kemono.su an
 - Includes video files in batch downloads.
 - Preserves original video filenames.
 
+### Bug Fixes and Improvements (v2.0.6)
+
+- **Gallery Button Scaling:** Fixed a scaling issue that could cause a gap in the second row of thumbnails in the gallery view.
+- **Firefox Download Compatibility:** Improved download functionality for Firefox users by using the updated `GM.download` API and adding a referer header.(but this is uncertain since i use Zen and it still doesn
+- **Batch Downloading:** Fixed a minor bug that could prevent images from being added to the zip archive during batch downloads.
+
 ## Usage
 
 After installation, navigate to a post on kemono.su or coomer.su. You'll see new buttons for resizing, downloading, and removing images. Use the `DL ALL` button to initiate a batch download of all media in the post.
@@ -58,4 +64,4 @@ After installation, navigate to a post on kemono.su or coomer.su. You'll see new
 
 ## Version
 
-Current version: 2.0.2
+Current version: 2.0.6
