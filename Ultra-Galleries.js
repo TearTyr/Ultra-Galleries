@@ -1,59 +1,90 @@
 // ==UserScript==
 // @name         Ultra Kemono Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      2.0.6
-// @description  Load original resolution, toggle fitted zoom views, remove photos, batch download images and videos, and view images in a modern, scalable gallery with new features.
-// @author       ntf (original), Meri (updates)
+// @version      2.2.0
+// @description  Enhanced gallery experience for Kemono with modern features and optimizations
+// @author       ntf (original), Meri/TearTyr (updates)
 // @match        *://kemono.su/*/user/*/post/*
 // @match        *://coomer.su/*/user/*/post/*
 // @icon         https://kemono.party/static/menu/recent.svg
 // @grant        GM_download
 // @grant        GM.xmlHttpRequest
 // @grant        GM_xmlhttpRequest
-// @require      https://cdn.bootcdn.net/ajax/libs/jquery/2.2.4/jquery.min.js
-// @require      https://cdn.bootcss.com/jszip/3.1.4/jszip.min.js
-// @require      https://cdn.bootcss.com/FileSaver.js/1.3.2/FileSaver.min.js
+// @grant        GM_addStyle
+// @require      https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js
+// @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js
+// @require      https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js
+// @require      https://cdn.jsdelivr.net/npm/sweetalert2@11
 // @run-at       document-end
 // @noframes
 // ==/UserScript==
 
 (function () {
-  'use strict';
+  "use strict";
+
+  // Load CSS
+  fetch(
+    "https://raw.githubusercontent.com/yourusername/Ultra-Galleries/main/Ultra-Galleries.css",
+  )
+    .then((response) => response.text())
+    .then((css) => GM_addStyle(css))
+    .catch((error) => console.error("Error loading CSS:", error));
 
   // Constants
   const BUTTONS = {
-    DOWNLOAD: '【DOWNLOAD】',
-    DOWNLOAD_ALL: '【DL ALL】',
-    FULL: '【FULL】',
-    HEIGHT: '【FILL HEIGHT】',
-    REMOVE: '【REMOVE】',
-    WIDTH: '【FILL WIDTH】',
-    GALLERY: '【GALLERY】'
+    DOWNLOAD: "【DOWNLOAD】",
+    DOWNLOAD_ALL: "【DL ALL】",
+    FULL: "【FULL】",
+    HEIGHT: "【FILL HEIGHT】",
+    REMOVE: "【REMOVE】",
+    WIDTH: "【FILL WIDTH】",
+    GALLERY: "【GALLERY】",
+    SETTINGS: "⚙️",
   };
+
   const MAX_RETRIES = 10;
   const RETRY_DELAY = 1250;
 
-  // State
-  const state = {
+  // State management using a Proxy for reactivity
+  const createReactiveState = (initialState) => {
+    return new Proxy(initialState, {
+      set(target, key, value) {
+        target[key] = value;
+        if (key === "imageCount" || key === "totalImages") {
+          updateImageLoadingStatus();
+        } else if (key === "downloadedCount") {
+          updateDownloadStatus();
+        }
+        return true;
+      },
+    });
+  };
+
+  const state = createReactiveState({
     imageCount: 0,
     downloadedCount: 0,
     totalImages: 0,
-    imagesLoaded: false
-  };
+    imagesLoaded: false,
+    galleryActive: false,
+    expandedViewActive: false,
+    zipFileNameFormat: "{title}-{artistName}.zip",
+    imageFileNameFormat: "{title}-{artistName}-{fileName}-{index}",
+  });
 
   // DOM Elements
   const elements = {
     statusElement: null,
     postActions: null,
-    galleryButton: null
+    galleryButton: null,
+    settingsButton: null,
   };
 
   // Helper functions
   const createToggleButton = (name, action) => {
-    const toggle = document.createElement('a');
+    const toggle = document.createElement("a");
     toggle.textContent = name;
-    toggle.addEventListener('click', action);
-    toggle.style.cursor = 'pointer';
+    toggle.addEventListener("click", action);
+    toggle.style.cursor = "pointer";
     return toggle;
   };
 
@@ -65,9 +96,10 @@
 
   const updateImageLoadingStatus = () => {
     const { imageCount, totalImages } = state;
-    const status = imageCount === totalImages
-      ? `Images Done Loading! Total: ${totalImages}`
-      : `Loading images (${imageCount}/${totalImages})...`;
+    const status =
+      imageCount === totalImages
+        ? `Images Done Loading! Total: ${totalImages}`
+        : `Loading images (${imageCount}/${totalImages})...`;
     updateStatus(status);
 
     if (imageCount === totalImages) {
@@ -78,19 +110,19 @@
 
   const updateDownloadStatus = () => {
     const { downloadedCount, totalImages } = state;
-    const status = downloadedCount === totalImages
-      ? 'Done Downloading!'
-      : 'Downloading...';
+    const status =
+      downloadedCount === totalImages
+        ? "Done Downloading!"
+        : `Downloading... (${downloadedCount}/${totalImages})`;
     updateStatus(status);
   };
 
   const enableGalleryButton = () => {
     if (elements.galleryButton) {
-      elements.galleryButton.textContent = 'Click for Gallery';
+      elements.galleryButton.textContent = BUTTONS.GALLERY;
       elements.galleryButton.disabled = false;
-      elements.galleryButton.style.opacity = '1';
-      elements.galleryButton.style.cursor = 'pointer';
-      elements.galleryButton.addEventListener('click', showGallery);
+      elements.galleryButton.classList.remove("disabled");
+      elements.galleryButton.addEventListener("click", showGallery);
     }
   };
 
@@ -99,157 +131,169 @@
     if (img) {
       Object.assign(img.style, styles);
     } else {
-      console.error('Image element is undefined or null:', img);
+      console.error("Image element is undefined or null:", img);
     }
   };
 
   const imageActions = {
-    height: (img) => setImageStyle(img, { maxHeight: '100vh', maxWidth: '100%', width: 'auto' }),
-    width: (img) => setImageStyle(img, { maxHeight: '100%', maxWidth: '100vw', height: 'auto' }),
-    full: (img) => setImageStyle(img, { maxHeight: 'none', maxWidth: 'none', height: 'auto', width: 'auto' })
+    height: (img) =>
+      setImageStyle(img, {
+        maxHeight: "100vh",
+        maxWidth: "100%",
+        width: "auto",
+      }),
+    width: (img) =>
+      setImageStyle(img, {
+        maxHeight: "100%",
+        maxWidth: "100vw",
+        height: "auto",
+      }),
+    full: (img) =>
+      setImageStyle(img, {
+        maxHeight: "none",
+        maxWidth: "none",
+        height: "auto",
+        width: "auto",
+      }),
   };
 
   const removeImage = (evt) => {
-    const buttonContainer = evt.currentTarget.closest('div');
+    const buttonContainer = evt.currentTarget.closest("div");
     const imageContainer = buttonContainer?.nextElementSibling;
     if (imageContainer) {
       imageContainer.remove();
       buttonContainer.remove();
     } else {
-      console.error('Could not find image container to remove');
+      console.error("Could not find image container to remove");
     }
   };
 
   const resizeImage = (evt) => {
-    const action = Object.keys(BUTTONS).find(key => BUTTONS[key] === evt.currentTarget.textContent)?.toLowerCase();
-    const imgContainer = evt.currentTarget.closest('.gallery-item') || evt.currentTarget.closest('.expanded-view') || evt.currentTarget.closest('.post__files');
-    const img = imgContainer?.querySelector('img');
+    const action = Object.keys(BUTTONS)
+      .find((key) => BUTTONS[key] === evt.currentTarget.textContent)
+      ?.toLowerCase();
+    const imgContainer =
+      evt.currentTarget.closest(".gallery-item") ||
+      evt.currentTarget.closest(".expanded-view") ||
+      evt.currentTarget.closest(".post__files");
+    const img = imgContainer?.querySelector("img");
 
     if (img && imageActions[action]) {
       imageActions[action](img);
     } else {
-      console.error('Image element or action not found for resize:', imgContainer, action);
+      console.error(
+        "Image element or action not found for resize:",
+        imgContainer,
+        action,
+      );
     }
   };
 
   const resizeAllImages = (action) => {
-    document.querySelectorAll('.post__image').forEach(img => imageActions[action](img));
+    document
+      .querySelectorAll(".post__image")
+      .forEach((img) => imageActions[action](img));
   };
 
   // Zip archive creation
-  const addToZip = (zip, src, fileName, type) => {
-    return new Promise((resolve, reject) => {
-      GM.xmlHttpRequest({
-        method: 'GET',
-        url: src,
-        responseType: 'blob',
-        headers: { referer: 'https://kemono.su/' },
-        onload: (response) => {
-          if (response.status === 200) {
-            zip.file(fileName, response.response);
-            if (type === 'image') {
-              state.downloadedCount++;
-              updateDownloadStatus();
-            }
-            resolve();
-          } else {
-            reject(new Error(`Failed to download ${type}: ${src}`));
-          }
-        },
-        onerror: (error) => reject(error)
+  const addToZip = async (zip, src, fileName, type) => {
+    try {
+      const response = await new Promise((resolve, reject) => {
+        GM.xmlHttpRequest({
+          method: "GET",
+          url: src,
+          responseType: "blob",
+          headers: { referer: "https://kemono.su/" },
+          onload: resolve,
+          onerror: reject,
+        });
       });
-    });
-  };
 
-  const addToZipWithRetry = async (zip, src, fileName, type, retryCount = 0) => {
-    try {
-      await addToZip(zip, src, fileName, type);
-    } catch (error) {
-      if (retryCount < MAX_RETRIES) {
-        console.warn(`Failed to download ${type}: ${src}, retrying... (Attempt ${retryCount + 1})`);
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-        await addToZipWithRetry(zip, src, fileName, type, retryCount + 1);
+      if (response.status === 200) {
+        zip.file(fileName, response.response);
+        if (type === "image") {
+          state.downloadedCount++;
+        }
+        return true;
       } else {
-        throw error;
+        throw new Error(`Failed to download ${type}: ${src}`);
       }
+    } catch (error) {
+      console.error(`Error downloading ${type}:`, error);
+      return false;
     }
   };
 
-  const downloadImage = (evt) => {
-    evt.preventDefault();
-
-    const container = evt.target.closest('.post__files');
-    const img = container?.querySelector('.post__image');
-    const imgSrc = img?.getAttribute('src');
-
-    if (!imgSrc) {
-      console.error('Could not find image source to download');
-      return;
-    }
-
+  const addToZipWithRetry = async (
+    zip,
+    src,
+    fileName,
+    type,
+    retryCount = 0,
+  ) => {
     try {
-      const url = new URL(imgSrc, document.baseURI);
-      const fileName = url.pathname.split('/').pop();
-      const [baseFileName, fileExtension] = fileName.split('.');
-
-      const title = document.querySelector('.post__title')?.textContent?.trim() ?? 'Untitled';
-      const artistName = document.querySelector('.post__user-name')?.textContent?.trim() ?? 'Unknown';
-
-      const downloadLink = container?.querySelector('.fileThumb');
-      const imgName = downloadLink?.getAttribute('download') || `${artistName}-${baseFileName}.${fileExtension}`;
-
-      // Firefox fix: Use GM.download instead of GM_download
-      if (typeof GM_download === 'undefined' && typeof GM.download === 'function') {
-        GM.download({
-          url: imgSrc,
-          name: imgName,
-          onload: () => console.log('Image downloaded successfully:', imgName),
-          onerror: (error) => console.error('Failed to download image:', imgName, error),
-          headers: { referer: 'https://kemono.su/' } // Add referer header for Firefox
-        });
-      } else {
-        GM_download({
-          url: imgSrc,
-          name: imgName,
-          onload: () => console.log('Image downloaded successfully:', imgName),
-          onerror: (error) => console.error('Failed to download image:', imgName, error)
-        });
+      const success = await addToZip(zip, src, fileName, type);
+      if (!success && retryCount < MAX_RETRIES) {
+        console.warn(
+          `Failed to download ${type}: ${src}, retrying... (Attempt ${retryCount + 1})`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
+        return addToZipWithRetry(zip, src, fileName, type, retryCount + 1);
       }
+      return success;
     } catch (error) {
-      console.error('Error processing image source:', imgSrc, error);
+      console.error(
+        `Failed to download ${type} after ${MAX_RETRIES} attempts:`,
+        src,
+        error,
+      );
+      return false;
     }
   };
 
   const downloadAllImagesAndVideos = async () => {
-    const images = document.querySelectorAll('.post__image');
-    const attachmentLinks = document.querySelectorAll('.post__attachment-link');
-    const title = document.querySelector('.post__title').textContent.trim();
-    const artistName = document.querySelector('.post__user-name').textContent.trim();
+    const images = document.querySelectorAll("a.fileThumb.image-link");
+    const attachmentLinks = document.querySelectorAll(".post__attachment-link");
+    const title = document.querySelector(".post__title").textContent.trim();
+    const artistName = document
+      .querySelector(".post__user-name")
+      .textContent.trim();
 
     const total = images.length + attachmentLinks.length;
     const zip = new JSZip();
 
-    const sanitizeFileName = (name) => name.replace(/[/\\:*?"<>|]/g, '-');
+    const sanitizeFileName = (name) => name.replace(/[/\\:*?"<>|]/g, "-");
 
-    let downloadPromises = [
-      ...Array.from(images).map((img) => {
-        let imgSrc = img.getAttribute('src').split('?')[0];
-        const fileName = imgSrc.split('/').pop();
-        const [baseFileName, fileExtension] = fileName.split('.'); // Fixed: fileExtension was not defined
-        const imgName = `${artistName}-${sanitizeFileName(title)}-${baseFileName}.${fileExtension}`;
-        return addToZipWithRetry(zip, imgSrc, imgName, 'image');
+    state.downloadedCount = 0;
+    state.totalImages = images.length;
+
+    const downloadPromises = [
+      ...Array.from(images).map((imgLink, index) => {
+        const imgSrc = imgLink.getAttribute("href").split("?")[0];
+        const fileName = imgLink.getAttribute("download");
+        const imgName = state.imageFileNameFormat
+          .replace("{title}", sanitizeFileName(title))
+          .replace("{artistName}", sanitizeFileName(artistName))
+          .replace("{fileName}", fileName.replace(/\.[^/.]+$/, ""))
+          .replace("{index}", index + 1)
+          .replace("{ext}", getExtension(fileName));
+        return addToZipWithRetry(zip, imgSrc, imgName, "image");
       }),
       ...Array.from(attachmentLinks).map((link) => {
-        const videoSrc = link.getAttribute('href');
-        const videoName = link.textContent.trim().replace('Download ', '');
-        return addToZipWithRetry(zip, videoSrc, videoName, 'Attachment');
-      })
+        const videoSrc = link.getAttribute("href");
+        const videoName = link.textContent.trim().replace("Download ", "");
+        return addToZipWithRetry(zip, videoSrc, videoName, "Attachment");
+      }),
     ];
 
     try {
       await Promise.all(downloadPromises);
-      const content = await zip.generateAsync({ type: 'blob' });
-      const zipFileName = `${artistName}-${sanitizeFileName(title)}.zip`;
+      const content = await zip.generateAsync({ type: "blob" });
+
+      const zipFileName = state.zipFileNameFormat
+        .replace("{artistName}", sanitizeFileName(artistName))
+        .replace("{title}", sanitizeFileName(title));
+
       saveAs(content, zipFileName);
       updateStatus(`Done Downloading and adding to a zip! Total: ${total}`);
     } catch (error) {
@@ -259,174 +303,98 @@
   };
 
   // Force image load (for rate limiting)
-  const forceLoadImage = (imgSrc) => {
-    fetch(imgSrc, { method: 'HEAD' })
-      .then((response) => {
-        if (response.status === 200) {
-          console.log('Force loaded image:', imgSrc);
-          state.imageCount++;
-          updateImageLoadingStatus();
-        } else {
-          console.error('Failed to force load image:', imgSrc, response.status);
-        }
-      })
-      .catch((error) => {
-        console.error('Failed to force load image:', imgSrc, error);
-      })
-      .finally(() => updateImageLoadingStatus());
+  const forceLoadImage = async (imgSrc) => {
+    try {
+      const response = await fetch(imgSrc, { method: "HEAD" });
+      if (response.ok) {
+        console.log("Force loaded image:", imgSrc);
+        state.imageCount++;
+      } else {
+        console.error("Failed to force load image:", imgSrc, response.status);
+      }
+    } catch (error) {
+      console.error("Failed to force load image:", imgSrc, error);
+    }
   };
 
   const loadImageWithRetry = async (img, imgSrc, retryCount = 0) => {
     try {
       const response = await new Promise((resolve, reject) => {
         GM_xmlhttpRequest({
-          method: 'HEAD',
+          method: "HEAD",
           url: imgSrc,
           onload: resolve,
-          onerror: reject
+          onerror: reject,
         });
       });
 
       if (response.status === 200) {
-        console.log('Image loaded successfully:', imgSrc);
+        console.log("Image loaded successfully:", imgSrc);
         img.src = imgSrc;
       } else if (response.status === 429) {
-        console.warn('Image rate limited:', imgSrc);
         throw new Error(`Image rate limited: ${imgSrc}`);
       } else {
-        console.error('Failed to load image:', imgSrc, 'Status:', response.status);
-        throw new Error(`Failed to load image: ${imgSrc}, Status: ${response.status}`);
+        throw new Error(
+          `Failed to load image: ${imgSrc}, Status: ${response.status}`,
+        );
       }
     } catch (error) {
+      console.warn(`Error loading image: ${imgSrc}`, error);
       if (retryCount < MAX_RETRIES) {
         const delay = Math.pow(2, retryCount) * 1000;
-        console.log(`Retrying image load: ${imgSrc} in ${delay / 1000} seconds (Attempt ${retryCount + 1})`);
+        console.log(
+          `Retrying image load: ${imgSrc} in ${delay / 1000} seconds (Attempt ${retryCount + 1})`,
+        );
         await new Promise((resolve) => setTimeout(resolve, delay));
         await loadImageWithRetry(img, imgSrc, retryCount + 1);
       } else {
-        console.error('Failed to load image after all retries:', imgSrc, error);
-        forceLoadImage(imgSrc); // Try force loading after retries fail
+        console.error("Failed to load image after all retries:", imgSrc);
+        await forceLoadImage(imgSrc);
       }
     } finally {
       state.imageCount++;
-      updateImageLoadingStatus();
     }
   };
 
   const loadImages = async () => {
-    const images = document.querySelectorAll('a.fileThumb.image-link');
+    const images = document.querySelectorAll("a.fileThumb.image-link");
     state.totalImages = images.length;
 
-    for (const a of images) {
-      const img = a.querySelector('img');
-      const imgSrc = a.getAttribute('href');
-
-      try {
+    await Promise.all(
+      Array.from(images).map(async (a) => {
+        const img = a.querySelector("img");
+        const imgSrc = a.getAttribute("href");
         await loadImageWithRetry(img, imgSrc);
-      } catch (error) {
-        console.error('Failed to load image:', imgSrc, error);
-      }
-    }
+      }),
+    );
 
-    console.log('All images loaded');
+    console.log("All images loaded");
   };
 
   // Gallery functions
   const createGalleryOverlay = () => {
-    const overlay = document.createElement('div');
-    overlay.id = 'gallery-overlay';
-    overlay.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: rgba(0, 0, 0, 0.8);
-      backdrop-filter: blur(10px);
-      z-index: 9999;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-    `;
+    const overlay = document.createElement("div");
+    overlay.id = "gallery-overlay";
 
-    const galleryContainer = document.createElement('div');
-    galleryContainer.style.cssText = `
-      width: 95%;
-      height: 95%;
-      background-color: rgba(255, 255, 255, 0.1);
-      border-radius: 8px;
-      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.3);
-      display: flex;
-      flex-direction: column;
-      position: relative;
-    `;
+    const galleryContainer = document.createElement("div");
+    galleryContainer.className = "gallery-container";
 
-    const closeButton = document.createElement('button');
-    closeButton.textContent = '×';
-    closeButton.style.cssText = `
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      font-size: 24px;
-      background: none;
-      border: none;
-      color: white;
-      cursor: pointer;
-      z-index: 10;
-    `;
-    closeButton.addEventListener('click', () => {
-      document.body.removeChild(overlay);
-    });
+    const closeButton = document.createElement("button");
+    closeButton.textContent = "×";
+    closeButton.className = "gallery-close-button";
+    closeButton.addEventListener("click", closeGallery);
 
-    const galleryContent = document.createElement('div');
-    galleryContent.style.cssText = `
-      flex: 1;
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      grid-gap: 10px;
-      padding: 20px;
-      overflow-y: auto;
-    `;
+    const galleryContent = document.createElement("div");
+    galleryContent.className = "gallery-content";
 
-    const expandedView = document.createElement('div');
-    expandedView.style.cssText = `
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: rgba(0, 0, 0, 0.9);
-      display: none;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 11;
-    `;
+    const expandedView = document.createElement("div");
+    expandedView.className = "expanded-view";
 
-    const expandedImage = document.createElement('img');
-    expandedImage.style.cssText = `
-      max-width: 90vw;
-      max-height: 80vh;
-      object-fit: contain;
-    `;
+    const expandedImage = document.createElement("img");
+    expandedImage.className = "expanded-image";
 
-    const thumbnailContainer = document.createElement('div');
-    thumbnailContainer.style.cssText = `
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      height: 100px;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      background-color: rgba(0, 0, 0, 0.5);
-      overflow-x: auto;
-      padding: 10px;
-    `;
+    const thumbnailContainer = document.createElement("div");
+    thumbnailContainer.className = "thumbnail-container";
 
     expandedView.appendChild(expandedImage);
     expandedView.appendChild(thumbnailContainer);
@@ -439,154 +407,110 @@
   };
 
   const createNavigationButton = (direction) => {
-    const button = document.createElement('button');
-    button.textContent = direction === 'prev' ? '←' : '→';
-    button.style.cssText = `
-      position: absolute;
-      top: 50%;
-      ${direction === 'prev' ? 'left' : 'right'}: 10px;
-      transform: translateY(-50%);
-      font-size: 24px;
-      background: rgba(0, 0, 0, 0.5);
-      color: white;
-      border: none;
-      border-radius: 50%;
-      width: 40px;
-      height: 40px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      opacity: 0.7;
-      transition: opacity 0.3s ease;
-      z-index: 12;
-    `;
-    button.addEventListener('mouseover', () => {
-      button.style.opacity = '1';
-    });
-    button.addEventListener('mouseout', () => {
-      button.style.opacity = '0.7';
-    });
+    const button = document.createElement("button");
+    button.textContent = direction === "prev" ? "←" : "→";
+    button.className = `navigation-button ${direction}`;
     return button;
   };
 
   const createLoadingOverlay = () => {
-    const overlay = document.createElement('div');
-    overlay.style.cssText = `
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: rgba(0, 0, 0, 0.7);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 12;
-    `;
-    const loadingText = document.createElement('div');
-    loadingText.textContent = 'Loading...';
-    loadingText.style.color = 'white';
+    const overlay = document.createElement("div");
+    overlay.className = "loading-overlay";
+    const loadingText = document.createElement("div");
+    loadingText.textContent = "Loading...";
     overlay.appendChild(loadingText);
     return overlay;
   };
 
+  const closeGallery = () => {
+    const overlay = document.getElementById("gallery-overlay");
+    if (overlay) {
+      document.body.removeChild(overlay);
+      state.galleryActive = false;
+      state.expandedViewActive = false;
+    }
+  };
+
   const showGallery = () => {
+    state.galleryActive = true;
     const overlay = createGalleryOverlay();
-    const galleryContent = overlay.querySelector('#gallery-overlay > div > div:first-of-type');
-    const expandedView = overlay.querySelector('#gallery-overlay > div > div:last-of-type');
-    const expandedImage = expandedView?.querySelector('img');
-    const thumbnailContainer = expandedView?.querySelector('div');
-    const images = Array.from(document.querySelectorAll('.post__image'));
+    const galleryContent = overlay.querySelector(".gallery-content");
+    const expandedView = overlay.querySelector(".expanded-view");
+    const expandedImage = expandedView?.querySelector("img");
+    const thumbnailContainer = expandedView?.querySelector(
+      ".thumbnail-container",
+    );
+    const images = Array.from(document.querySelectorAll(".post__image"));
 
     let currentIndex = 0;
 
-    const pageNumber = document.createElement('div');
-    pageNumber.style.cssText = `
-      position: absolute;
-      bottom: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      color: white;
-      font-size: 16px;
-    `;
+    const pageNumber = document.createElement("div");
+    pageNumber.className = "page-number";
     expandedView.appendChild(pageNumber);
 
     const showExpandedImage = (index) => {
       if (expandedImage && expandedView) {
+        state.expandedViewActive = true;
         const loadingOverlay = createLoadingOverlay();
         expandedView.appendChild(loadingOverlay);
 
         expandedImage.onload = () => {
           expandedView.removeChild(loadingOverlay);
-          expandedView.style.display = 'flex';
+          expandedView.style.display = "flex";
         };
 
         expandedImage.onerror = () => {
           expandedView.removeChild(loadingOverlay);
-          // Handle error, maybe show an error message
+          console.error("Failed to load expanded image");
         };
 
         expandedImage.src = images[index].src;
         currentIndex = index;
         pageNumber.textContent = `${index + 1} / ${images.length}`;
 
-        // Update thumbnail selection
-        thumbnailContainer?.querySelectorAll('.thumbnail').forEach((thumb, i) => {
-          thumb.style.opacity = i === index ? '1' : '0.5';
-        });
+        thumbnailContainer
+          ?.querySelectorAll(".expanded-thumbnail")
+          .forEach((thumb, i) => {
+            thumb.classList.toggle("active", i === index);
+          });
       } else {
-        console.error("Unable to show expanded image. Missing elements:", { expandedImage, expandedView });
+        console.error("Unable to show expanded image. Missing elements:", {
+          expandedImage,
+          expandedView,
+        });
       }
     };
 
     const hideExpandedImage = () => {
-      expandedView.style.display = 'none';
+      state.expandedViewActive = false;
+      expandedView.style.display = "none";
     };
 
     images.forEach((img, index) => {
-      const thumbnail = document.createElement('img');
+      const thumbnail = document.createElement("img");
       thumbnail.src = img.src;
-      thumbnail.className = 'thumbnail';
-      thumbnail.style.cssText = `
-        width: 100%;
-        height: 200px;
-        object-fit: cover;
-        cursor: pointer;
-        transition: transform 0.3s ease;
-      `;
-      thumbnail.addEventListener('click', () => showExpandedImage(index));
-      thumbnail.addEventListener('mouseover', () => thumbnail.style.transform = 'scale(1.05)');
-      thumbnail.addEventListener('mouseout', () => thumbnail.style.transform = 'scale(1)');
+      thumbnail.className = "thumbnail";
+      thumbnail.addEventListener("click", () => showExpandedImage(index));
 
       galleryContent.appendChild(thumbnail);
 
-      // Create thumbnails for the expanded view
       const expandedThumbnail = thumbnail.cloneNode(true);
-      expandedThumbnail.style.cssText = `
-        width: 60px;
-        height: 60px;
-        object-fit: cover;
-        margin: 0 5px;
-        cursor: pointer;
-        opacity: 0.5;
-        transition: opacity 0.3s ease;
-        /* Fix for scaling issue: Add vertical-align */
-        vertical-align: top;
-      `;
-      expandedThumbnail.addEventListener('click', () => showExpandedImage(index));
+      expandedThumbnail.className = "expanded-thumbnail";
+      expandedThumbnail.addEventListener("click", () =>
+        showExpandedImage(index),
+      );
       thumbnailContainer.appendChild(expandedThumbnail);
     });
 
-    const prevButton = createNavigationButton('prev');
-    const nextButton = createNavigationButton('next');
+    const prevButton = createNavigationButton("prev");
+    const nextButton = createNavigationButton("next");
 
-    prevButton.addEventListener('click', () => {
+    prevButton.addEventListener("click", () => {
       currentIndex = (currentIndex - 1 + images.length) % images.length;
       showExpandedImage(currentIndex);
     });
 
-    nextButton.addEventListener('click', () => {
+    nextButton.addEventListener("click", () => {
       currentIndex = (currentIndex + 1) % images.length;
       showExpandedImage(currentIndex);
     });
@@ -594,69 +518,179 @@
     expandedView.appendChild(prevButton);
     expandedView.appendChild(nextButton);
 
-    // Close expanded view when clicking outside the image
-    expandedView.addEventListener('click', (e) => {
+    expandedView.addEventListener("click", (e) => {
       if (e.target === expandedView) {
         hideExpandedImage();
       }
     });
 
     document.body.appendChild(overlay);
+
+    const handleKeydown = (event) => {
+      if (state.galleryActive) {
+        if (event.key === "Escape") {
+          state.expandedViewActive ? hideExpandedImage() : closeGallery();
+        } else if (state.expandedViewActive) {
+          if (event.key === "ArrowLeft") {
+            currentIndex = (currentIndex - 1 + images.length) % images.length;
+            showExpandedImage(currentIndex);
+          } else if (event.key === "ArrowRight") {
+            currentIndex = (currentIndex + 1) % images.length;
+            showExpandedImage(currentIndex);
+          }
+        }
+      } else {
+        const prevPageLink = document.querySelector(".paginator__link--prev");
+        const nextPageLink = document.querySelector(".paginator__link--next");
+        if (event.key === "ArrowLeft" && prevPageLink) {
+          prevPageLink.click();
+          event.preventDefault();
+        } else if (event.key === "ArrowRight" && nextPageLink) {
+          nextPageLink.click();
+          event.preventDefault();
+        }
+      }
+    };
+
+    document.addEventListener("keydown", handleKeydown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeydown);
+    };
+  };
+
+  const getExtension = (filename) => {
+    return filename.slice(((filename.lastIndexOf(".") - 1) >>> 0) + 2);
+  };
+
+  const sanitizeFileName = (name) => name.replace(/[/\\:*?"<>|]/g, "-");
+
+  const showSettings = () => {
+    Swal.fire({
+      title: "Ultra Kemono Galleries - Zip Settings",
+      html: `
+        <div>
+          <label for="zipFileNameFormat">Zip Filename Format:</label>
+          <input type="text" id="zipFileNameFormat" value="${state.zipFileNameFormat}" placeholder="{title}-{artistName}.zip">
+          <p>Available placeholders: {artistName}, {title}</p>
+        </div>
+        <div>
+          <label for="imageFileNameFormat">Image Filename Format:</label>
+          <input type="text" id="imageFileNameFormat" value="${state.imageFileNameFormat}" placeholder="{title}-{artistName}-{fileName}-{index}">
+          <p>Available placeholders: {artistName}, {title}, {fileName}, {index}, {ext}</p>
+        </div>
+        <div>
+          <p>Original author: ntf</p>
+          <p>Forked by: Meri/TearTyr</p>
+        </div>
+      `,
+      confirmButtonText: "Save",
+      focusConfirm: false,
+      preConfirm: () => {
+        state.zipFileNameFormat =
+          document.getElementById("zipFileNameFormat").value;
+        state.imageFileNameFormat = document.getElementById(
+          "imageFileNameFormat",
+        ).value;
+      },
+    });
   };
 
   const init = () => {
-    document.querySelectorAll('a.fileThumb.image-link img').forEach((img) => (img.className = 'post__image'));
+    document
+      .querySelectorAll("a.fileThumb.image-link img")
+      .forEach((img) => (img.className = "post__image"));
 
-    document.querySelectorAll('.post__attachment-link').forEach((link) => {
-      link.dataset.fileName = link.getAttribute('download');
+    document.querySelectorAll(".post__attachment-link").forEach((link) => {
+      link.dataset.fileName = link.getAttribute("download");
     });
 
-    const containerStatus = document.createElement('div');
-    containerStatus.style.cssText = `
-      display: inline-flex;
-    `;
+    const containerStatus = document.createElement("div");
+    containerStatus.style.display = "inline-flex";
 
-    const downloadAllButton = createToggleButton(BUTTONS.DOWNLOAD_ALL, downloadAllImagesAndVideos);
-    elements.statusElement = document.createElement('span');
-    elements.statusElement.id = 'Status';
-    elements.statusElement.textContent = '';
-    elements.statusElement.style.marginLeft = '10px';
+    const downloadAllButton = createToggleButton(
+      BUTTONS.DOWNLOAD_ALL,
+      downloadAllImagesAndVideos,
+    );
+    elements.statusElement = document.createElement("span");
+    elements.statusElement.id = "Status";
+    elements.statusElement.style.marginLeft = "10px";
 
     containerStatus.append(downloadAllButton, elements.statusElement);
 
-    elements.postActions = document.querySelector('.post__actions');
+    elements.postActions = document.querySelector(".post__actions");
     elements.galleryButton = createToggleButton(BUTTONS.GALLERY, null);
     elements.galleryButton.disabled = true;
-    elements.galleryButton.style.opacity = '0.6';
-    elements.galleryButton.style.cursor = 'not-allowed';
+    elements.galleryButton.classList.add("disabled");
 
     elements.postActions.append(
-      createToggleButton(BUTTONS.WIDTH, () => resizeAllImages('width')),
-      createToggleButton(BUTTONS.HEIGHT, () => resizeAllImages('height')),
-      createToggleButton(BUTTONS.FULL, () => resizeAllImages('full')),
+      createToggleButton(BUTTONS.WIDTH, () => resizeAllImages("width")),
+      createToggleButton(BUTTONS.HEIGHT, () => resizeAllImages("height")),
+      createToggleButton(BUTTONS.FULL, () => resizeAllImages("full")),
       containerStatus,
-      elements.galleryButton
+      elements.galleryButton,
     );
 
+    elements.settingsButton = createToggleButton(
+      BUTTONS.SETTINGS,
+      showSettings,
+    );
+    elements.settingsButton.className = "settings-button";
 
-    const fileDivs = document.querySelectorAll('.post__thumbnail');
+    document.body.appendChild(elements.settingsButton);
+
+    const fileDivs = document.querySelectorAll(".post__thumbnail");
     const parentDiv = fileDivs[0]?.parentNode;
 
     if (parentDiv) {
-      fileDivs.forEach((div) => {
-        const newDiv = document.createElement('div');
-        newDiv.append(
-          createToggleButton(BUTTONS.WIDTH, resizeImage),
-          createToggleButton(BUTTONS.HEIGHT, resizeImage),
-          createToggleButton(BUTTONS.FULL, resizeImage),
-          createToggleButton(BUTTONS.DOWNLOAD, downloadImage),
-          createToggleButton(BUTTONS.REMOVE, removeImage)
-        );
-        parentDiv.insertBefore(newDiv, div);
+      fileDivs.forEach((div, index) => {
+        const downloadLink = div.querySelector(".fileThumb");
+        if (downloadLink) {
+          const newDiv = document.createElement("div");
+          newDiv.append(
+            createToggleButton(BUTTONS.WIDTH, resizeImage),
+            createToggleButton(BUTTONS.HEIGHT, resizeImage),
+            createToggleButton(BUTTONS.FULL, resizeImage),
+            createToggleButton(BUTTONS.DOWNLOAD, () =>
+              downloadImageByIndex(index),
+            ),
+            createToggleButton(BUTTONS.REMOVE, removeImage),
+          );
+          parentDiv.insertBefore(newDiv, div);
+        }
       });
     }
 
     loadImages();
+
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        event.preventDefault();
+      }
+    });
+
+    function downloadImageByIndex(index) {
+      const downloadFunction =
+        typeof GM_download !== "undefined" ? GM_download : GM.download;
+      const imgLink = document.querySelectorAll("a.fileThumb.image-link")[
+        index
+      ];
+      if (imgLink) {
+        const imgSrc = imgLink.getAttribute("href").split("?")[0];
+        const fileName = imgLink.getAttribute("download");
+        const options = {
+          url: imgSrc,
+          name: fileName,
+          onload: () => console.log("Image downloaded successfully:", fileName),
+          onerror: (error) =>
+            console.error("Failed to download image:", fileName, error),
+          headers: { referer: "https://kemono.su/" },
+        };
+        downloadFunction(options);
+      } else {
+        console.error("Image link not found for index:", index);
+      }
+    }
   };
 
   init();
