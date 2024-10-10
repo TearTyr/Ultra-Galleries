@@ -1,11 +1,12 @@
 // ==UserScript==
-// @name         Ultra Kemono Galleries
+// @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      2.2.0
-// @description  Enhanced gallery experience for Kemono with modern features and optimizations
+// @version      2.3.0
+// @description  Enhanced gallery experience with modern features and optimizations
 // @author       ntf (original), Meri/TearTyr (updates)
 // @match        *://kemono.su/*/user/*/post/*
 // @match        *://coomer.su/*/user/*/post/*
+// @match        *://nekohouse.su/*/user/*/post/*
 // @icon         https://kemono.party/static/menu/recent.svg
 // @grant        GM_download
 // @grant        GM.xmlHttpRequest
@@ -22,7 +23,6 @@
 (function () {
   "use strict";
 
-  // Load CSS
   fetch(
     "https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/main/Ultra-Galleries.css",
   )
@@ -30,7 +30,6 @@
     .then((css) => GM_addStyle(css))
     .catch((error) => console.error("Error loading CSS:", error));
 
-  // Constants
   const BUTTONS = {
     DOWNLOAD: "【DOWNLOAD】",
     DOWNLOAD_ALL: "【DL ALL】",
@@ -45,7 +44,8 @@
   const MAX_RETRIES = 10;
   const RETRY_DELAY = 1250;
 
-  // State management using a Proxy for reactivity
+  const website = window.location.hostname.split(".")[0];
+
   const createReactiveState = (initialState) => {
     return new Proxy(initialState, {
       set(target, key, value) {
@@ -71,7 +71,6 @@
     imageFileNameFormat: "{title}-{artistName}-{fileName}-{index}",
   });
 
-  // DOM Elements
   const elements = {
     statusElement: null,
     postActions: null,
@@ -79,7 +78,6 @@
     settingsButton: null,
   };
 
-  // Helper functions
   const createToggleButton = (name, action) => {
     const toggle = document.createElement("a");
     toggle.textContent = name;
@@ -122,11 +120,10 @@
       elements.galleryButton.textContent = BUTTONS.GALLERY;
       elements.galleryButton.disabled = false;
       elements.galleryButton.classList.remove("disabled");
-      elements.galleryButton.addEventListener("click", showGallery);
+      elements.galleryButton.addEventListener("click", showGallery); // Now showGallery is defined
     }
   };
 
-  // Image manipulation functions
   const setImageStyle = (img, styles) => {
     if (img) {
       Object.assign(img.style, styles);
@@ -175,7 +172,9 @@
     const imgContainer =
       evt.currentTarget.closest(".gallery-item") ||
       evt.currentTarget.closest(".expanded-view") ||
-      evt.currentTarget.closest(".post__files");
+      evt.currentTarget.closest(
+        website === "nekohouse" ? ".scrape__files" : ".post__files",
+      );
     const img = imgContainer?.querySelector("img");
 
     if (img && imageActions[action]) {
@@ -191,11 +190,12 @@
 
   const resizeAllImages = (action) => {
     document
-      .querySelectorAll(".post__image")
+      .querySelectorAll(
+        website === "nekohouse" ? ".scrape__files img" : ".post__image",
+      )
       .forEach((img) => imageActions[action](img));
   };
 
-  // Zip archive creation
   const addToZip = async (zip, src, fileName, type) => {
     try {
       const response = await new Promise((resolve, reject) => {
@@ -203,7 +203,7 @@
           method: "GET",
           url: src,
           responseType: "blob",
-          headers: { referer: "https://kemono.su/" },
+          headers: { referer: `https://${website}.su/` },
           onload: resolve,
           onerror: reject,
         });
@@ -252,11 +252,23 @@
   };
 
   const downloadAllImagesAndVideos = async () => {
-    const images = document.querySelectorAll("a.fileThumb.image-link");
-    const attachmentLinks = document.querySelectorAll(".post__attachment-link");
-    const title = document.querySelector(".post__title").textContent.trim();
+    const images = document.querySelectorAll(
+      website === "nekohouse"
+        ? "a.image-link:not(.scrape__user-profile)"
+        : "a.fileThumb.image-link",
+    );
+    const attachmentLinks = document.querySelectorAll(
+      website === "nekohouse"
+        ? ".scrape__attachment-link"
+        : ".post__attachment-link",
+    );
+    const title = document.querySelector(
+      website === "nekohouse" ? ".scrape__title" : ".post__title",
+    ).textContent.trim();
     const artistName = document
-      .querySelector(".post__user-name")
+      .querySelector(
+        website === "nekohouse" ? ".scrape__user-name" : ".post__user-name",
+      )
       .textContent.trim();
 
     const total = images.length + attachmentLinks.length;
@@ -269,8 +281,16 @@
 
     const downloadPromises = [
       ...Array.from(images).map((imgLink, index) => {
-        const imgSrc = imgLink.getAttribute("href").split("?")[0];
-        const fileName = imgLink.getAttribute("download");
+        const imgSrc =
+          website === "nekohouse"
+            ? imgLink.querySelector(".fileThumb").getAttribute("href") // Nekohouse: Get actual image URL
+            : imgLink.getAttribute("href").split("?")[0]; // Kemono/Coomer: Get image URL
+        const fileName =
+          website === "nekohouse"
+            ? imgLink
+                .querySelector("img")
+                .getAttribute("alt") || imgSrc.split("/").pop()
+            : imgLink.getAttribute("download");
         const imgName = state.imageFileNameFormat
           .replace("{title}", sanitizeFileName(title))
           .replace("{artistName}", sanitizeFileName(artistName))
@@ -302,10 +322,12 @@
     }
   };
 
-  // Force image load (for rate limiting)
   const forceLoadImage = async (imgSrc) => {
     try {
-      const response = await fetch(imgSrc, { method: "HEAD" });
+      const response = await fetch(imgSrc, {
+        method: "HEAD",
+        headers: { referer: `https://${website}.su/` },
+      });
       if (response.ok) {
         console.log("Force loaded image:", imgSrc);
         state.imageCount++;
@@ -323,6 +345,7 @@
         GM_xmlhttpRequest({
           method: "HEAD",
           url: imgSrc,
+          headers: { referer: `https://${website}.su/` },
           onload: resolve,
           onerror: reject,
         });
@@ -357,13 +380,25 @@
   };
 
   const loadImages = async () => {
-    const images = document.querySelectorAll("a.fileThumb.image-link");
+    const images = document.querySelectorAll(
+      website === "nekohouse"
+        ? "a.image-link:not(.scrape__user-profile) img"
+        : "a.fileThumb.image-link img",
+    );
     state.totalImages = images.length;
 
     await Promise.all(
-      Array.from(images).map(async (a) => {
-        const img = a.querySelector("img");
-        const imgSrc = a.getAttribute("href");
+      Array.from(images).map(async (img) => {
+        const fileThumbElement =
+          website === "nekohouse"
+            ? img.parentNode.querySelector(".fileThumb")
+            : null;
+
+        const imgSrc =
+          website === "nekohouse" && fileThumbElement
+            ? fileThumbElement.getAttribute("href")
+            : img.parentNode.getAttribute("href");
+
         await loadImageWithRetry(img, imgSrc);
       }),
     );
@@ -431,6 +466,7 @@
     }
   };
 
+  // Function is now defined before it's used
   const showGallery = () => {
     state.galleryActive = true;
     const overlay = createGalleryOverlay();
@@ -540,8 +576,16 @@
           }
         }
       } else {
-        const prevPageLink = document.querySelector(".paginator__link--prev");
-        const nextPageLink = document.querySelector(".paginator__link--next");
+        const prevPageLink = document.querySelector(
+          website === "nekohouse"
+            ? ".scrape__nav-link.next"
+            : ".paginator__link--prev",
+        );
+        const nextPageLink = document.querySelector(
+          website === "nekohouse"
+            ? ".scrape__nav-link.next"
+            : ".paginator__link--next",
+        );
         if (event.key === "ArrowLeft" && prevPageLink) {
           prevPageLink.click();
           event.preventDefault();
@@ -559,6 +603,7 @@
     };
   };
 
+
   const getExtension = (filename) => {
     return filename.slice(((filename.lastIndexOf(".") - 1) >>> 0) + 2);
   };
@@ -567,7 +612,7 @@
 
   const showSettings = () => {
     Swal.fire({
-      title: "Ultra Kemono Galleries - Zip Settings",
+      title: "Ultra Galleries - Zip Settings",
       html: `
         <div>
           <label for="zipFileNameFormat">Zip Filename Format:</label>
@@ -597,11 +642,32 @@
   };
 
   const init = () => {
+    // Get post actions container, handle potential null value
+    if (website === "nekohouse") {
+      elements.postActions = document.querySelector(".scrape__actions");
+    } else {
+      elements.postActions = document.querySelector(".post__actions");
+    }
+
+    if (!elements.postActions) {
+      console.error("Post actions container not found!");
+      return; // Stop initialization if container is not found
+    }
+
+    // Add image class based on website
     document
-      .querySelectorAll("a.fileThumb.image-link img")
+      .querySelectorAll(
+        website === "nekohouse"
+          ? "a.image-link:not(.scrape__user-profile) img"
+          : "a.fileThumb.image-link img",
+      )
       .forEach((img) => (img.className = "post__image"));
 
-    document.querySelectorAll(".post__attachment-link").forEach((link) => {
+    document.querySelectorAll(
+      website === "nekohouse"
+        ? ".scrape__attachment-link"
+        : ".post__attachment-link",
+    ).forEach((link) => {
       link.dataset.fileName = link.getAttribute("download");
     });
 
@@ -618,11 +684,11 @@
 
     containerStatus.append(downloadAllButton, elements.statusElement);
 
-    elements.postActions = document.querySelector(".post__actions");
     elements.galleryButton = createToggleButton(BUTTONS.GALLERY, null);
     elements.galleryButton.disabled = true;
     elements.galleryButton.classList.add("disabled");
 
+    // Append buttons to postActions (now safe to access)
     elements.postActions.append(
       createToggleButton(BUTTONS.WIDTH, () => resizeAllImages("width")),
       createToggleButton(BUTTONS.HEIGHT, () => resizeAllImages("height")),
@@ -639,12 +705,16 @@
 
     document.body.appendChild(elements.settingsButton);
 
-    const fileDivs = document.querySelectorAll(".post__thumbnail");
+    const fileDivs = document.querySelectorAll(
+      website === "nekohouse" ? ".scrape__thumbnail" : ".post__thumbnail",
+    );
     const parentDiv = fileDivs[0]?.parentNode;
 
     if (parentDiv) {
       fileDivs.forEach((div, index) => {
-        const downloadLink = div.querySelector(".fileThumb");
+        const downloadLink = div.querySelector(
+          website === "nekohouse" ? "a.image-link" : ".fileThumb",
+        );
         if (downloadLink) {
           const newDiv = document.createElement("div");
           newDiv.append(
@@ -672,19 +742,30 @@
     function downloadImageByIndex(index) {
       const downloadFunction =
         typeof GM_download !== "undefined" ? GM_download : GM.download;
-      const imgLink = document.querySelectorAll("a.fileThumb.image-link")[
-        index
-      ];
+      const imgLink = document.querySelectorAll(
+        website === "nekohouse"
+          ? "a.image-link:not(.scrape__user-profile)"
+          : "a.fileThumb.image-link",
+      )[index];
+
       if (imgLink) {
-        const imgSrc = imgLink.getAttribute("href").split("?")[0];
-        const fileName = imgLink.getAttribute("download");
+        // Get image URL based on website
+        const imgSrc = website === "nekohouse"
+          ? imgLink.querySelector(".fileThumb").getAttribute("href")
+          : imgLink.getAttribute("href").split("?")[0];
+
+        // Get file name based on website
+        const fileName = website === "nekohouse"
+          ? imgLink.querySelector("img").getAttribute("alt") || imgSrc.split("/").pop()
+          : imgLink.getAttribute("download");
+
         const options = {
           url: imgSrc,
           name: fileName,
           onload: () => console.log("Image downloaded successfully:", fileName),
           onerror: (error) =>
             console.error("Failed to download image:", fileName, error),
-          headers: { referer: "https://kemono.su/" },
+          headers: { referer: `https://${website}.su/` },
         };
         downloadFunction(options);
       } else {
