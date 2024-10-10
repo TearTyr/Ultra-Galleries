@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      2.3.1 
+// @version      2.3.1
 // @description  Enhanced gallery experience with modern features and optimizations
 // @author       ntf (original), Meri/TearTyr (updates)
 // @match        *://kemono.su/*/user/*/post/*
@@ -12,7 +12,7 @@
 // @grant        GM.xmlHttpRequest
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
-// @grant        GM_setValue 
+// @grant        GM_setValue
 // @grant        GM_getValue
 // @require      https://unpkg.com/jquery@3.7.1/dist/jquery.min.js
 // @require      https://unpkg.com/jszip@3.10.1/dist/jszip.min.js
@@ -609,19 +609,24 @@
   // --- Fetch and Execute settings.js ---
   async function loadSettingsScript() {
     try {
-      const response = await fetch("https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/refs/heads/TestingBranch/Settings.css");
+      const response = await fetch("https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/refs/heads/TestingBranch/Settings.js");
       const settingsScript = await response.text();
 
-      // Create a script element and execute the fetched code
       const script = document.createElement("script");
       script.textContent = settingsScript;
       document.body.appendChild(script);
 
-      // Call initSettings after the settings script is loaded
-      initSettings(); 
+      initSettings();
+      init(); 
     } catch (error) {
       console.error("Error loading settings.js:", error);
     }
+  }
+
+  function addSettingsButton() {
+    elements.settingsButton = createToggleButton(BUTTONS.SETTINGS, window.showSettings);
+    elements.settingsButton.className = "settings-button";
+    document.body.appendChild(elements.settingsButton);
   }
 
 
@@ -634,7 +639,7 @@
 
     if (!elements.postActions) {
       console.error("Post actions container not found!");
-      return; 
+      return;
     }
 
     document
@@ -679,7 +684,7 @@
     );
 
     // --- Settings Button (calls showSettings from settings.js) ---
-    elements.settingsButton = createToggleButton(BUTTONS.SETTINGS, showSettings); 
+    elements.settingsButton = createToggleButton(BUTTONS.SETTINGS, window.showSettings);
     elements.settingsButton.className = "settings-button";
     document.body.appendChild(elements.settingsButton);
 
@@ -748,14 +753,14 @@
       }
     }
   };
-  
-    // --- Load settings.js and then run init ---
-  loadSettingsScript().then(init);
+
+  // --- Load settings.js and then run init ---
+  loadSettingsScript();
 
   // --- CSS Styling ---
   fetch("https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/refs/heads/TestingBranch/Styles.css")
     .then((response) => response.text())
     .then((css) => GM_addStyle(css))
-    .catch((error) => console.error("Error loading CSS:", error)); 
+    .catch((error) => console.error("Error loading CSS:", error));
 
 })();
