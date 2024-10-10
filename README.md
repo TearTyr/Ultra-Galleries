@@ -1,10 +1,10 @@
-# Ultra Kemono Galleries
+# Ultra Galleries
 
-Ultra Kemono Galleries is an enhanced version of [Better Kemono Galleries](https://sleazyfork.org/en/scripts/460064-better-kemono-galleries) with improved image downloading features and additional functionality.
+**Ultra Galleries** is a powerful userscript that enhances the browsing and downloading experience on `kemono.su`, `coomer.su`, and `nekohouse.su` by adding features for image manipulation, viewing, and batch downloading. It was originally based on [Better Kemono Galleries](https://sleazyfork.org/en/scripts/460064-better-kemono-galleries) but has been significantly expanded and improved.
 
 ## Overview
 
-This userscript enhances the browsing and downloading experience on kemono.su and coomer.su by adding various features for image manipulation, viewing, and batch downloading.
+This userscript provides a seamless and efficient way to interact with image and video content on supported websites, making it easier to view, resize, download, and manage your favorite media.
 
 ## Features
 
@@ -24,6 +24,7 @@ This userscript enhances the browsing and downloading experience on kemono.su an
 - **Individual Image Download:** Download single images with a click.
 - **Batch Downloading:** Download all images and videos from a post, packaged in a zip file.
 - **Custom Naming:** Configurable naming patterns for zip files and individual images.
+- **Multi-Site Support:** Accurately downloads assets from Kemono, Coomer, and Nekohouse by targeting the correct image URLs. 
 
 ### Performance and User Experience
 
@@ -36,16 +37,15 @@ This userscript enhances the browsing and downloading experience on kemono.su an
 - Includes video files in batch downloads.
 - Preserves original video filenames.
 
-### New Features (v2.2.0)
+### New Features (v2.3.0)
 
-- **Gallery View:** Added a new gallery view for easier browsing of images within a post.
-- **Customizable File Naming:** Users can now configure the naming pattern for zip files and individual images.
-- **Improved UI:** Enhanced user interface with better styling and responsiveness.
-- **Settings Menu:** Added a settings menu for customizing file naming patterns.
+- **Multi-Site Support:** Enhanced support for `nekohouse.su`, including downloading assets and using the gallery view.
+- **Improved Code Clarity:** Optimized code for better readability and maintainability.
+- **Enhanced Error Handling:** Implemented robust error handling to prevent unexpected script behavior.
 
 ## Usage
 
-After installation, navigate to a post on kemono.su or coomer.su. You'll see new buttons for resizing, downloading, and removing images. Use the `DL ALL` button to initiate a batch download of all media in the post. The `GALLERY` button opens the new gallery view.
+After installation, navigate to a post on `kemono.su`, `coomer.su`, or `nekohouse.su`. You'll see new buttons for resizing, downloading, and removing images. Use the `DL ALL` button to initiate a batch download of all media in the post. The `GALLERY` button opens the new gallery view.
 
 ## Dependencies
 
@@ -67,4 +67,4 @@ After installation, navigate to a post on kemono.su or coomer.su. You'll see new
 
 ## Version
 
-Current version: 2.2.0
+Current version: 2.3.0
