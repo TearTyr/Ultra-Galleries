@@ -1,5 +1,6 @@
 /* Ultra-Galleries.css */
 
+/* --- Gallery Styles --- */
 #gallery-overlay {
     position: fixed;
     top: 0;
@@ -166,34 +167,108 @@
     opacity: 1;
 }
 
-.settings-button {
+
+/* --- Settings Panel Styles (Pixiv Downloader inspired) --- */
+
+#ultra-galleries-settings {
     position: fixed;
-    bottom: 20px;
-    right: 20px;
-    padding: 10px 15px;
-    background-color: #333;
-    color: white;
-    border-radius: 5px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     z-index: 10000;
-    opacity: 0.8;
-    transition: opacity 0.3s ease;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    width: 500px;
+    max-width: 90%;
+    font-family: sans-serif;
 }
 
-.settings-button:hover {
-    opacity: 1;
+.settings-header {
+    background-color: #eee;
+    padding: 15px 20px;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
-.swal2-popup {
-    background: #222 !important;
-    color: #eee !important;
+.settings-header h2 {
+    margin: 0;
+    font-size: 1.2em;
 }
 
-.swal2-input {
-    background-color: #333 !important;
-    color: #eee !important;
-    border: 1px solid #555 !important;
+#close-settings {
+    background: none;
+    border: none;
+    font-size: 1.5em;
+    cursor: pointer;
 }
 
-.swal2-confirm {
-    background-color: #777 !important;
+.settings-tabs {
+    display: flex;
+    border-bottom: 1px solid #ddd;
+}
+
+.settings-tab {
+    flex: 1;
+    padding: 10px;
+    text-align: center;
+    cursor: pointer;
+    border: none;
+    background: none;
+    border-bottom: 2px solid transparent; 
+    transition: border-bottom-color 0.3s ease;
+}
+
+.settings-tab.active {
+    border-bottom-color: #3498db; /* Example active color */
+    font-weight: bold;
+}
+
+.settings-content {
+    padding: 20px;
+}
+
+.settings-section {
+    display: none; /* Hide all sections by default */
+}
+
+.settings-section.active {
+    display: block; /* Show the active section */
+}
+
+.setting {
+    margin-bottom: 15px;
+}
+
+.setting label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.setting input[type="text"],
+.setting select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+.placeholders {
+    font-size: 0.9em;
+    color: #777;
+    margin-top: 5px;
+}
+
+#export-json, #export-csv, #import-button, #clear-history {
+    background-color: #3498db;
+    color: white;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-right: 5px;
 }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      2.3.0
+// @version      2.3.1 
 // @description  Enhanced gallery experience with modern features and optimizations
 // @author       ntf (original), Meri/TearTyr (updates)
 // @match        *://kemono.su/*/user/*/post/*
@@ -12,23 +12,18 @@
 // @grant        GM.xmlHttpRequest
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
-// @require      https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js
-// @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js
-// @require      https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js
-// @require      https://cdn.jsdelivr.net/npm/sweetalert2@11
+// @grant        GM_setValue 
+// @grant        GM_getValue
+// @require      https://unpkg.com/jquery@3.7.1/dist/jquery.min.js
+// @require      https://unpkg.com/jszip@3.10.1/dist/jszip.min.js
+// @require      https://unpkg.com/file-saver@2.0.5/dist/FileSaver.min.js
+// @require      https://unpkg.com/sweetalert2@11.14.2/dist/sweetalert2.js
 // @run-at       document-end
 // @noframes
 // ==/UserScript==
 
 (function () {
   "use strict";
-
-  fetch(
-    "https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/main/Ultra-Galleries.css",
-  )
-    .then((response) => response.text())
-    .then((css) => GM_addStyle(css))
-    .catch((error) => console.error("Error loading CSS:", error));
 
   const BUTTONS = {
     DOWNLOAD: "【DOWNLOAD】",
@@ -78,6 +73,7 @@
     settingsButton: null,
   };
 
+  // --- Helper Functions ---
   const createToggleButton = (name, action) => {
     const toggle = document.createElement("a");
     toggle.textContent = name;
@@ -120,7 +116,7 @@
       elements.galleryButton.textContent = BUTTONS.GALLERY;
       elements.galleryButton.disabled = false;
       elements.galleryButton.classList.remove("disabled");
-      elements.galleryButton.addEventListener("click", showGallery); // Now showGallery is defined
+      elements.galleryButton.addEventListener("click", showGallery);
     }
   };
 
@@ -283,8 +279,8 @@
       ...Array.from(images).map((imgLink, index) => {
         const imgSrc =
           website === "nekohouse"
-            ? imgLink.querySelector(".fileThumb").getAttribute("href") // Nekohouse: Get actual image URL
-            : imgLink.getAttribute("href").split("?")[0]; // Kemono/Coomer: Get image URL
+            ? imgLink.querySelector(".fileThumb").getAttribute("href")
+            : imgLink.getAttribute("href").split("?")[0];
         const fileName =
           website === "nekohouse"
             ? imgLink
@@ -610,39 +606,26 @@
 
   const sanitizeFileName = (name) => name.replace(/[/\\:*?"<>|]/g, "-");
 
-  const showSettings = () => {
-    Swal.fire({
-      title: "Ultra Galleries - Zip Settings",
-      html: `
-        <div>
-          <label for="zipFileNameFormat">Zip Filename Format:</label>
-          <input type="text" id="zipFileNameFormat" value="${state.zipFileNameFormat}" placeholder="{title}-{artistName}.zip">
-          <p>Available placeholders: {artistName}, {title}</p>
-        </div>
-        <div>
-          <label for="imageFileNameFormat">Image Filename Format:</label>
-          <input type="text" id="imageFileNameFormat" value="${state.imageFileNameFormat}" placeholder="{title}-{artistName}-{fileName}-{index}">
-          <p>Available placeholders: {artistName}, {title}, {fileName}, {index}, {ext}</p>
-        </div>
-        <div>
-          <p>Original author: ntf</p>
-          <p>Forked by: Meri/TearTyr</p>
-        </div>
-      `,
-      confirmButtonText: "Save",
-      focusConfirm: false,
-      preConfirm: () => {
-        state.zipFileNameFormat =
-          document.getElementById("zipFileNameFormat").value;
-        state.imageFileNameFormat = document.getElementById(
-          "imageFileNameFormat",
-        ).value;
-      },
-    });
-  };
+  // --- Fetch and Execute settings.js ---
+  async function loadSettingsScript() {
+    try {
+      const response = await fetch("https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/refs/heads/TestingBranch/Settings.css");
+      const settingsScript = await response.text();
+
+      // Create a script element and execute the fetched code
+      const script = document.createElement("script");
+      script.textContent = settingsScript;
+      document.body.appendChild(script);
+
+      // Call initSettings after the settings script is loaded
+      initSettings(); 
+    } catch (error) {
+      console.error("Error loading settings.js:", error);
+    }
+  }
+
 
   const init = () => {
-    // Get post actions container, handle potential null value
     if (website === "nekohouse") {
       elements.postActions = document.querySelector(".scrape__actions");
     } else {
@@ -651,10 +634,9 @@
 
     if (!elements.postActions) {
       console.error("Post actions container not found!");
-      return; // Stop initialization if container is not found
+      return; 
     }
 
-    // Add image class based on website
     document
       .querySelectorAll(
         website === "nekohouse"
@@ -688,7 +670,6 @@
     elements.galleryButton.disabled = true;
     elements.galleryButton.classList.add("disabled");
 
-    // Append buttons to postActions (now safe to access)
     elements.postActions.append(
       createToggleButton(BUTTONS.WIDTH, () => resizeAllImages("width")),
       createToggleButton(BUTTONS.HEIGHT, () => resizeAllImages("height")),
@@ -697,12 +678,9 @@
       elements.galleryButton,
     );
 
-    elements.settingsButton = createToggleButton(
-      BUTTONS.SETTINGS,
-      showSettings,
-    );
+    // --- Settings Button (calls showSettings from settings.js) ---
+    elements.settingsButton = createToggleButton(BUTTONS.SETTINGS, showSettings); 
     elements.settingsButton.className = "settings-button";
-
     document.body.appendChild(elements.settingsButton);
 
     const fileDivs = document.querySelectorAll(
@@ -749,16 +727,13 @@
       )[index];
 
       if (imgLink) {
-        // Get image URL based on website
         const imgSrc = website === "nekohouse"
           ? imgLink.querySelector(".fileThumb").getAttribute("href")
           : imgLink.getAttribute("href").split("?")[0];
-
-        // Get file name based on website
         const fileName = website === "nekohouse"
-          ? imgLink.querySelector("img").getAttribute("alt") || imgSrc.split("/").pop()
+          ? imgLink.querySelector("img").getAttribute("alt") ||
+              imgLink.getAttribute("href").split("/").pop()
           : imgLink.getAttribute("download");
-
         const options = {
           url: imgSrc,
           name: fileName,
@@ -773,6 +748,14 @@
       }
     }
   };
+  
+    // --- Load settings.js and then run init ---
+  loadSettingsScript().then(init);
 
-  init();
+  // --- CSS Styling ---
+  fetch("https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/refs/heads/TestingBranch/Styles.css")
+    .then((response) => response.text())
+    .then((css) => GM_addStyle(css))
+    .catch((error) => console.error("Error loading CSS:", error)); 
+
 })();
