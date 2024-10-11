@@ -73,7 +73,6 @@
     settingsButton: null,
   };
 
-  // --- Helper Functions ---
   const createToggleButton = (name, action) => {
     const toggle = document.createElement("a");
     toggle.textContent = name;
@@ -612,19 +611,19 @@
       const response = await fetch("https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/refs/heads/TestingBranch/Settings.js");
       const settingsScript = await response.text();
       const script = document.createElement("script");
-
       script.textContent = settingsScript;
 
-      // Use a Promise to signal when settings are initialized
+      // Promise to wait for settings initialization
       const settingsInitialized = new Promise(resolve => {
-        window.onSettingsInitialized = resolve; 
+          window.onSettingsInitialized = resolve; 
       });
 
       script.onload = async () => {
-        // Wait for initSettings to complete in settings.js
-        await settingsInitialized; 
-        addSettingsButton(); // Add the settings button when ready
+          // Wait for settings.js to signal it's ready
+          await settingsInitialized;
+          addSettingsButton();
       };
+
       document.body.appendChild(script);
 
     } catch (error) {
@@ -632,143 +631,144 @@
     }
   }
 
-  // --- Add the Settings Button (After settings.js is Loaded) ---
+  // --- Add the Settings Button ---
   function addSettingsButton() {
-    elements.settingsButton = createToggleButton(BUTTONS.SETTINGS, window.showSettings);
-    elements.settingsButton.className = "settings-button";
-    document.body.appendChild(elements.settingsButton);
+      elements.settingsButton = createToggleButton(BUTTONS.SETTINGS, window.showSettings);
+      elements.settingsButton.className = "settings-button";
 
-    // Call init now that settings are loaded and the button is added
-    init(); 
+      if (elements.postActions) {
+          elements.postActions.appendChild(elements.settingsButton);
+      } else {
+          console.warn("Could not find post actions container for settings button.");
+      }
+      init();
   }
 
 
+  // --- Initialization Function ---
   const init = () => {
-    if (website === "nekohouse") {
-      elements.postActions = document.querySelector(".scrape__actions");
-    } else {
-      elements.postActions = document.querySelector(".post__actions");
-    }
+      if (website === "nekohouse") {
+          elements.postActions = document.querySelector(".scrape__actions");
+      } else {
+          elements.postActions = document.querySelector(".post__actions");
+      }
 
-    if (!elements.postActions) {
-      console.error("Post actions container not found!");
-      return;
-    }
+      if (!elements.postActions) {
+          console.error("Post actions container not found!");
+          return; 
+      }
 
-    document
-      .querySelectorAll(
+      document
+        .querySelectorAll(
+          website === "nekohouse"
+            ? "a.image-link:not(.scrape__user-profile) img"
+            : "a.fileThumb.image-link img",
+        )
+        .forEach((img) => (img.className = "post__image"));
+
+      document.querySelectorAll(
         website === "nekohouse"
-          ? "a.image-link:not(.scrape__user-profile) img"
-          : "a.fileThumb.image-link img",
-      )
-      .forEach((img) => (img.className = "post__image"));
+          ? ".scrape__attachment-link"
+          : ".post__attachment-link",
+      ).forEach((link) => {
+        link.dataset.fileName = link.getAttribute("download");
+      });
 
-    document.querySelectorAll(
-      website === "nekohouse"
-        ? ".scrape__attachment-link"
-        : ".post__attachment-link",
-    ).forEach((link) => {
-      link.dataset.fileName = link.getAttribute("download");
-    });
+      const containerStatus = document.createElement("div");
+      containerStatus.style.display = "inline-flex";
 
-    const containerStatus = document.createElement("div");
-    containerStatus.style.display = "inline-flex";
+      const downloadAllButton = createToggleButton(
+        BUTTONS.DOWNLOAD_ALL,
+        downloadAllImagesAndVideos,
+      );
+      elements.statusElement = document.createElement("span");
+      elements.statusElement.id = "Status";
+      elements.statusElement.style.marginLeft = "10px";
 
-    const downloadAllButton = createToggleButton(
-      BUTTONS.DOWNLOAD_ALL,
-      downloadAllImagesAndVideos,
-    );
-    elements.statusElement = document.createElement("span");
-    elements.statusElement.id = "Status";
-    elements.statusElement.style.marginLeft = "10px";
+      containerStatus.append(downloadAllButton, elements.statusElement);
 
-    containerStatus.append(downloadAllButton, elements.statusElement);
+      elements.galleryButton = createToggleButton(BUTTONS.GALLERY, null);
+      elements.galleryButton.disabled = true;
+      elements.galleryButton.classList.add("disabled");
 
-    elements.galleryButton = createToggleButton(BUTTONS.GALLERY, null);
-    elements.galleryButton.disabled = true;
-    elements.galleryButton.classList.add("disabled");
+      elements.postActions.append(
+          createToggleButton(BUTTONS.WIDTH, () => resizeAllImages("width")),
+          createToggleButton(BUTTONS.HEIGHT, () => resizeAllImages("height")),
+          createToggleButton(BUTTONS.FULL, () => resizeAllImages("full")),
+          containerStatus,
+          elements.galleryButton,
+      );
 
-    elements.postActions.append(
-      createToggleButton(BUTTONS.WIDTH, () => resizeAllImages("width")),
-      createToggleButton(BUTTONS.HEIGHT, () => resizeAllImages("height")),
-      createToggleButton(BUTTONS.FULL, () => resizeAllImages("full")),
-      containerStatus,
-      elements.galleryButton,
-    );
+      const fileDivs = document.querySelectorAll(
+        website === "nekohouse" ? ".scrape__thumbnail" : ".post__thumbnail",
+      );
+      const parentDiv = fileDivs[0]?.parentNode;
 
-    const fileDivs = document.querySelectorAll(
-      website === "nekohouse" ? ".scrape__thumbnail" : ".post__thumbnail",
-    );
-    const parentDiv = fileDivs[0]?.parentNode;
-
-    if (parentDiv) {
-      fileDivs.forEach((div, index) => {
-        const downloadLink = div.querySelector(
-          website === "nekohouse" ? "a.image-link" : ".fileThumb",
-        );
-        if (downloadLink) {
-          const newDiv = document.createElement("div");
-          newDiv.append(
-            createToggleButton(BUTTONS.WIDTH, resizeImage),
-            createToggleButton(BUTTONS.HEIGHT, resizeImage),
-            createToggleButton(BUTTONS.FULL, resizeImage),
-            createToggleButton(BUTTONS.DOWNLOAD, () =>
-              downloadImageByIndex(index),
-            ),
-            createToggleButton(BUTTONS.REMOVE, removeImage),
+      if (parentDiv) {
+        fileDivs.forEach((div, index) => {
+          const downloadLink = div.querySelector(
+            website === "nekohouse" ? "a.image-link" : ".fileThumb",
           );
-          parentDiv.insertBefore(newDiv, div);
+          if (downloadLink) {
+            const newDiv = document.createElement("div");
+            newDiv.append(
+              createToggleButton(BUTTONS.WIDTH, resizeImage),
+              createToggleButton(BUTTONS.HEIGHT, resizeImage),
+              createToggleButton(BUTTONS.FULL, resizeImage),
+              createToggleButton(BUTTONS.DOWNLOAD, () =>
+                downloadImageByIndex(index),
+              ),
+              createToggleButton(BUTTONS.REMOVE, removeImage),
+            );
+            parentDiv.insertBefore(newDiv, div);
+          }
+        });
+      }
+
+      loadImages();
+
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+          event.preventDefault();
         }
       });
-    }
 
-    loadImages();
+      function downloadImageByIndex(index) {
+        const downloadFunction =
+          typeof GM_download !== "undefined" ? GM_download : GM.download;
+        const imgLink = document.querySelectorAll(
+          website === "nekohouse"
+            ? "a.image-link:not(.scrape__user-profile)"
+            : "a.fileThumb.image-link",
+        )[index];
 
-    window.addEventListener("keydown", (event) => {
-      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-        event.preventDefault();
+        if (imgLink) {
+          const imgSrc = website === "nekohouse"
+            ? imgLink.querySelector(".fileThumb").getAttribute("href")
+            : imgLink.getAttribute("href").split("?")[0];
+          const fileName = website === "nekohouse"
+            ? imgLink.querySelector("img").getAttribute("alt") ||
+                imgLink.getAttribute("href").split("/").pop()
+            : imgLink.getAttribute("download");
+          const options = {
+            url: imgSrc,
+            name: fileName,
+            onload: () => console.log("Image downloaded successfully:", fileName),
+            onerror: (error) =>
+              console.error("Failed to download image:", fileName, error),
+            headers: { referer: `https://${website}.su/` },
+          };
+          downloadFunction(options);
+        } else {
+          console.error("Image link not found for index:", index);
+        }
       }
-    });
-
-    function downloadImageByIndex(index) {
-      const downloadFunction =
-        typeof GM_download !== "undefined" ? GM_download : GM.download;
-      const imgLink = document.querySelectorAll(
-        website === "nekohouse"
-          ? "a.image-link:not(.scrape__user-profile)"
-          : "a.fileThumb.image-link",
-      )[index];
-
-      if (imgLink) {
-        const imgSrc = website === "nekohouse"
-          ? imgLink.querySelector(".fileThumb").getAttribute("href")
-          : imgLink.getAttribute("href").split("?")[0];
-        const fileName = website === "nekohouse"
-          ? imgLink.querySelector("img").getAttribute("alt") ||
-              imgLink.getAttribute("href").split("/").pop()
-          : imgLink.getAttribute("download");
-        const options = {
-          url: imgSrc,
-          name: fileName,
-          onload: () => console.log("Image downloaded successfully:", fileName),
-          onerror: (error) =>
-            console.error("Failed to download image:", fileName, error),
-          headers: { referer: `https://${website}.su/` },
-        };
-        downloadFunction(options);
-      } else {
-        console.error("Image link not found for index:", index);
-      }
-    }
   };
 
-  // --- Load settings.js and then run init ---
-  loadSettingsScript()
+  loadSettingsScript(); 
 
-  // --- CSS Styling ---
   fetch("https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/refs/heads/TestingBranch/Styles.css")
     .then((response) => response.text())
     .then((css) => GM_addStyle(css))
     .catch((error) => console.error("Error loading CSS:", error));
-
 })();
