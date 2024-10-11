@@ -611,22 +611,35 @@
     try {
       const response = await fetch("https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/refs/heads/TestingBranch/Settings.js");
       const settingsScript = await response.text();
-
       const script = document.createElement("script");
+
       script.textContent = settingsScript;
+
+      // Use a Promise to signal when settings are initialized
+      const settingsInitialized = new Promise(resolve => {
+        window.onSettingsInitialized = resolve; 
+      });
+
+      script.onload = async () => {
+        // Wait for initSettings to complete in settings.js
+        await settingsInitialized; 
+        addSettingsButton(); // Add the settings button when ready
+      };
       document.body.appendChild(script);
 
-      initSettings();
-      init(); 
     } catch (error) {
       console.error("Error loading settings.js:", error);
     }
   }
 
+  // --- Add the Settings Button (After settings.js is Loaded) ---
   function addSettingsButton() {
     elements.settingsButton = createToggleButton(BUTTONS.SETTINGS, window.showSettings);
     elements.settingsButton.className = "settings-button";
     document.body.appendChild(elements.settingsButton);
+
+    // Call init now that settings are loaded and the button is added
+    init(); 
   }
 
 
@@ -682,11 +695,6 @@
       containerStatus,
       elements.galleryButton,
     );
-
-    // --- Settings Button (calls showSettings from settings.js) ---
-    elements.settingsButton = createToggleButton(BUTTONS.SETTINGS, window.showSettings);
-    elements.settingsButton.className = "settings-button";
-    document.body.appendChild(elements.settingsButton);
 
     const fileDivs = document.querySelectorAll(
       website === "nekohouse" ? ".scrape__thumbnail" : ".post__thumbnail",
@@ -755,7 +763,7 @@
   };
 
   // --- Load settings.js and then run init ---
-  loadSettingsScript();
+  loadSettingsScript()
 
   // --- CSS Styling ---
   fetch("https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/refs/heads/TestingBranch/Styles.css")
