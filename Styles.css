@@ -9,7 +9,7 @@
     height: 100%;
     background-color: rgba(0, 0, 0, 0.8);
     backdrop-filter: blur(10px);
-    z-index: 9999;
+    z-index: 10000;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -167,21 +167,68 @@
     opacity: 1;
 }
 
-
-/* --- Settings Panel Styles (Pixiv Downloader inspired) --- */
+/* --- Settings Panel Styles --- */
 
 #ultra-galleries-settings {
     position: fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    z-index: 10000;
+    z-index: 10001;
     background-color: #fff;
     border-radius: 8px;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
     width: 500px;
     max-width: 90%;
-    font-family: sans-serif;
+    opacity: 0;
+    pointer-events: none;
+    transition:
+        opacity 0.3s ease,
+        transform 0.3s ease;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+#ultra-galleries-settings.show {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+#ultra-galleries-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 10000;
+    display: none;
+    transition: opacity 0.3s ease;
+}
+
+#ultra-galleries-backdrop.show {
+    display: block;
+    opacity: 1;
+}
+
+.settings-button {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 10000;
+    background-color: #0078d7;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.settings-button:hover {
+    background-color: #0063b1;
 }
 
 .settings-modal {
@@ -190,7 +237,7 @@
     border-radius: 8px;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
     max-width: 80%;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Fluent UI font */
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
 }
 
 .settings-header {
@@ -198,7 +245,7 @@
     justify-content: space-between;
     align-items: center;
     padding-bottom: 10px;
-    border-bottom: 1px solid #eee; /* Subtle separator */
+    border-bottom: 1px solid #eee;
 }
 
 .settings-header h2 {
@@ -235,20 +282,22 @@
     margin-right: 10px;
     color: #555;
     font-weight: 500;
-    transition: background-color 0.2s ease, color 0.2s ease;
+    transition:
+        background-color 0.2s ease,
+        color 0.2s ease;
 }
 
 .settings-tab.active {
-    background-color: #e0e0e0; /* Light gray background for active tab */
+    background-color: #e0e0e0;
     color: #333;
 }
 
 .settings-tab:hover {
-    background-color: #f0f0f0; /* Even lighter gray on hover */
+    background-color: #f0f0f0;
 }
 
 .settings-content {
-    padding: 20px 0; 
+    padding: 20px 0;
 }
 
 .settings-section {
@@ -296,11 +345,11 @@
     margin-top: 5px;
 }
 
-#export-json, 
-#export-csv, 
-#import-button, 
+#export-json,
+#export-csv,
+#import-button,
 #clear-history {
-    background-color: #0078d7; /* Fluent UI blue */
+    background-color: #0078d7;
     color: white;
     padding: 8px 12px;
     border: none;
@@ -311,9 +360,57 @@
     transition: background-color 0.2s ease;
 }
 
-#export-json:hover, 
-#export-csv:hover, 
-#import-button:hover, 
+#export-json:hover,
+#export-csv:hover,
+#import-button:hover,
 #clear-history:hover {
-    background-color: #0063b1; /* Slightly darker blue on hover */
+    background-color: #0063b1;
+}
+
+/* Accessibility improvements */
+.navigation-button:focus,
+.gallery-close-button:focus,
+.settings-button:focus,
+.settings-tab:focus,
+#export-json:focus,
+#export-csv:focus,
+#import-button:focus,
+#clear-history:focus {
+    outline: 2px solid #0078d7;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    #ultra-galleries-settings {
+        width: 95%;
+        max-width: none;
+    }
+
+    .settings-modal {
+        width: 95%;
+        max-width: none;
+    }
+
+    .settings-tabs {
+        flex-wrap: wrap;
+    }
+
+    .settings-tab {
+        flex: 1 0 40%;
+        margin-bottom: 10px;
+    }
+
+    .expanded-image {
+        max-width: 95vw;
+        max-height: 70vh;
+    }
+
+    .thumbnail-container {
+        height: 80px;
+    }
+
+    .expanded-thumbnail {
+        width: 50px;
+        height: 50px;
+    }
 }
