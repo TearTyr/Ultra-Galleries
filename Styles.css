@@ -213,8 +213,11 @@
 .swal2-popup {
   background: var(--swal-bg) !important;
   color: var(--swal-text) !important;
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
 }
-
 .swal2-input {
   background-color: var(--swal-input-bg) !important;
   color: var(--swal-text) !important;
