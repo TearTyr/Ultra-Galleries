@@ -18,6 +18,12 @@
   --swal-input-bg: #333;
   --swal-input-border: 1px solid #555;
   --swal-confirm-bg: #777;
+  --swal-label-font-weight: bold;
+  --swal-input-padding: 10px;
+  --swal-input-radius: 5px;
+  --swal-footer-margin-top: 20px;
+  --swal-footer-font-size: 0.8em;
+  --swal-footer-text-color: #888;
 }
 
 #gallery-overlay {
@@ -213,8 +219,39 @@
   background-color: var(--swal-input-bg) !important;
   color: var(--swal-text) !important;
   border: var(--swal-input-border) !important;
+  padding: var(--swal-input-padding) !important;
+  border-radius: var(--swal-input-radius) !important;
 }
 
 .swal2-confirm {
   background-color: var(--swal-confirm-bg) !important;
+}
+
+/* Settings Modal Specific Styles */
+.swal2-content {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.swal2-content > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.swal2-content label {
+  margin-bottom: 5px;
+  font-weight: var(--swal-label-font-weight);
+}
+
+.swal2-content p {
+  margin-top: 5px;
+  font-size: 0.9em;
+}
+
+.swal2-content > div:last-child { /* Footer styles */
+  margin-top: var(--swal-footer-margin-top);
+  font-size: var(--swal-footer-font-size);
+  text-align: center;
+  color: var(--swal-footer-text-color);
 }
