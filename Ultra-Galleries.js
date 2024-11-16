@@ -24,7 +24,7 @@
   "use strict";
 
   fetch(
-    "https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/main/Ultra-Galleries.css",
+    "https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/refs/heads/TestingBranch/Styles.css",
   )
     .then((response) => response.text())
     .then((css) => GM_addStyle(css))
