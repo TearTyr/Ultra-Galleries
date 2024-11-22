@@ -197,3 +197,58 @@
 .swal2-confirm {
     background-color: #777 !important;
 }
+
+.ug-settings-popup {
+    background: #222 !important;
+    color: #eee !important;
+    font-family: sans-serif;
+}
+
+.ug-settings-title {
+    font-size: 1.2em;
+    font-weight: bold;
+    margin-bottom: 1em;
+}
+
+.ug-settings-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1em;
+}
+
+.ug-setting {
+    display: flex;
+    flex-direction: column;
+}
+
+.ug-setting label {
+    margin-bottom: 0.5em;
+}
+
+.ug-settings-input {
+    background-color: #333 !important;
+    color: #eee !important;
+    border: 1px solid #555 !important;
+    padding: 0.5em;
+    border-radius: 4px; /* Rounded corners */
+}
+
+.ug-placeholder-info {
+    font-size: 0.9em;
+    color: #aaa;
+    margin-top: 0.3em;
+}
+
+.ug-credits {
+    text-align: center;
+    margin-top: 1em;
+    color: #888;
+}
+
+.ug-settings-confirm {
+    background-color: #007bff !important; 
+}
+
+.ug-settings-cancel {
+    background-color: #6c757d !important;
+}
