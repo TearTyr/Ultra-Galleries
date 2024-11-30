@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      2.3.3
+// @version      2.4.0
 // @description  Enhanced gallery experience (SPA-compatible Testing Phase)
 // @author       ntf (original), Meri/TearTyr
 // @match        *://kemono.su/*
@@ -16,8 +16,8 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @require      https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js
-// @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js
-// @require      https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js
+// @require      https://cdn.bootcss.com/jszip/3.1.4/jszip.min.js
+// @require      https://cdn.bootcss.com/FileSaver.js/1.3.2/FileSaver.min.js
 // @require      https://cdn.jsdelivr.net/npm/sweetalert2@11
 // ==/UserScript==
 
@@ -161,9 +161,9 @@
                 disableGalleryButton();
             }
         },
-        loadedImages: () => updateImageLoadingStatus(),
+        loadedImages: () => updateMediaLoadingStatus(),
         downloadedCount: () => updateDownloadStatus(),
-        totalImages: () => updateImageLoadingStatus(),
+        totalImages: () => updateMediaLoadingStatus(),
         isLoading: (value, oldValue) => {
             if (value && !oldValue) {
                 if (state.galleryActive || state.isDownloading) { // Only show if gallery or download is active
@@ -214,12 +214,19 @@
 
     let elements = {};
 
-    const loadImage = async (imgLink, index) => {
+    const loadImage = async (mediaLink, index) => {
         try {
-            const imgSrc = imgLink.href.split("?")[0];
+            if (mediaLink.href.toLowerCase().endsWith('.mp4')) { // Check if it's a video
+                state.virtualGallery[index] = mediaLink.querySelector('video').src; // Store video URL
+                state.fullSizeImageSrcs[index] = mediaLink.querySelector('video').src;
+                state.loadedImages++;
+                return; // No image loading needed for videos
+            }
+
+            const imgSrc = mediaLink.href.split("?")[0];
             state.fullSizeImageSrcs[index] = imgSrc;
 
-            const img = imgLink.querySelector('img');
+            const img = mediaLink.querySelector('img');
             if (img) {
                 img.src = imgSrc;
                 img.dataset.originalSrc = imgSrc;
@@ -230,8 +237,8 @@
             state.loadedImages++;
 
         } catch (error) {
-            console.error(`Failed to load image: ${imgLink.href}`, error);
-            state.virtualGallery[index] = null; // Placeholder for failed image
+            console.error(`Failed to load media: ${mediaLink.href}`, error);
+            state.virtualGallery[index] = null; // Placeholder for failed media
             state.loadedImages++;
         } finally {
             if (state.loadedImages === state.totalImages) {
@@ -247,21 +254,24 @@
         if (state.galleryReady || state.isLoading) return;
 
         state.isLoading = true;
-        state.loadingMessage = "Loading Images...";
+        state.loadingMessage = "Loading Media...";
 
-        const imageLinks = document.querySelectorAll(website === "nekohouse" ? "a.image-link:not(.scrape__user-profile)" : "a.fileThumb.image-link");
-        state.totalImages = imageLinks.length;
+        const mediaLinks = [
+            ...document.querySelectorAll(website === "nekohouse" ? "a.image-link:not(.scrape__user-profile)" : "a.fileThumb.image-link"),
+            ...document.querySelectorAll(".post__video-link") // Select video links (adjust selector if needed)
+        ];
+        state.totalImages = mediaLinks.length;
         state.virtualGallery = Array(state.totalImages).fill(null);
         state.fullSizeImageSrcs = Array(state.totalImages).fill(null);
         state.loadedImages = 0;
 
         const loadingPromises = [];
-        for (let i = 0; i < imageLinks.length; i++) {
-            loadingPromises.push(loadImage(imageLinks[i], i));
+        for (let i = 0; i < mediaLinks.length; i++) {
+            loadingPromises.push(loadImage(mediaLinks[i], i));
         }
 
         await Promise.all(loadingPromises);
-    };
+};
 
     const createVirtualGallery = () => {
         cleanupVirtualGallery();
@@ -353,48 +363,70 @@
 
         showExpandedImage = (index) => {
             if (state.fullSizeImageSrcs.length === 0 || index < 0 || index >= state.fullSizeImageSrcs.length) {
-                console.error("Invalid image index:", index);
+                console.error("Invalid media index:", index);
                 return; // Handle invalid index
             }
 
             state.expandedViewActive = true;
-            state.loadingMessage = "Loading Image...";
+            state.loadingMessage = "Loading Media...";
 
-            const imgSrc = state.fullSizeImageSrcs[index]; // Use fullSizeImageSrcs
+            const mediaSrc = state.fullSizeImageSrcs[index];
 
-            if (!imgSrc) {
-                console.error("Image source is undefined for index:", index);
+            if (!mediaSrc) {
+                console.error("Media source is undefined for index:", index);
                 state.loadingMessage = null;
                 return;
             }
 
-            const expandedView = document.querySelector(".expanded-view"); // Make sure this selector is correct
-            const expandedImage = expandedView.querySelector("img");
+            const expandedView = document.querySelector(".expanded-view");
+            const expandedImage = expandedView.querySelector("img"); // Get the initial image element
             const pageNumber = expandedView.querySelector(".page-number");
             const thumbnailContainer = expandedView.querySelector(".thumbnail-container");
 
             const loadingOverlay = createLoadingOverlay();
             expandedView.appendChild(loadingOverlay);
 
-            const tempImg = new Image();
-            tempImg.onload = () => {
-                expandedImage.src = tempImg.src;
-                expandedView.removeChild(loadingOverlay);
-                expandedView.style.display = "flex";
-                currentIndex = index;
-                pageNumber.textContent = `${index + 1} / ${state.fullSizeImageSrcs.length}`;
-                thumbnailContainer.querySelectorAll(".expanded-thumbnail").forEach((thumb, i) => thumb.classList.toggle("active", i === index));
-                state.loadingMessage = null;
-            };
-            tempImg.onerror = () => {
-                console.error("Failed to load image in expanded view:", imgSrc);
-                expandedView.removeChild(loadingOverlay);
-                state.loadingMessage = null;
-                // Optionally, display an error message in the expanded view
-                expandedImage.src = ""; // Clear the image
-                pageNumber.textContent = "Error loading image";
-            };
-            tempImg.src = imgSrc;
+            const tempMedia = mediaSrc.toLowerCase().endsWith('.mp4') ? document.createElement('video') : new Image();
+
+            if (tempMedia instanceof HTMLVideoElement) {
+                tempMedia.controls = true;
+                tempMedia.src = mediaSrc;
+                tempMedia.onloadeddata = () => {
+                    expandedView.removeChild(loadingOverlay);
+                    expandedView.style.display = "flex";
+                    expandedImage.replaceWith(tempMedia); // Replace the image with the video
+                    currentIndex = index;
+                    pageNumber.textContent = `${index + 1} / ${state.fullSizeImageSrcs.length}`;
+                    thumbnailContainer.querySelectorAll(".expanded-thumbnail").forEach((thumb, i) => thumb.classList.toggle("active", i === index));
+                    state.loadingMessage = null;
+                };
+                tempMedia.onerror = () => {
+                    console.error("Failed to load video in expanded view:", mediaSrc);
+                    expandedView.removeChild(loadingOverlay);
+                    state.loadingMessage = null;
+                    expandedImage.src = ""; // Clear the image
+                    pageNumber.textContent = "Error loading video";
+                };
+
+            } else { // It's an image
+                tempMedia.onload = () => {
+                    expandedImage.src = tempMedia.src;
+                    expandedView.removeChild(loadingOverlay);
+                    expandedView.style.display = "flex";
+                    currentIndex = index;
+                    pageNumber.textContent = `${index + 1} / ${state.fullSizeImageSrcs.length}`;
+                    thumbnailContainer.querySelectorAll(".expanded-thumbnail").forEach((thumb, i) => thumb.classList.toggle("active", i === index));
+                    state.loadingMessage = null;
+                };
+                tempMedia.onerror = () => {
+                    console.error("Failed to load image in expanded view:", mediaSrc);
+                    expandedView.removeChild(loadingOverlay);
+                    state.loadingMessage = null;
+                    expandedImage.src = ""; // Clear the image
+                    pageNumber.textContent = "Error loading image";
+                };
+                tempMedia.src = mediaSrc;
+            }
         };
 
         hideExpandedImage = () => {  // Now assigned inside showGallery
@@ -437,117 +469,130 @@
             if (event.key === "Escape") {
                 state.expandedViewActive ? hideExpandedImage() : closeGallery();
             } else if (state.expandedViewActive) {
-                event.preventDefault();
-                if (event.key === "ArrowLeft") {
+                event.preventDefault(); // Prevent default behavior for arrow keys and k/l
+                if (event.key === "k") {
                     showExpandedImage((currentIndex - 1 + images.length) % images.length);
-                } else if (event.key === "ArrowRight") {
+                } else if (event.key === "l") {
                     showExpandedImage((currentIndex + 1) % images.length);
                 }
             }
         }
-    };
+    }
 
     // --- Downloading and Post Actions ---
-
     const downloadAllImagesAndVideos = async () => {
         const images = document.querySelectorAll(website === "nekohouse" ? "a.image-link:not(.scrape__user-profile)" : "a.fileThumb.image-link");
+        const videoLinks = document.querySelectorAll('.post__video-link');
         const attachmentLinks = document.querySelectorAll(website === "nekohouse" ? ".scrape__attachment-link" : ".post__attachment-link");
         const title = document.querySelector(website === "nekohouse" ? ".scrape__title" : ".post__title")?.textContent?.trim() || "Untitled";
         const artistName = document.querySelector(website === "nekohouse" ? ".scrape__user-name" : ".post__user-name")?.textContent?.trim() || "Unknown Artist";
 
-        const total = images.length + attachmentLinks.length;
+        const total = images.length + videoLinks.length + attachmentLinks.length;
         if (total === 0) return;
 
         state.isDownloading = true;
         state.loadingMessage = "Downloading...";
         state.downloadedCount = 0;
-        state.totalImages = total;
+        updateStatus(elements.statusElement, `Downloading... (0/${total})`);
 
-        const zip = new JSZip(); // Create zip instance outside worker
+        const sanitizedTitle = sanitizeFileName(title);
+        const sanitizedArtistName = sanitizeFileName(artistName);
 
-        const zipWorker = new Worker(URL.createObjectURL(new Blob([`
-            importScripts('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
-            let zip; // Declare zip inside worker
-            self.onmessage = async (e) => {
-                const { type, data } = e.data;
-                if (type === 'addFile') {
-                    const { src, fileName } = data;
-                    try {
-                        const response = await fetch(src, { headers: { referer: 'https://${website}.su/' } });
-                        if (!response.ok) {
-                            throw new Error(\`Failed to fetch: \${src}, Status: \${response.status}\`);
+        const zip = new JSZip();
+        let downloaded = 0;
+        const downloadPromises = [];
+
+        const downloadAndAddToZip = (url, filename) => {
+            return new Promise((resolve, reject) => {
+                GM.xmlHttpRequest({
+                    method: "GET",
+                    url: url,
+                    headers: { referer: `https://${website}.su/` },
+                    responseType: 'blob',
+                    onload: function (response) {
+                        if (response.status === 200) {
+                            zip.file(filename, response.response);
+                            downloaded++;
+                            updateStatus(elements.statusElement, `Downloading... (${downloaded}/${total})`);
+                            resolve();
+                        } else {
+                            console.error('Error downloading:', response.status, filename);
+                            reject(new Error(`Failed to fetch ${filename}: ${response.status}`));
                         }
-                        const blob = await response.blob();
-                        zip.file(fileName, blob);
-                        self.postMessage({ type: 'progress', downloaded: 1 });
-                    } catch (error) {
-                        console.error('Error in Web Worker:', error);
-                        self.postMessage({ type: 'error', error: error.message });
+                    },
+                    onerror: function (error) {
+                        console.error('Error downloading:', error, filename);
+                        reject(error);
                     }
-                } else if (type === 'generateZip') {
-                    const zipBlob = await zip.generateAsync({ type: 'blob' });
-                    self.postMessage({ type: 'zipReady', blob: zipBlob });
-                }
-            };
-        `], { type: 'application/javascript' })));
-
-        zipWorker.onmessage = (e) => {
-            const { type, downloaded, blob, error } = e.data;
-            if (type === 'progress') {
-                state.downloadedCount += downloaded;
-            } else if (type === 'zipReady') {
-                const zipFileName = state.zipFileNameFormat.replace("{artistName}", sanitizeFileName(artistName)).replace("{title}", sanitizeFileName(title));
-                saveAs(blob, zipFileName);
-                state.isDownloading = false;
-                state.loadingMessage = null;
-                zipWorker.terminate();
-                updateStatus(elements.statusElement, `Done! Total: ${total}`);
-            } else if (type === 'error') {
-                console.error('Web Worker Error:', error);
-                state.isDownloading = false;
-                state.loadingMessage = null;
-                zipWorker.terminate();
-                updateStatus(elements.statusElement, `Error creating zip`);
-            }
+                });
+            });
         };
 
-        const addFileToZip = async (src, fileName) => { // Made async
-            try {
-                const response = await fetch(src, { headers: { referer: 'https://${website}.su/' } });
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch: ${src}, Status: ${response.status}`);
-                }
-                const blob = await response.blob();
-                zip.file(fileName, blob);
-                self.postMessage({ type: 'progress', downloaded: 1 });
-            } catch (error) {
-                console.error('Error in Web Worker:', error);
-                self.postMessage({ type: 'error', error: error.message });
-            }
-        }; // Now handles fetching and error handling internally
+        for (let i = 0; i < images.length; i++) {
+            const imgLink = images[i];
+            const imgSrc = imgLink.href.split("?")[0];
+            const originalFileName = imgLink.getAttribute("download") || `image-${i + 1}.jpg`;
+            const ext = getExtension(originalFileName);
 
-        const downloadPromises = [
-            ...Array.from(images).map((imgLink, index) => {
-                const imgSrc = imgLink.href.split("?")[0];
-                const fileName = imgLink.getAttribute("download") || `image-${index + 1}.jpg`;
-                const imgName = state.imageFileNameFormat
-                    .replace("{title}", sanitizeFileName(title))
-                    .replace("{artistName}", sanitizeFileName(artistName))
-                    .replace("{fileName}", fileName.replace(/\.[^/.]+$/, ""))
-                    .replace("{index}", index + 1)
-                    .replace("{ext}", getExtension(fileName));
-                return addFileToZip(imgSrc, imgName);
-            }),
-            ...Array.from(attachmentLinks).map((link, index) => {
-                const videoSrc = link.getAttribute("href");
-                const videoName = link.textContent.trim().replace("Download ", "") || `attachment-${index + 1}`;
-                return addFileToZip(videoSrc, videoName);
-            }),
-        ];
+            const fileName = state.imageFileNameFormat
+                .replace("{title}", sanitizedTitle)
+                .replace("{artistName}", sanitizedArtistName)
+                .replace("{fileName}", originalFileName.replace(/\.[^/.]+$/, ""))
+                .replace("{index}", i + 1)
+                .replace("{ext}", ext);
 
-        Promise.all(downloadPromises).then(() => {
-            zipWorker.postMessage({ type: 'generateZip' });
-        });
+            downloadPromises.push(downloadAndAddToZip(imgSrc, fileName));
+        }
+
+        for (let i = 0; i < videoLinks.length; i++) {
+            const videoLink = videoLinks[i];
+            const videoSrc = videoLink.href;
+            const originalFileName = videoLink.getAttribute("download") || `video-${i + 1}.mp4`;
+            const ext = getExtension(originalFileName);
+
+            const fileName = state.imageFileNameFormat
+                .replace("{title}", sanitizedTitle)
+                .replace("{artistName}", sanitizedArtistName)
+                .replace("{fileName}", originalFileName.replace(/\.[^/.]+$/, ""))
+                .replace("{index}", i + 1)
+                .replace("{ext}", ext);
+
+            downloadPromises.push(downloadAndAddToZip(videoSrc, fileName));
+        }
+
+        for (let i = 0; i < attachmentLinks.length; i++) {
+            const link = attachmentLinks[i];
+            const attachmentSrc = link.href;
+            const originalFileName = link.textContent.trim().replace("Download ", "");
+            const ext = getExtension(originalFileName);
+
+            const fileName = state.imageFileNameFormat
+                .replace("{title}", sanitizedTitle)
+                .replace("{artistName}", sanitizedArtistName)
+                .replace("{fileName}", originalFileName.replace(/\.[^/.]+$/, ""))
+                .replace("{index}", i + 1)
+                .replace("{ext}", ext);
+
+            downloadPromises.push(downloadAndAddToZip(attachmentSrc, fileName));
+        }
+
+        try {
+            await Promise.all(downloadPromises);
+
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+            const zipFileName = state.zipFileNameFormat
+                .replace("{artistName}", sanitizedArtistName)
+                .replace("{title}", sanitizedTitle);
+            saveAs(zipBlob, zipFileName);
+            state.isDownloading = false;
+            state.loadingMessage = null;
+            updateStatus(elements.statusElement, `Done! Total: ${total}`);
+        } catch (error) {
+            console.error('Error creating zip:', error);
+            Swal.fire('Error!', `Failed to create zip file: ${error.message}`, 'error');
+            state.isDownloading = false;
+            state.loadingMessage = null;
+        }
     };
 
     const downloadImageByIndex = (index) => {
@@ -615,7 +660,7 @@
                     state.originalImageSrcs.splice(index, 1);
                     state.totalImages--;
                     state.displayedImages.splice(index, 1);
-                    updateImageLoadingStatus();
+                    updateMediaLoadingStatus();
                 };
 
                 const newDiv = document.createElement('div');
@@ -698,9 +743,26 @@
         }
     };
 
-    const updateImageLoadingStatus = () => {
+    const updateMediaLoadingStatus = () => { // Renamed function
         const { loadedImages, totalImages } = state;
-        const status = loadedImages === totalImages ? `Images Done Loading! Total: ${totalImages}` : `Loading images (${loadedImages}/${totalImages})...`;
+        const imageLinks = document.querySelectorAll(website === "nekohouse" ? "a.image-link:not(.scrape__user-profile)" : "a.fileThumb.image-link");
+        const videoLinks = document.querySelectorAll(".post__video-link"); // Select video links
+        const totalImagesCount = imageLinks.length;
+        const totalVideosCount = videoLinks.length;
+
+        let status = "";
+        if (loadedImages === totalImages) {
+            if (totalVideosCount > 0 && totalImagesCount > 0) {
+                status = `Images and Videos Done Loading! Total: ${totalImages} (${totalImagesCount} images, ${totalVideosCount} videos)`;
+            } else if (totalVideosCount > 0) {
+                status = `Videos Done Loading! Total: ${totalVideosCount}`;
+            } else {
+                status = `Images Done Loading! Total: ${totalImagesCount}`;
+            }
+        } else {
+            status = `Loading media (${loadedImages}/${totalImages})...`;
+        }
+
         updateStatus(elements.statusElement, status);
     };
 
@@ -743,28 +805,22 @@
     // --- Mutation Observer and Initialization ---
     const isPostPage = () => !!document.querySelector(".site-section.site-section--post");
 
+    let currentPostUrl = null; // Store the current post URL
+
     const injectUI = debounce(() => {
         if (!isPostPage()) return;
 
-        if (state.currentPostUrl !== window.location.href || !elements.postActions) {
-            if (state.currentPostUrl !== window.location.href) {
-                // Reset gallery state if navigating to a new post
-                state.galleryReady = false;
-                state.galleryActive = false;
-                state.expandedViewActive = false;
-                state.virtualGallery = [];
-                state.originalImageSrcs = [];
-                state.displayedImages = [];
-                state.totalImages = 0;
-                state.loadedImages = 0;
-                state.downloadedCount = 0;
-                state.isLoading = false;
-                state.loadingMessage = null;
-                cleanupVirtualGallery();
-                cleanupPostActions();
-            }
+        if (!elements.postActions) { // Inject UI if not present
+            state.galleryReady = false;
+
             loadImages();
             initPostActions();
+
+            currentPostUrl = window.location.href; // Update URL after UI injection
+        } else if (window.location.href !== currentPostUrl) { // Refresh only if UI exists and URL is different
+            currentPostUrl = window.location.href; // Update URL before refresh
+            window.location.reload();
+            return;
         }
     }, DEBOUNCE_DELAY);
 
@@ -780,7 +836,6 @@
         const observer = new MutationObserver(injectUI);
 
         observer.observe(targetNode, config);
-        injectUI(); // Initial check
     };
 
     init();
