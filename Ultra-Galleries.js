@@ -152,7 +152,7 @@
         downloadedCount: 0,
         isLoading: false,
         loadingMessage: null,
-        fullSizeImageSrcs: [] // Array to store full-size image URLs
+        fullSizeImageSrcs: []
     }, {
         galleryReady: (value) => {
             if (value) {
@@ -230,6 +230,7 @@
             if (img) {
                 img.src = imgSrc;
                 img.dataset.originalSrc = imgSrc;
+                imageActions.height(img);
                 await new Promise(resolve => img.onload = resolve);
             }
 
@@ -258,7 +259,7 @@
 
         const mediaLinks = [
             ...document.querySelectorAll(website === "nekohouse" ? "a.image-link:not(.scrape__user-profile)" : "a.fileThumb.image-link"),
-            ...document.querySelectorAll(".post__video-link") // Select video links (adjust selector if needed)
+            ...document.querySelectorAll(".post__video-link")
         ];
         state.totalImages = mediaLinks.length;
         state.virtualGallery = Array(state.totalImages).fill(null);
@@ -290,7 +291,7 @@
     const cleanupVirtualGallery = () => {
         if (elements.virtualGalleryContainer) {
             elements.virtualGalleryContainer.remove();
-            state.virtualGallery.forEach(url => URL.revokeObjectURL(url)); // Revoke object URLs
+            state.virtualGallery.forEach(url => URL.revokeObjectURL(url));
             state.virtualGallery = [];
         }
         state.galleryReady = false;
@@ -345,12 +346,12 @@
         return button;
     };
 
-    let showExpandedImage, hideExpandedImage; // Declared with let
+    let showExpandedImage, hideExpandedImage;
 
     const showGallery = () => {
         if (state.galleryActive || !state.galleryReady) return;
         state.galleryActive = true;
-        state.loadingMessage = "Loading Gallery..."; // Set loading message here
+        state.loadingMessage = "Loading Gallery...";
 
         const overlay = createGalleryOverlay();
         const galleryContent = overlay.querySelector(".gallery-content");
@@ -469,7 +470,7 @@
             if (event.key === "Escape") {
                 state.expandedViewActive ? hideExpandedImage() : closeGallery();
             } else if (state.expandedViewActive) {
-                event.preventDefault(); // Prevent default behavior for arrow keys and k/l
+                event.preventDefault(); // Prevent default behavior for k/l
                 if (event.key === "k") {
                     showExpandedImage((currentIndex - 1 + images.length) % images.length);
                 } else if (event.key === "l") {
@@ -511,7 +512,8 @@
                     responseType: 'blob',
                     onload: function (response) {
                         if (response.status === 200) {
-                            zip.file(filename, response.response);
+                            const decodedFilename = decodeURIComponent(filename);
+                            zip.file(decodedFilename, response.response);
                             downloaded++;
                             updateStatus(elements.statusElement, `Downloading... (${downloaded}/${total})`);
                             resolve();
@@ -701,8 +703,9 @@
             elements.settingsButton = null;
         }
 
+        // Remove any lingering event listeners
         state.displayedImages.forEach(img => {
-            img.removeEventListener('click', () => showExpandedImage(index)); // Remove any lingering event listeners
+            img.removeEventListener('click', () => showExpandedImage(index));
         });
         state.displayedImages = [];
 
@@ -743,7 +746,7 @@
         }
     };
 
-    const updateMediaLoadingStatus = () => { // Renamed function
+    const updateMediaLoadingStatus = () => {
         const { loadedImages, totalImages } = state;
         const imageLinks = document.querySelectorAll(website === "nekohouse" ? "a.image-link:not(.scrape__user-profile)" : "a.fileThumb.image-link");
         const videoLinks = document.querySelectorAll(".post__video-link"); // Select video links
