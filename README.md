@@ -29,7 +29,7 @@ This userscript provides a seamless and efficient way to interact with image and
 ### Performance and User Experience
 
 - **Improved Image Loading:** Modified image loading mechanism to prevent rate-limiting issues.
-- **Retry Mechanism:** Implements exponential backoff for failed image loads.
+- **Retry Mechanism:** Implements exponential backoff for failed image loads. (Currently disabled, will be re-implemented in a future update)
 - **Status Updates:** Provides real-time status updates for image loading and download progress.
 
 ### Video Handling
@@ -37,21 +37,24 @@ This userscript provides a seamless and efficient way to interact with image and
 - Includes video files in batch downloads.
 - Preserves original video filenames.
 
-### New Features (v2.3.0)
+### New Features (v2.4.0)
 
-- **Multi-Site Support:** Enhanced support for `nekohouse.su`, including downloading assets and using the gallery view.
-- **Improved Code Clarity:** Optimized code for better readability and maintainability.
-- **Enhanced Error Handling:** Implemented robust error handling to prevent unexpected script behavior.
+- **Gallery Key Binding:** Use a customizable key to open the gallery. Configurable in settings. Defaults to 'g'.
+- **Expanded View:** Images and videos can be viewed in an expanded overlay within the gallery. Navigation through arrow keys or on-screen buttons.
+- **Thumbnail Navigation in Expanded View:**  Provides thumbnails for easy navigation within the expanded view.
+- **Video Support in Expanded View:** Videos are now playable directly within the expanded gallery view.
+- **Settings Panel:**  Added settings panel accessible via a settings button to adjust zip and image filename formats and the gallery hotkey.
+- **Code Clarity and Performance Improvements:**  Code refactoring and optimization for better readability and reduced overhead.
 
 ## Usage
 
-After installation, navigate to a post on `kemono.su`, `coomer.su`, or `nekohouse.su`. You'll see new buttons for resizing, downloading, and removing images. Use the `DL ALL` button to initiate a batch download of all media in the post. The `GALLERY` button opens the new gallery view.
+After installation, navigate to a post on `kemono.su`, `coomer.su`, or `nekohouse.su`. You'll see new buttons for resizing, downloading, and removing images. Use the `DL ALL` button to initiate a batch download of all media in the post. The `GALLERY` button opens the new gallery view. Press the configured gallery key (default 'g') to quickly open the gallery. **Within the gallery view, you can open an image or video in an expanded view by clicking on its thumbnail. Once in expanded view, navigate using the  'k' (previous) and 'l' (next) keys or the on-screen navigation buttons.**
 
 ## Dependencies
 
 - [jQuery](https://jquery.com/) (v3.6.0)
-- [JSZip](https://stuk.github.io/jszip/) (v3.10.1)
-- [FileSaver.js](https://github.com/eligrey/FileSaver.js/) (v2.0.5)
+- [JSZip](https://stuk.github.io/jszip/) (v3.1.4)
+- [FileSaver.js](https://github.com/eligrey/FileSaver.js/) (v1.3.2)
 - [SweetAlert2](https://sweetalert2.github.io/) (v11)
 
 ## Installation
@@ -67,4 +70,4 @@ After installation, navigate to a post on `kemono.su`, `coomer.su`, or `nekohous
 
 ## Version
 
-Current version: 2.3.0
+Current version: 2.4.0
