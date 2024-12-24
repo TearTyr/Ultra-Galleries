@@ -2,318 +2,398 @@
 
 /* --- Gallery Overlay --- */
 #gallery-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(10px);
-  z-index: 9999;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  overflow: auto;
-}
-
-.gallery-container {
-  width: 95%;
-  max-height: 95vh;
-  background-color: rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  overflow: hidden;
-}
-
-/* Full Width Gallery */
-.gallery-container.full-width {
-  width: 100vw;
-  max-width: 100vw;
-  height: 100vh;
-  max-height: 100vh;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-}
-
-/* --- Close Button --- */
-.gallery-close-button {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  font-size: 24px;
-  background: none;
-  border: none;
-  color: white;
-  cursor: pointer;
-  z-index: 1002;
-}
-
-/* --- Gallery Content --- */
-.gallery-content {
-  flex: 1;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  grid-gap: 10px;
-  padding: 20px;
-  overflow-y: auto;
-  max-height: 75vh;
-}
-
-/* --- Expanded View --- */
-.expanded-view {
-    position: absolute;
+    position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.9);
-    display: none;
+    background-color: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(10px);
+    z-index: 9999; /* Ensure it's on top of everything */
+    display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    z-index: 10000;
-    padding: 0;
+    overflow: auto;
+  }
+  
+  .gallery-container {
+    width: 95%;
+    max-height: 95vh;
+    background-color: rgba(255, 255, 255, 0.1);
     border-radius: 8px;
-}
-
-.expanded-image,
-.expanded-view video {
-  max-width: 90vw;
-  max-height: 80vh;
-  object-fit: contain;
-  display: block;
-  margin: 0 auto;
-}
-
-/* --- Thumbnail Container --- */
-.thumbnail-container {
-    width: calc(100% - 40px);
-    box-sizing: border-box;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden; /* Prevent content overflow */
+  }
+  
+  /* Full Width Gallery */
+  .gallery-container.full-width {
+    width: 100vw;
+    max-width: 100vw; /* Prevent horizontal overflow */
+    height: 100vh; /* Make it cover the full height */
+    max-height: 100vh; /* Prevent vertical overflow */
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* Prevent content overflow */
+  }
+  
+  /* --- Close Button --- */
+  .gallery-close-button {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 24px;
+    background: none;
+    border: none;
+    color: white; /* White text */
+    cursor: pointer;
+    z-index: 1002;
+  }
+  
+  /* --- Gallery Content --- */
+  .gallery-content {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    grid-gap: 10px;
+    padding: 20px;
+    overflow-y: auto;
+    max-height: 75vh;
+  }
+  
+  /* --- Expanded View --- */
+  .expanded-view {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.9);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      padding: 0;
+      border-radius: 8px;
+  }
+  
+  .expanded-image,
+  .expanded-view video {
+    max-width: 90vw;
+    max-height: 80vh;
+    object-fit: contain;
+    display: block;
+    margin: 0 auto;
+  }
+  
+  /* --- Thumbnail Container --- */
+  .thumbnail-container {
+      width: calc(100% - 40px);
+      box-sizing: border-box;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow-x: auto;
+      padding: 10px 20px;
+      margin-top: 10px;
+      max-height: 120px;
+      flex-shrink: 0;
+      position: relative;
+      left: 50%;
+      transform: translateX(-50%);
+  }
+  
+  /* --- Navigation Buttons --- */
+  .navigation-button {
+    position: absolute;
+    top: 50%;
+    font-size: 24px;
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.3s ease;
+    z-index: 1005;
+    transform: translateY(-50%);
+    user-select: none;
+  }
+  
+  .navigation-button:hover {
+    opacity: 1;
+  }
+  
+  .navigation-button.prev {
+    left: 10px;
+  }
+  
+  .navigation-button.next {
+    right: 10px;
+  }
+  
+  /* Gallery Arrows - Hidden */
+  .expanded-view.hidden .navigation-button {
+    display: none;
+  }
+  
+  /* Gallery Arrows - Overlay */
+  .expanded-view.overlay .navigation-button {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 10;
+  }
+  
+  .expanded-view.overlay .navigation-button.prev {
+    left: 20px;
+  }
+  
+  .expanded-view.overlay .navigation-button.next {
+    right: 20px;
+  }
+  
+  /* Gallery Arrows - Side */
+  .expanded-view.side .navigation-button {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 10;
+  }
+  
+  .expanded-view.side .navigation-button.prev {
+    left: 0px;
+  }
+  
+  .expanded-view.side .navigation-button.next {
+    right: 0px;
+  }
+  
+  /* Full Width Gallery - Arrow Positioning */
+  .gallery-container.full-width .expanded-view.overlay .navigation-button.prev {
+    left: 10px;
+  }
+  
+  .gallery-container.full-width .expanded-view.overlay .navigation-button.next {
+    right: 10px;
+  }
+  
+  /* Side Arrows in Full Width (May need further adjustments) */
+  .gallery-container.full-width .expanded-view.side .navigation-button.prev {
+    left: 0;
+  }
+  
+  .gallery-container.full-width .expanded-view.side .navigation-button.next {
+    right: 0;
+  }
+  
+  /* --- Loading Overlay --- */
+  .loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
     display: flex;
     justify-content: center;
     align-items: center;
-    overflow-x: auto;
-    padding: 10px 20px;
+    z-index: 1001;
+    color: white;
+    font-size: 24px;
+  }
+  
+  /* --- Page Number --- */
+  .page-number {
+    color: white;
     margin-top: 10px;
-    max-height: 120px;
+    margin-bottom: 10px;
+    font-size: 16px;
+  }
+  
+  /* --- Thumbnails --- */
+  .thumbnail {
+    width: 200px;
+    height: 200px;
+    object-fit: cover;
+    cursor: pointer;
+    transition: transform 0.3s ease;
+    border: 2px solid transparent;
+    border-radius: 4px;
+  }
+  
+  .thumbnail:hover {
+    transform: scale(1.05);
+    border-color: white;
+  }
+  
+  .expanded-thumbnail {
+    width: 100px;
+    height: 100px;
+    object-fit: cover;
+    margin: 0 5px;
+    cursor: pointer;
+    opacity: 0.5;
+    transition: opacity 0.3s ease;
+    vertical-align: top;
+    border: 2px solid transparent;
+    border-radius: 4px;
     flex-shrink: 0;
-    position: relative;
-    left: 50%;
-    transform: translateX(-50%);
-}
-
-/* --- Navigation Buttons --- */
-.navigation-button {
-  position: absolute;
-  top: 50%;
-  font-size: 24px;
-  background: rgba(0, 0, 0, 0.5);
-  color: white;
-  border: none;
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  opacity: 0.7;
-  transition: opacity 0.3s ease;
-  z-index: 1005;
-  transform: translateY(-50%);
-  user-select: none;
-}
-
-.navigation-button:hover {
-  opacity: 1;
-}
-
-.navigation-button.prev {
-  left: 10px;
-}
-
-.navigation-button.next {
-  right: 10px;
-}
-
-/* Gallery Arrows - Hidden */
-.expanded-view.hidden .navigation-button {
-  display: none;
-}
-
-/* Gallery Arrows - Overlay */
-.expanded-view.overlay .navigation-button {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 10;
-}
-
-.expanded-view.overlay .navigation-button.prev {
-  left: 20px;
-}
-
-.expanded-view.overlay .navigation-button.next {
-  right: 20px;
-}
-
-/* Gallery Arrows - Side */
-.expanded-view.side .navigation-button {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 10;
-}
-
-.expanded-view.side .navigation-button.prev {
-  left: 0px;
-}
-
-.expanded-view.side .navigation-button.next {
-  right: 0px;
-}
-
-/* Full Width Gallery - Arrow Positioning */
-.gallery-container.full-width .expanded-view.overlay .navigation-button.prev {
-  left: 10px;
-}
-
-.gallery-container.full-width .expanded-view.overlay .navigation-button.next {
-  right: 10px;
-}
-
-/* Side Arrows in Full Width (May need further adjustments) */
-.gallery-container.full-width .expanded-view.side .navigation-button.prev {
-  left: 0;
-}
-
-.gallery-container.full-width .expanded-view.side .navigation-button.next {
-  right: 0;
-}
-
-/* --- Loading Overlay --- */
-.loading-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.7);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1001;
-  color: white;
-  font-size: 24px;
-}
-
-/* --- Page Number --- */
-.page-number {
-  color: white;
-  margin-top: 10px;
-  margin-bottom: 10px;
-  font-size: 16px;
-}
-
-/* --- Thumbnails --- */
-.thumbnail {
-  width: 200px;
-  height: 200px;
-  object-fit: cover;
-  cursor: pointer;
-  transition: transform 0.3s ease;
-  border: 2px solid transparent;
-  border-radius: 4px;
-}
-
-.thumbnail:hover {
-  transform: scale(1.05);
-  border-color: white;
-}
-
-.expanded-thumbnail {
-  width: 100px;
-  height: 100px;
-  object-fit: cover;
-  margin: 0 5px;
-  cursor: pointer;
-  opacity: 0.5;
-  transition: opacity 0.3s ease;
-  vertical-align: top;
-  border: 2px solid transparent;
-  border-radius: 4px;
-  flex-shrink: 0;
-}
-
-.expanded-thumbnail.active {
-  opacity: 1;
-  border-color: orange;
-}
-
-/* --- Settings Button --- */
-.settings-button {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  padding: 10px 15px;
-  background-color: #333;
-  color: white;
-  border-radius: 5px;
-  z-index: 10000;
-  opacity: 0.8;
-  transition: opacity 0.3s ease;
-  text-decoration: none;
-}
-
-.settings-button:hover {
-  opacity: 1;
-  background-color: #444;
-}
-
-/* --- SweetAlert Styles --- */
-.swal2-popup {
-  background: #222 !important;
-  color: #eee !important;
-}
-
-.swal2-input,
-.swal2-textarea,
-.swal2-select {
-  background-color: #333 !important;
-  color: #eee !important;
-  border: 1px solid #555 !important;
-  width: 90% !important;
-  margin-left: auto !important;
-  margin-right: auto !important;
-}
-
-.swal2-confirm {
-  background-color: #777 !important;
-}
-
-/* --- Post Actions --- */
-.post__actions a,
-.scrape__actions a {
-  margin-right: 5px;
-  cursor: pointer;
-  text-decoration: none;
-  color: white;
-}
-
-.post__actions a.disabled,
-.scrape__actions a.disabled {
-  color: gray;
-  pointer-events: none;
-  cursor: not-allowed;
-}
-
-/* --- Hidden Virtual Image --- */
-.virtual-image {
-  display: none;
-}
+  }
+  
+  .expanded-thumbnail.active {
+    opacity: 1;
+    border-color: orange;
+  }
+  
+  /* --- Settings Button --- */
+  .settings-button {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 10px 15px;
+    background-color: #333;
+    color: white;
+    border-radius: 5px;
+    z-index: 10000;
+    opacity: 0.8;
+    transition: opacity 0.3s ease;
+    text-decoration: none;
+  }
+  
+  .settings-button:hover {
+    opacity: 1;
+    background-color: #444;
+  }
+  
+  /* --- SweetAlert Styles --- */
+  .swal2-popup {
+    background: #222 !important;
+    color: #eee !important;
+  }
+  
+  .swal2-input,
+  .swal2-textarea,
+  .swal2-select {
+    background-color: #333 !important;
+    color: #eee !important;
+    border: 1px solid #555 !important;
+    width: 90% !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+  
+  .swal2-confirm {
+    background-color: #777 !important;
+  }
+  
+  /* --- Post Actions --- */
+  .post__actions a,
+  .scrape__actions a {
+    margin-right: 5px;
+    cursor: pointer;
+    text-decoration: none;
+    color: white;
+  }
+  
+  .post__actions a.disabled,
+  .scrape__actions a.disabled {
+    color: gray;
+    pointer-events: none;
+    cursor: not-allowed;
+  }
+  
+  /* --- Hidden Virtual Image --- */
+  .virtual-image {
+    display: none;
+  }
+  
+  /* --- Full Width Expanded View --- */
+  .full-width-expanded {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 10001;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(0, 0, 0, 0.9);
+    padding: 0;
+    overflow: hidden;
+  }
+  
+  .full-width-expanded .expanded-image,
+  .full-width-expanded video {
+    max-width: 100vw;
+    max-height: calc(100vh - 140px);
+    object-fit: contain;
+  }
+  
+  .full-width-expanded .navigation-button {
+    z-index: 10002;
+  }
+  
+  .full-width-expanded .gallery-close-button {
+    color: white;
+    font-size: 24px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 10003;
+  }
+  
+  .full-width-expanded .page-number {
+      color: white;
+      margin-top: 5px;
+      margin-bottom: 0;
+      font-size: 16px;
+  }
+  
+  .full-width-expanded .thumbnail-container {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      max-height: 120px;
+      overflow-x: auto;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 10px 0;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 10002;
+  }
+  
+  .full-width-expanded .expanded-thumbnail {
+      width: 100px;
+      height: 100px;
+      object-fit: cover;
+      margin: 0 5px;
+      cursor: pointer;
+      opacity: 0.5;
+      transition: opacity 0.3s ease;
+      border: 2px solid transparent;
+      border-radius: 4px;
+      flex-shrink: 0;
+  }
+  
+  .full-width-expanded .expanded-thumbnail.active {
+      opacity: 1;
+      border-color: orange;
+  }
