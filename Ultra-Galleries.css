@@ -1,307 +1,262 @@
 /* Ultra-Galleries.css */
 
+/* --- Gallery Overlay --- */
 #gallery-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.8);
-    backdrop-filter: blur(10px);
-    z-index: 1000;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    overflow: auto; /* Changed to auto to allow scroll if needed */
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(10px);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
 }
 
 .gallery-container {
-    width: 95%;
-    max-height: 95vh; /* Added max-height */
-    background-color: rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    display: flex;
-    flex-direction: column;
-    position: relative;
-    overflow: hidden; /* Added to contain potentially overflowing content */
-
+  width: 95%;
+  max-height: 95vh;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
 }
 
+/* Full Width Gallery */
 #gallery-overlay.full-width-gallery .gallery-container {
-    max-width: 100vw !important;
-    width: 100vw !important;
-    margin: 0 !important;
-    padding: 10px;
-    max-height: 100vh;
+  max-width: 100vw !important;
+  width: 100vw !important;
+  margin: 0 !important;
+  padding: 10px;
+  max-height: 100vh;
 }
 
 #gallery-overlay.full-width-gallery .gallery-content {
-    justify-content: center;
+  justify-content: center;
 }
 
-
+/* --- Close Button --- */
 .gallery-close-button {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    font-size: 24px;
-    background: none;
-    border: none;
-    color: white;
-    cursor: pointer;
-    z-index: 1002;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 24px;
+  background: none;
+  border: none;
+  color: white; /* White text */
+  cursor: pointer;
+  z-index: 1002;
 }
 
+/* --- Gallery Content --- */
 .gallery-content {
-    flex: 1;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    grid-gap: 10px;
-    padding: 20px;
-    overflow-y: auto;
-    max-height: 75vh;
-
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-gap: 10px;
+  padding: 20px;
+  overflow-y: auto;
+  max-height: 75vh;
 }
 
+/* --- Expanded View --- */
 .expanded-view {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: auto; /* Changed to auto */
-    max-width: 95vw;
-    max-height: 95vh;
-    background-color: rgba(0, 0, 0, 0.9);
-    display: none;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    z-index: 1001;
-    padding: 20px;
-    border-radius: 8px;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: auto;
+  max-width: 95vw;
+  max-height: 95vh;
+  background-color: rgba(0, 0, 0, 0.9);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 1001;
+  padding: 20px;
+  border-radius: 8px;
 }
 
-.expanded-image, .expanded-view video {
-    max-width: 90vw;
-    max-height: 80vh;
-    object-fit: contain;
-    display: block;
-    margin: 0 auto;
+.expanded-image,
+.expanded-view video {
+  max-width: 90vw;
+  max-height: 80vh;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
 }
 
+/* --- Thumbnail Container --- */
 .thumbnail-container {
-    position: static;
-    width: 90vw;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    overflow-x: auto;
-    padding: 10px;
-    margin-top: 15px;
-    max-height: 120px;
-
-
+  position: static;
+  width: 90vw;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow-x: auto;
+  padding: 10px;
+  margin-top: 15px;
+  max-height: 120px;
 }
 
+/* --- Navigation Buttons --- */
 .navigation-button {
-    position: absolute;
-    top: 50%;
-    font-size: 24px;
-    background: rgba(0, 0, 0, 0.5);
-    color: white;
-    border: none;
-    border-radius: 50%;
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    opacity: 0.7;
-    transition: opacity 0.3s ease;
-    z-index: 1005;
-    transform: translateY(-50%); /* Vertical centering */
-     user-select: none;
+  position: absolute;
+  top: 50%;
+  font-size: 24px;
+  background: rgba(0, 0, 0, 0.5);
+  color: white; /* White text */
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.3s ease;
+  z-index: 1005;
+  transform: translateY(-50%);
+  user-select: none;
 }
 
 .navigation-button:hover {
-    opacity: 1;
+  opacity: 1;
 }
 
 .navigation-button.prev {
-    left: 10px;
+  left: 10px;
 }
 
 .navigation-button.next {
-    right: 10px;
+  right: 10px;
 }
 
+/* --- Loading Overlay --- */
 .loading-overlay {
-     position: fixed; /* Changed to fixed */
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.7);
-    display: none;
-    justify-content: center;
-    align-items: center;
-    z-index: 1001
-    color: white;
-    font-size: 24px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex; /* Changed to flex to enable centering */
+  justify-content: center;
+  align-items: center;
+  z-index: 1001;
+  color: white; /* White text */
+  font-size: 24px;
 }
 
+/* --- Page Number --- */
 .page-number {
-    color: white;
-    margin-top: 10px;
-    margin-bottom: 10px;
-    font-size: 16px;
+  color: white; /* White text */
+  margin-top: 10px;
+  margin-bottom: 10px;
+  font-size: 16px;
 }
 
+/* --- Thumbnails --- */
 .thumbnail {
-    width: 200px;
-    height: 200px;
-    object-fit: cover;
-    cursor: pointer;
-    transition: transform 0.3s ease;
-    border: 2px solid transparent;
-    border-radius: 4px;
-
+  width: 200px;
+  height: 200px;
+  object-fit: cover;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+  border: 2px solid transparent;
+  border-radius: 4px;
 }
 
 .thumbnail:hover {
-    transform: scale(1.05);
-    border-color: white;
+  transform: scale(1.05);
+  border-color: white;
 }
 
 .expanded-thumbnail {
-    width: 100px;
-    height: 100px;
-    object-fit: cover;
-    margin: 0 5px;
-    cursor: pointer;
-    opacity: 0.5;
-    transition: opacity 0.3s ease;
-    vertical-align: top;
-    border: 2px solid transparent;
-    border-radius: 4px;
-
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  margin: 0 5px;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.3s ease;
+  vertical-align: top;
+  border: 2px solid transparent;
+  border-radius: 4px;
 }
 
 .expanded-thumbnail.active {
-    opacity: 1;
-     border-color: orange; 
+  opacity: 1;
+  border-color: orange;
 }
 
+/* --- Settings Button --- */
 .settings-button {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    padding: 10px 15px;
-    background-color: #333;
-    color: white;
-    border-radius: 5px;
-    z-index: 10000;
-    opacity: 0.8;
-    transition: opacity 0.3s ease;
-    text-decoration: none; /* Remove underline */
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 10px 15px;
+  background-color: #333;
+  color: white; /* White text */
+  border-radius: 5px;
+  z-index: 10000;
+  opacity: 0.8;
+  transition: opacity 0.3s ease;
+  text-decoration: none;
 }
 
 .settings-button:hover {
-    opacity: 1;
-     background-color: #444; /* Added hover effect */
+  opacity: 1;
+  background-color: #444;
 }
 
-/* SweetAlert Styles */
+/* --- SweetAlert Styles --- */
 .swal2-popup {
-    background: #222 !important;
-    color: #eee !important;
+  background: #222 !important;
+  color: #eee !important;
 }
 
-.swal2-input, .swal2-textarea {
-    background-color: #333 !important;
-    color: #eee !important;
-    border: 1px solid #555 !important;
-     width: 90% !important;
-    margin-left: auto !important;
-    margin-right: auto !important;
+.swal2-input,
+.swal2-textarea {
+  background-color: #333 !important;
+  color: #eee !important;
+  border: 1px solid #555 !important;
+  width: 90% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
 }
 
 .swal2-confirm {
-    background-color: #777 !important;
+  background-color: #777 !important;
 }
 
-/* Your .ug- Styles - Kept mostly as is */
-.ug-settings-popup {
-    background: #222 !important;
-    color: #eee !important;
-    font-family: sans-serif;
+/* --- Post Actions --- */
+.post__actions a,
+.scrape__actions a {
+  margin-right: 5px;
+  cursor: pointer;
+  text-decoration: none;
+  color: white; /* White text */
 }
 
-.ug-settings-title {
-    font-size: 1.2em;
-    font-weight: bold;
-    margin-bottom: 1em;
-}
-
-.ug-settings-container {
-    display: flex;
-    flex-direction: column;
-    gap: 1em;
-}
-
-.ug-setting {
-    display: flex;
-    flex-direction: column;
-}
-
-.ug-setting label {
-    margin-bottom: 0.5em;
-}
-
-.ug-settings-input {
-    background-color: #333 !important;
-    color: #eee !important;
-    border: 1px solid #555 !important;
-    padding: 0.5em;
-    border-radius: 4px;
-}
-
-.ug-placeholder-info {
-    font-size: 0.9em;
-    color: #aaa;
-    margin-top: 0.3em;
-}
-
-.ug-credits {
-    text-align: center;
-    margin-top: 1em;
-    color: #888;
-}
-
-.ug-settings-confirm {
-    background-color: #007bff !important;
-}
-
-.ug-settings-cancel {
-    background-color: #6c757d !important;
-}
-
-.post__actions a, .scrape__actions a {
-    margin-right: 5px;
-    cursor: pointer;
-    text-decoration: none;
-    color: black;
-
-}
-.post__actions a.disabled, .scrape__actions a.disabled {
+.post__actions a.disabled,
+.scrape__actions a.disabled {
   color: gray;
-  pointer-events: none; /* Make it non-clickable */
+  pointer-events: none;
   cursor: not-allowed;
 }
-  .virtual-image{
-    display: none;
-  }
+
+/* --- Hidden Virtual Image --- */
+.virtual-image {
+  display: none;
+}
