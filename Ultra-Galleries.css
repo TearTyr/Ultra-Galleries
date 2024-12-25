@@ -223,13 +223,14 @@
   
   /* --- Thumbnails --- */
   .thumbnail {
-    width: 200px;
-    height: 200px;
+    /* width: 200px;  Remove fixed width */
+    /* height: 200px; Remove fixed height */
     object-fit: cover;
     cursor: pointer;
     transition: transform 0.3s ease;
     border: 2px solid transparent;
     border-radius: 4px;
+    aspect-ratio: 1 / 1; /* Maintain a 1:1 aspect ratio */
   }
   
   .thumbnail:hover {
