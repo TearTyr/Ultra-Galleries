@@ -398,3 +398,12 @@
       opacity: 1;
       border-color: orange;
   }
+
+  /* --- Collapsing Hidden Buttons --- */
+    .post__actions a[style*="display: none"] {
+        width: 0;
+        padding: 0;
+        margin: 0;
+        border: none;
+        overflow: hidden;
+    }
