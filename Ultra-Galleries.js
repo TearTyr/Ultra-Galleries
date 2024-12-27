@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      2.4.0
+// @version      2.4.3
 // @description  Enhanced gallery experience (SPA-compatible Testing Phase)
 // @author       ntf (original), Meri/TearTyr
 // @match        *://kemono.su/*
@@ -24,7 +24,7 @@
 (function () {
     'use strict';
 
-    // --- CSS Injection ---
+    // --- CSS Injection (Using GM_xmlhttpRequest) ---
     GM.xmlHttpRequest({
         method: "GET",
         url: "https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/main/Ultra-Galleries.css",
@@ -90,6 +90,7 @@
         toggle.textContent = name;
         toggle.addEventListener("click", action);
         toggle.style.cursor = "pointer";
+        toggle.classList.add('ug-button');
         if (disabled) {
             toggle.disabled = true;
             toggle.classList.add('disabled');
@@ -186,13 +187,14 @@
         Swal.fire({
             title: 'Ultra Galleries - Settings',
             html: `
-                <div><label for="zipFileNameFormat">Zip Filename Format:</label><input type="text" id="zipFileNameFormat" value="${settings.zipFileNameFormat}" placeholder="{title}-{artistName}.zip"><p>Available placeholders: {artistName}, {title}</p></div>
-                <div><label for="imageFileNameFormat">Image Filename Format:</label><input type="text" id="imageFileNameFormat" value="${settings.imageFileNameFormat}" placeholder="{title}-{artistName}-{fileName}-{index}"><p>Available placeholders: {artistName}, {title}, {fileName}, {index}, {ext}</p></div>
-                <div><label for="galleryKey">Gallery Key:</label><input type="text" id="galleryKey" value="${settings.galleryKey}" maxlength="1"><p>Press this key to open the gallery when it's loaded.</p></div>
-                <div><p>Original author: ntf</p><p>Forked by: Meri/TearTyr</p></div>
+                <div class="ug-settings-popup"><div class="ug-settings-title">Ultra Galleries - Settings</div><div class="ug-settings-container"><div class="ug-setting"><label for="zipFileNameFormat">Zip Filename Format:</label><input type="text" id="zipFileNameFormat" class="ug-settings-input" value="${settings.zipFileNameFormat}" placeholder="{title}-{artistName}.zip"><p class="ug-placeholder-info">Available placeholders: {artistName}, {title}</p></div><div class="ug-setting"><label for="imageFileNameFormat">Image Filename Format:</label><input type="text" id="imageFileNameFormat" class="ug-settings-input" value="${settings.imageFileNameFormat}" placeholder="{title}-{artistName}-{fileName}-{index}"><p class="ug-placeholder-info">Available placeholders: {artistName}, {title}, {fileName}, {index}, {ext}</p></div><div class="ug-setting"><label for="galleryKey">Gallery Key:</label><input type="text" id="galleryKey" class="ug-settings-input" value="${settings.galleryKey}" maxlength="1"><p class="ug-placeholder-info">Press this key to open the gallery when it's loaded.</p></div></div><div class="ug-credits"><p>Original author: ntf</p><p>Forked by: Meri/TearTyr</p></div></div>
             `,
             confirmButtonText: 'Save',
             focusConfirm: false,
+            customClass: {
+                confirmButton: 'ug-settings-confirm',
+                cancelButton: 'ug-settings-cancel'
+            },
             preConfirm: () => ({
                 zipFileNameFormat: document.getElementById('zipFileNameFormat').value,
                 imageFileNameFormat: document.getElementById('imageFileNameFormat').value,
@@ -272,7 +274,7 @@
         }
 
         await Promise.all(loadingPromises);
-};
+    };
 
     const createVirtualGallery = () => {
         cleanupVirtualGallery();
@@ -291,8 +293,7 @@
     const cleanupVirtualGallery = () => {
         if (elements.virtualGalleryContainer) {
             elements.virtualGalleryContainer.remove();
-            state.virtualGallery.forEach(url => URL.revokeObjectURL(url));
-            state.virtualGallery = [];
+            elements.virtualGalleryContainer = null; // Reset the container
         }
         state.galleryReady = false;
     };
@@ -460,6 +461,16 @@
             state.galleryActive = false;
             state.expandedViewActive = false;
             state.loadingMessage = null; // Clear loading message when closing
+
+            // Revoke object URLs when the gallery is closed
+            if (elements.virtualGalleryContainer) {
+                state.virtualGallery.forEach(url => {
+                    if (url && url.startsWith("blob:")) { // Check if it's a blob URL
+                        URL.revokeObjectURL(url);
+                    }
+                });
+                state.virtualGallery = [];
+            }
         }
     };
 
@@ -508,7 +519,6 @@
                 GM.xmlHttpRequest({
                     method: "GET",
                     url: url,
-                    headers: { referer: `https://${website}.su/` },
                     responseType: 'blob',
                     onload: function (response) {
                         if (response.status === 200) {
@@ -604,14 +614,14 @@
         if (imgLink) {
             const imgSrc = imgLink.href.split("?")[0];
             const fileName = imgLink.getAttribute('download');
-            const options = { url: imgSrc, name: fileName, headers: { referer: `https://${website}.su/` } };
+            const options = { url: imgSrc, name: fileName };
             downloadFunction(options);
         }
     };
 
     const initPostActions = () => {
         if (!isPostPage() || state.currentPostUrl === window.location.href) return;
-        cleanupPostActions(); // Clean up previous actions and listeners
+        cleanupPostActions();
         state.currentPostUrl = window.location.href;
 
         document.querySelectorAll(website === 'nekohouse' ? 'a.image-link:not(.scrape__user-profile) img' : 'a.fileThumb.image-link img').forEach(img => img.className = 'post__image');
@@ -674,8 +684,22 @@
                     createToggleButton(BUTTONS.REMOVE, removeImage)
                 );
 
+                // Add 'ug-button' class to the buttons in the newDiv
+                Array.from(newDiv.children).forEach(button => button.classList.add('ug-button'));
+
                 parentDiv.insertBefore(newDiv, img.closest(website === 'nekohouse' ? '.scrape__thumbnail' : '.post__thumbnail'));
                 img.addEventListener('click', () => showExpandedImage(index));
+            });
+
+            // Use event delegation for dynamically added images
+            parentDiv.addEventListener('click', (event) => {
+                const clickedImage = event.target.closest(website === 'nekohouse' ? 'a.image-link:not(.scrape__user-profile) img' : 'a.fileThumb.image-link img');
+                if (clickedImage) {
+                    const index = Array.from(document.querySelectorAll(website === 'nekohouse' ? 'a.image-link:not(.scrape__user-profile) img' : 'a.fileThumb.image-link img')).indexOf(clickedImage);
+                    if (index !== -1) {
+                        showExpandedImage(index);
+                    }
+                }
             });
 
             const favoriteButton = document.querySelector(website === "nekohouse" ? ".scrape__actions a.favorite-button" : ".post__actions a.favorite-button");
@@ -687,48 +711,36 @@
                     createToggleButton(BUTTONS.HEIGHT, () => resizeAllImages('height')),
                     createToggleButton(BUTTONS.FULL, () => resizeAllImages('full'))
                 );
+
+                // Add 'ug-button' class to the buttons in the newDiv
+                Array.from(newDiv.children).forEach(button => button.classList.add('ug-button'));
+
                 favoriteButton.parentNode.insertBefore(newDiv, favoriteButton.nextSibling);
             }
         }
     };
 
     const cleanupPostActions = () => {
+        // Remove only elements with the 'ug-button' class
         if (elements.postActions) {
-            while (elements.postActions.firstChild) {
-                elements.postActions.removeChild(elements.postActions.firstChild);
-            }
+            const ugButtons = elements.postActions.querySelectorAll('.ug-button');
+            ugButtons.forEach(button => button.remove());
         }
+
         if (elements.settingsButton) {
             elements.settingsButton.remove();
             elements.settingsButton = null;
         }
 
-        // Remove any lingering event listeners
-        state.displayedImages.forEach(img => {
-            img.removeEventListener('click', () => showExpandedImage(index));
-        });
-        state.displayedImages = [];
-
-        // Clean up status element
-        if (elements.statusElement && elements.statusElement.parentNode) {
-            elements.statusElement.parentNode.removeChild(elements.statusElement);
-            elements.statusElement = null;
-        }
-
-        // Clean up download all button
-        if (elements.downloadAllButton && elements.downloadAllButton.parentNode) {
-            elements.downloadAllButton.parentNode.removeChild(elements.downloadAllButton);
-            elements.downloadAllButton = null;
-        }
-
-        // Clean up gallery button
-        if (elements.galleryButton && elements.galleryButton.parentNode) {
-            elements.galleryButton.parentNode.removeChild(elements.galleryButton);
-            elements.galleryButton = null;
+        // Clean up event delegation from parentDiv
+        const parentDiv = document.querySelector(website === 'nekohouse' ? '.scrape__thumbnails' : '.post__thumbnails');
+        if (parentDiv) {
+            parentDiv.removeEventListener('click', delegatedImageClickHandler);
         }
 
         elements.postActions = null; // Reset postActions
-        state.currentPostUrl = null; // Reset current post URL
+        // Don't reset currentPostUrl here as it might break dynamic content handling
+        // state.currentPostUrl = null;
     };
 
     const resizeAllImages = (action) => {
@@ -791,10 +803,21 @@
         }
     };
 
-    const showLoadingOverlay = () => {
+    const showLoadingOverlay = (text) => {
         if (!elements.loadingOverlay) {
-            elements.loadingOverlay = createLoadingOverlay();
+            elements.loadingOverlay = createLoadingOverlay(text);
             document.body.appendChild(elements.loadingOverlay);
+        } else {
+            updateLoadingOverlayText(text);
+        }
+    };
+
+    const updateLoadingOverlayText = (text) => {
+        if (elements.loadingOverlay) {
+            const loadingText = elements.loadingOverlay.querySelector('div');
+            if (loadingText) {
+                loadingText.textContent = text;
+            }
         }
     };
 
@@ -808,22 +831,33 @@
     // --- Mutation Observer and Initialization ---
     const isPostPage = () => !!document.querySelector(".site-section.site-section--post");
 
-    let currentPostUrl = null; // Store the current post URL
+    // Named function for the delegated event handler (for removal in cleanup)
+    const delegatedImageClickHandler = (event) => {
+        const clickedImage = event.target.closest(website === 'nekohouse' ? 'a.image-link:not(.scrape__user-profile) img' : 'a.fileThumb.image-link img');
+        if (clickedImage) {
+            const index = Array.from(document.querySelectorAll(website === 'nekohouse' ? 'a.image-link:not(.scrape__user-profile) img' : 'a.fileThumb.image-link img')).indexOf(clickedImage);
+            if (index !== -1) {
+                showExpandedImage(index);
+            }
+        }
+    };
 
     const injectUI = debounce(() => {
         if (!isPostPage()) return;
 
-        if (!elements.postActions) { // Inject UI if not present
+        if (!elements.postActions) {
             state.galleryReady = false;
-
+            state.loadedImages = 0; // Reset loadedImages
             loadImages();
             initPostActions();
-
-            currentPostUrl = window.location.href; // Update URL after UI injection
-        } else if (window.location.href !== currentPostUrl) { // Refresh only if UI exists and URL is different
-            currentPostUrl = window.location.href; // Update URL before refresh
-            window.location.reload();
-            return;
+            state.currentPostUrl = window.location.href;
+        } else if (window.location.href !== state.currentPostUrl) {
+            // Instead of reloading, re-initialize post actions and update the URL
+            state.galleryReady = false;
+            state.loadedImages = 0; // Reset loadedImages
+            loadImages();
+            initPostActions();
+            state.currentPostUrl = window.location.href;
         }
     }, DEBOUNCE_DELAY);
 
@@ -836,7 +870,23 @@
         const targetNode = document.body;
         const config = { childList: true, subtree: true };
 
-        const observer = new MutationObserver(injectUI);
+        const observer = new MutationObserver((mutationsList, observer) => {
+            // Check if mutations are relevant to your script
+            const relevantMutations = mutationsList.some(mutation => {
+                return mutation.addedNodes.length > 0 &&
+                    [...mutation.addedNodes].some(node =>
+                        node.querySelector && (
+                            node.querySelector(website === "nekohouse" ? "a.image-link:not(.scrape__user-profile)" : "a.fileThumb.image-link") ||
+                            node.querySelector(".post__video-link") ||
+                            node.querySelector(website === "nekohouse" ? ".scrape__attachment-link" : ".post__attachment-link")
+                        )
+                    );
+            });
+
+            if (relevantMutations) {
+                injectUI();
+            }
+        });
 
         observer.observe(targetNode, config);
     };
