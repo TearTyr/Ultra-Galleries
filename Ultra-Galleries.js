@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      2.4.3
+// @version      2.4.4
 // @description  Enhanced gallery experience (SPA-compatible Testing Phase)
 // @author       ntf (original), Meri/TearTyr
 // @match        *://kemono.su/*
@@ -153,7 +153,8 @@
         downloadedCount: 0,
         isLoading: false,
         loadingMessage: null,
-        fullSizeImageSrcs: []
+        fullSizeImageSrcs: [],
+        mediaLoadingStatus: "idle", // "idle", "loading", "completed", "error"
     }, {
         galleryReady: (value) => {
             if (value) {
@@ -162,12 +163,22 @@
                 disableGalleryButton();
             }
         },
-        loadedImages: () => updateMediaLoadingStatus(),
+        loadedImages: (value, oldValue) => {
+            // Update status when loadedImages changes
+            if (value === state.totalImages && state.totalImages > 0) {
+                state.mediaLoadingStatus = "completed";
+            }
+        },
         downloadedCount: () => updateDownloadStatus(),
-        totalImages: () => updateMediaLoadingStatus(),
+        totalImages: (value, oldValue) => {
+            // Only update the status if totalImages changes from 0 to a positive number
+            if (oldValue === 0 && value > 0) {
+                state.mediaLoadingStatus = "loading";
+            }
+        },
         isLoading: (value, oldValue) => {
             if (value && !oldValue) {
-                if (state.galleryActive || state.isDownloading) { // Only show if gallery or download is active
+                if ((state.galleryActive || state.isDownloading) && state.loadedImages === 0) {
                     showLoadingOverlay(state.loadingMessage);
                 }
             } else if (!value && oldValue) {
@@ -175,10 +186,14 @@
             }
         },
         loadingMessage: (value) => {
-            if (state.isLoading && (state.galleryActive || state.isDownloading)) { // Only update if relevant
+            if (state.isLoading && (state.galleryActive || state.isDownloading)) {
                 updateLoadingOverlayText(value);
             }
-        }
+        },
+        mediaLoadingStatus: (value) => {
+            // Update the media loading status whenever it changes
+            updateMediaLoadingStatus();
+        },
     });
 
     // --- Settings ---
@@ -213,43 +228,44 @@
     };
 
     // --- Image Loading and Gallery Functions ---
-
     let elements = {};
 
     const loadImage = async (mediaLink, index) => {
         try {
+            let mediaSrc;
             if (mediaLink.href.toLowerCase().endsWith('.mp4')) { // Check if it's a video
-                state.virtualGallery[index] = mediaLink.querySelector('video').src; // Store video URL
-                state.fullSizeImageSrcs[index] = mediaLink.querySelector('video').src;
-                state.loadedImages++;
-                return; // No image loading needed for videos
+                mediaSrc = mediaLink.querySelector('video').src; // Store video URL
+            } else {
+                mediaSrc = mediaLink.href.split("?")[0];
             }
 
-            const imgSrc = mediaLink.href.split("?")[0];
-            state.fullSizeImageSrcs[index] = imgSrc;
+            state.fullSizeImageSrcs[index] = mediaSrc;
 
             const img = mediaLink.querySelector('img');
             if (img) {
-                img.src = imgSrc;
-                img.dataset.originalSrc = imgSrc;
+                img.src = mediaSrc;
+                img.dataset.originalSrc = mediaSrc;
                 imageActions.height(img);
-                await new Promise(resolve => img.onload = resolve);
+                await new Promise((resolve, reject) => {
+                    img.onload = () => {
+                        state.loadedImages++;
+                        resolve();
+                    };
+                    img.onerror = () => {
+                        console.error(`Image failed to load: ${mediaSrc}`);
+                        state.loadedImages++;
+                        reject();
+                    }
+                });
             }
 
-            state.virtualGallery[index] = imgSrc;
-            state.loadedImages++;
+            state.virtualGallery[index] = mediaSrc;
 
         } catch (error) {
             console.error(`Failed to load media: ${mediaLink.href}`, error);
             state.virtualGallery[index] = null; // Placeholder for failed media
             state.loadedImages++;
-        } finally {
-            if (state.loadedImages === state.totalImages) {
-                createVirtualGallery();
-                state.galleryReady = true;
-                state.isLoading = false;
-                state.loadingMessage = null;
-            }
+            state.mediaLoadingStatus = "error"; // Indicate error state
         }
     };
 
@@ -274,6 +290,16 @@
         }
 
         await Promise.all(loadingPromises);
+
+        // Check if all images/videos failed to load
+        if (state.loadedImages === state.totalImages && state.virtualGallery.every(item => item === null)) {
+            state.mediaLoadingStatus = "error";
+        }
+
+        createVirtualGallery();
+        state.galleryReady = true;
+        state.isLoading = false;
+        state.loadingMessage = null;
     };
 
     const createVirtualGallery = () => {
@@ -633,16 +659,19 @@
         elements.postActions = document.querySelector(website === "nekohouse" ? ".scrape__actions" : ".post__actions");
         if (!elements.postActions) return;
 
-        const downloadAllButton = createToggleButton(BUTTONS.DOWNLOAD_ALL, downloadAllImagesAndVideos);
-        const galleryButton = createToggleButton("Loading Gallery...", showGallery, true); // Initially disabled
-        elements.galleryButton = galleryButton;
+        // Check if buttons already exist before adding them
+        if (!elements.postActions.querySelector('.ug-button')) {
+            const downloadAllButton = createToggleButton(BUTTONS.DOWNLOAD_ALL, downloadAllImagesAndVideos);
+            const galleryButton = createToggleButton("Loading Gallery...", showGallery, true); // Initially disabled
+            elements.galleryButton = galleryButton;
 
-        elements.postActions.append(
-            createToggleButton(BUTTONS.WIDTH, () => resizeAllImages('width')),
-            createToggleButton(BUTTONS.HEIGHT, () => resizeAllImages('height')),
-            createToggleButton(BUTTONS.FULL, () => resizeAllImages('full')),
-            downloadAllButton, statusContainer, galleryButton
-        );
+            elements.postActions.append(
+                createToggleButton(BUTTONS.WIDTH, () => resizeAllImages('width')),
+                createToggleButton(BUTTONS.HEIGHT, () => resizeAllImages('height')),
+                createToggleButton(BUTTONS.FULL, () => resizeAllImages('full')),
+                downloadAllButton, statusContainer, galleryButton
+            );
+        }
 
         if (!elements.settingsButton) {
             elements.settingsButton = createToggleButton(BUTTONS.SETTINGS, showSettings);
@@ -676,46 +705,46 @@
                 };
 
                 const newDiv = document.createElement('div');
-                newDiv.append(
-                    createToggleButton(BUTTONS.WIDTH, resizeImage),
-                    createToggleButton(BUTTONS.HEIGHT, resizeImage),
-                    createToggleButton(BUTTONS.FULL, () => imageActions.full(img)),
-                    createToggleButton(BUTTONS.DOWNLOAD, () => downloadImageByIndex(index)),
-                    createToggleButton(BUTTONS.REMOVE, removeImage)
-                );
+                // Check if buttons already exist before adding them
+                if (!img.closest(website === 'nekohouse' ? '.scrape__thumbnail' : '.post__thumbnail').previousElementSibling?.classList.contains('ug-button-container')) {
+                    newDiv.classList.add('ug-button-container');
+                    newDiv.append(
+                        createToggleButton(BUTTONS.WIDTH, resizeImage),
+                        createToggleButton(BUTTONS.HEIGHT, resizeImage),
+                        createToggleButton(BUTTONS.FULL, () => imageActions.full(img)),
+                        createToggleButton(BUTTONS.DOWNLOAD, () => downloadImageByIndex(index)),
+                        createToggleButton(BUTTONS.REMOVE, removeImage)
+                    );
 
-                // Add 'ug-button' class to the buttons in the newDiv
-                Array.from(newDiv.children).forEach(button => button.classList.add('ug-button'));
+                    // Add 'ug-button' class to the buttons in the newDiv
+                    Array.from(newDiv.children).forEach(button => button.classList.add('ug-button'));
 
-                parentDiv.insertBefore(newDiv, img.closest(website === 'nekohouse' ? '.scrape__thumbnail' : '.post__thumbnail'));
+                    parentDiv.insertBefore(newDiv, img.closest(website === 'nekohouse' ? '.scrape__thumbnail' : '.post__thumbnail'));
+                }
                 img.addEventListener('click', () => showExpandedImage(index));
             });
 
             // Use event delegation for dynamically added images
-            parentDiv.addEventListener('click', (event) => {
-                const clickedImage = event.target.closest(website === 'nekohouse' ? 'a.image-link:not(.scrape__user-profile) img' : 'a.fileThumb.image-link img');
-                if (clickedImage) {
-                    const index = Array.from(document.querySelectorAll(website === 'nekohouse' ? 'a.image-link:not(.scrape__user-profile) img' : 'a.fileThumb.image-link img')).indexOf(clickedImage);
-                    if (index !== -1) {
-                        showExpandedImage(index);
-                    }
-                }
-            });
+            parentDiv.addEventListener('click', delegatedImageClickHandler);
 
             const favoriteButton = document.querySelector(website === "nekohouse" ? ".scrape__actions a.favorite-button" : ".post__actions a.favorite-button");
             if (favoriteButton) {
                 const newDiv = document.createElement('div');
                 newDiv.style.display = 'inline-block';
-                newDiv.append(
-                    createToggleButton(BUTTONS.WIDTH, () => resizeAllImages('width')),
-                    createToggleButton(BUTTONS.HEIGHT, () => resizeAllImages('height')),
-                    createToggleButton(BUTTONS.FULL, () => resizeAllImages('full'))
-                );
+                // Check if buttons already exist before adding them
+                if (!favoriteButton.nextElementSibling?.classList.contains('ug-button-container')) {
+                    newDiv.classList.add('ug-button-container');
+                    newDiv.append(
+                        createToggleButton(BUTTONS.WIDTH, () => resizeAllImages('width')),
+                        createToggleButton(BUTTONS.HEIGHT, () => resizeAllImages('height')),
+                        createToggleButton(BUTTONS.FULL, () => resizeAllImages('full'))
+                    );
 
-                // Add 'ug-button' class to the buttons in the newDiv
-                Array.from(newDiv.children).forEach(button => button.classList.add('ug-button'));
+                    // Add 'ug-button' class to the buttons in the newDiv
+                    Array.from(newDiv.children).forEach(button => button.classList.add('ug-button'));
 
-                favoriteButton.parentNode.insertBefore(newDiv, favoriteButton.nextSibling);
+                    favoriteButton.parentNode.insertBefore(newDiv, favoriteButton.nextSibling);
+                }
             }
         }
     };
@@ -759,23 +788,37 @@
     };
 
     const updateMediaLoadingStatus = () => {
-        const { loadedImages, totalImages } = state;
-        const imageLinks = document.querySelectorAll(website === "nekohouse" ? "a.image-link:not(.scrape__user-profile)" : "a.fileThumb.image-link");
-        const videoLinks = document.querySelectorAll(".post__video-link"); // Select video links
-        const totalImagesCount = imageLinks.length;
-        const totalVideosCount = videoLinks.length;
-
+        const { mediaLoadingStatus, loadedImages, totalImages } = state;
         let status = "";
-        if (loadedImages === totalImages) {
-            if (totalVideosCount > 0 && totalImagesCount > 0) {
-                status = `Images and Videos Done Loading! Total: ${totalImages} (${totalImagesCount} images, ${totalVideosCount} videos)`;
-            } else if (totalVideosCount > 0) {
-                status = `Videos Done Loading! Total: ${totalVideosCount}`;
-            } else {
-                status = `Images Done Loading! Total: ${totalImagesCount}`;
-            }
-        } else {
-            status = `Loading media (${loadedImages}/${totalImages})...`;
+
+        switch (mediaLoadingStatus) {
+            case "idle":
+                status = "";
+                break;
+            case "loading":
+                if (totalImages > 0) {
+                    status = `Loading media (${loadedImages}/${totalImages})...`;
+                } else {
+                    status = "Loading media...";
+                }
+                break;
+            case "completed":
+                const imageLinks = document.querySelectorAll(website === "nekohouse" ? "a.image-link:not(.scrape__user-profile)" : "a.fileThumb.image-link");
+                const videoLinks = document.querySelectorAll(".post__video-link");
+                const totalImagesCount = imageLinks.length;
+                const totalVideosCount = videoLinks.length;
+
+                if (totalVideosCount > 0 && totalImagesCount > 0) {
+                    status = `Images and Videos Done Loading! Total: ${totalImages} (${totalImagesCount} images, ${totalVideosCount} videos)`;
+                } else if (totalVideosCount > 0) {
+                    status = `Videos Done Loading! Total: ${totalVideosCount}`;
+                } else if (totalImagesCount > 0) {
+                    status = `Images Done Loading! Total: ${totalImagesCount}`;
+                }
+                break;
+            case "error":
+                status = "Error loading some media.";
+                break;
         }
 
         updateStatus(elements.statusElement, status);
@@ -829,7 +872,14 @@
     };
 
     // --- Mutation Observer and Initialization ---
-    const isPostPage = () => !!document.querySelector(".site-section.site-section--post");
+    const isPostPage = () => {
+        const url = window.location.href;
+        const validPatterns = [
+            /https:\/\/(kemono\.su|coomer\.su|nekohouse\.su)\/.*\/post\//,
+            /https:\/\/(kemono\.su|coomer\.su|nekohouse\.su)\/.*\/user\/.*\/post\//
+        ];
+        return validPatterns.some(pattern => pattern.test(url));
+    };
 
     // Named function for the delegated event handler (for removal in cleanup)
     const delegatedImageClickHandler = (event) => {
@@ -845,7 +895,8 @@
     const injectUI = debounce(() => {
         if (!isPostPage()) return;
 
-        if (!elements.postActions) {
+        const postSection = document.querySelector(".site-section.site-section--post");
+        if (!elements.postActions && postSection) {
             state.galleryReady = false;
             state.loadedImages = 0; // Reset loadedImages
             loadImages();
@@ -861,6 +912,7 @@
         }
     }, DEBOUNCE_DELAY);
 
+    //old init
     const init = () => {
         if (!galleryKeyListenerAttached) {
             window.addEventListener('keydown', handleGalleryKey);
@@ -870,23 +922,7 @@
         const targetNode = document.body;
         const config = { childList: true, subtree: true };
 
-        const observer = new MutationObserver((mutationsList, observer) => {
-            // Check if mutations are relevant to your script
-            const relevantMutations = mutationsList.some(mutation => {
-                return mutation.addedNodes.length > 0 &&
-                    [...mutation.addedNodes].some(node =>
-                        node.querySelector && (
-                            node.querySelector(website === "nekohouse" ? "a.image-link:not(.scrape__user-profile)" : "a.fileThumb.image-link") ||
-                            node.querySelector(".post__video-link") ||
-                            node.querySelector(website === "nekohouse" ? ".scrape__attachment-link" : ".post__attachment-link")
-                        )
-                    );
-            });
-
-            if (relevantMutations) {
-                injectUI();
-            }
-        });
+        const observer = new MutationObserver(injectUI);
 
         observer.observe(targetNode, config);
     };
