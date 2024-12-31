@@ -249,6 +249,10 @@
     background-color: #007bff !important; 
 }
 
+.ug-no-click {
+    pointer-events: none;
+    cursor: default;
+}
 .ug-settings-cancel {
     background-color: #6c757d !important;
 }
