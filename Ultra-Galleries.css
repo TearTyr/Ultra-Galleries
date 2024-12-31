@@ -1,5 +1,6 @@
 /* Ultra-Galleries.css */
 
+/* --- Gallery Overlay --- */
 #gallery-overlay {
     position: fixed;
     top: 0;
@@ -49,6 +50,7 @@
     overflow-y: auto;
 }
 
+/* --- Expanded View --- */
 .expanded-view {
     position: absolute;
     top: 0;
@@ -69,6 +71,7 @@
     object-fit: contain;
 }
 
+/* --- Thumbnail Container --- */
 .thumbnail-container {
     position: absolute;
     bottom: 0;
@@ -83,6 +86,7 @@
     padding: 10px;
 }
 
+/* --- Navigation Buttons --- */
 .navigation-button {
     position: absolute;
     top: 50%;
@@ -116,6 +120,7 @@
     transform: translateY(-50%);
 }
 
+/* --- Loading Overlay --- */
 .loading-overlay {
     position: absolute;
     top: 0;
@@ -130,6 +135,7 @@
     color: white;
 }
 
+/* --- Page Number --- */
 .page-number {
     position: absolute;
     bottom: 10px;
@@ -139,6 +145,7 @@
     font-size: 16px;
 }
 
+/* --- Thumbnails --- */
 .thumbnail {
     width: 100%;
     height: 200px;
@@ -166,6 +173,7 @@
     opacity: 1;
 }
 
+/* --- Settings Button --- */
 .settings-button {
     position: fixed;
     bottom: 20px;
@@ -183,6 +191,7 @@
     opacity: 1;
 }
 
+/* --- SweetAlert Overrides --- */
 .swal2-popup {
     background: #222 !important;
     color: #eee !important;
@@ -198,6 +207,7 @@
     background-color: #777 !important;
 }
 
+/* --- Settings Panel --- */
 .ug-settings-popup {
     background: #222 !important;
     color: #eee !important;
@@ -255,4 +265,82 @@
 }
 .ug-settings-cancel {
     background-color: #6c757d !important;
+}
+
+/* --- Notification Area --- */
+.ug-notification-container {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 5px;
+    display: none;
+    /* Initially hidden */
+    align-items: center;
+    z-index: 1000;
+    box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.5);
+    font-family: sans-serif;
+}
+
+.ug-notification-container.info {
+    background-color: rgba(0, 0, 0, 0.8);
+}
+
+.ug-notification-container.success {
+    background-color: rgba(40, 167, 69, 0.8);
+}
+
+.ug-notification-container.error {
+    background-color: rgba(220, 53, 69, 0.8);
+}
+
+.ug-notification-container #ug-notification-text {
+    margin-right: 15px;
+}
+
+.ug-notification-container #ug-notification-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    margin-left: auto;
+}
+
+.ug-notification-container #ug-notification-report {
+    color: #66b3ff;
+    text-decoration: none;
+    margin-left: 15px;
+}
+
+.ug-notification-container #ug-notification-report:hover {
+    text-decoration: underline;
+}
+
+/* --- Animations --- */
+@keyframes slide-in {
+    from {
+        transform: translateX(-50%) translateY(100%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(-50%) translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slide-out {
+    from {
+        transform: translateX(-50%) translateY(0);
+        opacity: 1;
+    }
+
+    to {
+        transform: translateX(-50%) translateY(100%);
+        opacity: 0;
+    }
 }
