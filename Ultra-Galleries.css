@@ -198,14 +198,12 @@
     color: #eee !important;
     font-family: sans-serif;
     width: 90%;
-    max-width: 800px;
+    max-width: 900px;
     display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    padding: 20px;
     border-radius: 8px;
     box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
     position: relative;
+    overflow: hidden; /* Ensure content doesn't overflow */
 }
 
 .ug-settings-title {
@@ -213,21 +211,50 @@
     font-weight: bold;
     margin-bottom: 0.5em;
     text-align: center;
+    margin-top: 10px;
 }
 
 .ug-settings-container {
     display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    gap: 1em;
-    margin-bottom: 1em;
+    flex-direction: row;
+    height: 100%;
+}
+
+.ug-settings-tabs {
+    display: flex;
+    flex-direction: column;
+    width: 200px;
+    background-color: #333;
+    padding: 10px 0;
+}
+
+.ug-settings-tab {
+    padding: 10px 20px;
+    cursor: pointer;
+    color: #eee;
+    border-left: 3px solid transparent;
+    transition: background-color 0.3s ease, border-left-color 0.3s ease;
+}
+
+.ug-settings-tab:hover {
+    background-color: #444;
+}
+
+.ug-settings-tab.active {
+    background-color: #444;
+    border-left-color: #007bff;
+}
+
+.ug-settings-content {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
 }
 
 .ug-setting {
     display: flex;
     flex-direction: column;
-    flex: 1 1 45%;
-    min-width: 250px;
+    margin-bottom: 1em;
 }
 
 .ug-setting label {
