@@ -18,8 +18,8 @@
 }
 
 .gallery-container {
-    width: 95%;
-    height: 95%;
+    width: 98%;
+    height: 98%;
     background-color: rgba(255, 255, 255, 0.1);
     border-radius: 8px;
     box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
@@ -31,9 +31,9 @@
 
 .gallery-close-button {
     position: absolute;
-    top: 10px;
-    right: 10px;
-    font-size: 24px;
+    top: 15px;
+    right: 15px;
+    font-size: 30px;
     background: none;
     border: none;
     color: white;
@@ -44,9 +44,9 @@
 .gallery-content {
     flex: 1;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    grid-gap: 10px;
-    padding: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    grid-gap: 15px;
+    padding: 25px;
     overflow-y: auto;
 }
 
@@ -66,8 +66,8 @@
 }
 
 .expanded-image {
-    max-width: 90vw;
-    max-height: 80vh;
+    max-width: 95vw;
+    max-height: 85vh;
     object-fit: contain;
 }
 
@@ -77,7 +77,7 @@
     bottom: 0;
     left: 0;
     right: 0;
-    height: 100px;
+    height: 120px;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -90,13 +90,13 @@
 .navigation-button {
     position: absolute;
     top: 50%;
-    font-size: 24px;
+    font-size: 30px;
     background: rgba(0, 0, 0, 0.5);
     color: white;
     border: none;
     border-radius: 50%;
-    width: 40px;
-    height: 40px;
+    width: 50px;
+    height: 50px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -111,29 +111,29 @@
 }
 
 .navigation-button.prev {
-    left: 10px;
+    left: 15px;
     transform: translateY(-50%);
 }
 
 .navigation-button.next {
-    right: 10px;
+    right: 15px;
     transform: translateY(-50%);
 }
 
 /* --- Page Number --- */
 .page-number {
     position: absolute;
-    bottom: 10px;
+    bottom: 15px;
     left: 50%;
     transform: translateX(-50%);
     color: white;
-    font-size: 16px;
+    font-size: 20px;
 }
 
 /* --- Thumbnails --- */
 .thumbnail {
     width: 100%;
-    height: 200px;
+    height: 250px;
     object-fit: cover;
     cursor: pointer;
     transition: transform 0.3s ease;
@@ -144,10 +144,10 @@
 }
 
 .expanded-thumbnail {
-    width: 60px;
-    height: 60px;
+    width: 80px;
+    height: 80px;
     object-fit: cover;
-    margin: 0 5px;
+    margin: 0 7px;
     cursor: pointer;
     opacity: 0.5;
     transition: opacity 0.3s ease;
@@ -161,15 +161,16 @@
 /* --- Settings Button --- */
 .settings-button {
     position: fixed;
-    bottom: 20px;
-    right: 20px;
-    padding: 10px 15px;
+    bottom: 25px;
+    right: 25px;
+    padding: 12px 18px;
     background-color: #333;
     color: white;
     border-radius: 5px;
     z-index: 10000;
     opacity: 0.8;
     transition: opacity 0.3s ease;
+    font-size: 18px;
 }
 
 .settings-button:hover {
@@ -180,16 +181,19 @@
 .swal2-popup {
     background: #222 !important;
     color: #eee !important;
+    font-size: 18px;
 }
 
 .swal2-input {
     background-color: #333 !important;
     color: #eee !important;
     border: 1px solid #555 !important;
+    font-size: 18px;
 }
 
 .swal2-confirm {
     background-color: #777 !important;
+    font-size: 18px;
 }
 
 /* --- Settings Panel --- */
@@ -197,43 +201,48 @@
     background: #222 !important;
     color: #eee !important;
     font-family: sans-serif;
-    width: 90%;
-    max-width: 900px;
+    width: 95vw;
+    max-width: 800px;
     display: flex;
+    flex-direction: column;
     border-radius: 8px;
     box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
     position: relative;
-    overflow: hidden; /* Ensure content doesn't overflow */
+    overflow: hidden;
 }
 
 .ug-settings-title {
-    font-size: 1.5em;
+    font-size: 2em;
     font-weight: bold;
     margin-bottom: 0.5em;
     text-align: center;
-    margin-top: 10px;
+    margin-top: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #555;
 }
 
 .ug-settings-container {
     display: flex;
     flex-direction: row;
     height: 100%;
+    margin-top: 0.5em;
 }
 
 .ug-settings-tabs {
     display: flex;
     flex-direction: column;
-    width: 200px;
+    width: 180px;
     background-color: #333;
-    padding: 10px 0;
+    padding: 15px 0;
 }
 
 .ug-settings-tab {
-    padding: 10px 20px;
+    padding: 12px 20px;
     cursor: pointer;
     color: #eee;
     border-left: 3px solid transparent;
     transition: background-color 0.3s ease, border-left-color 0.3s ease;
+    font-size: 18px;
 }
 
 .ug-settings-tab:hover {
@@ -249,51 +258,69 @@
     flex: 1;
     padding: 20px;
     overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
 }
 
 .ug-setting {
     display: flex;
     flex-direction: column;
-    margin-bottom: 1em;
+    margin-bottom: 1.2em;
 }
 
 .ug-setting label {
     margin-bottom: 0.5em;
     text-align: left;
+    font-size: 18px;
 }
 
 .ug-settings-input {
     background-color: #333 !important;
     color: #eee !important;
     border: 1px solid #555 !important;
-    padding: 0.5em;
+    padding: 0.6em;
     border-radius: 4px;
     margin-bottom: 0.5em;
+    font-size: 18px;
+    width: fit-content;
 }
 
 .ug-placeholder-info {
-    font-size: 0.9em;
+    font-size: 1em;
     color: #aaa;
-    margin-top: 0.3em;
+    margin-top: 0.5em;
 }
 
 .ug-credits {
     text-align: center;
-    margin-top: 1em;
+    margin-top: 1.5em;
     color: #888;
+    font-size: 18px;
 }
 
 .ug-settings-confirm {
     background-color: #007bff !important;
-    margin-right: 0.5em;
-    padding: 0.5em 1em;
+    margin-right: 0.7em;
+    padding: 0.7em 1.2em;
+    font-size: 18px;
+    border-radius: 4px;
+    border: none;
+    color: white;
+    cursor: pointer;
 }
 
 .ug-settings-cancel {
     background-color: #6c757d !important;
-    padding: 0.5em 1em;
+    padding: 0.7em 1.2em;
+    font-size: 18px;
+    border-radius: 4px;
+    border: none;
+    color: white;
+    cursor: pointer;
 }
-.swal2-actions{
+
+.swal2-actions {
     display: flex !important;
     justify-content: center !important;
 }
@@ -302,11 +329,12 @@
     pointer-events: none;
     cursor: default;
 }
+
 .swal2-close {
     position: absolute !important;
-    top: 10px !important;
-    right: 10px !important;
-    font-size: 24px !important;
+    top: 15px !important;
+    right: 15px !important;
+    font-size: 30px !important;
     background: none !important;
     border: none !important;
     color: white !important;
@@ -317,18 +345,19 @@
 /* --- Notification Area --- */
 .ug-notification-container {
     position: fixed;
-    bottom: 20px;
+    bottom: 25px;
     left: 50%;
     transform: translateX(-50%);
     background-color: rgba(0, 0, 0, 0.8);
     color: white;
-    padding: 10px 20px;
+    padding: 12px 25px;
     border-radius: 5px;
     display: none;
     align-items: center;
     z-index: 1000;
     box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.5);
     font-family: sans-serif;
+    font-size: 18px;
 }
 
 .ug-notification-container.info {
@@ -344,14 +373,14 @@
 }
 
 .ug-notification-container #ug-notification-text {
-    margin-right: 15px;
+    margin-right: 20px;
 }
 
 .ug-notification-container #ug-notification-close {
     background: none;
     border: none;
     color: white;
-    font-size: 20px;
+    font-size: 25px;
     cursor: pointer;
     margin-left: auto;
 }
@@ -359,7 +388,7 @@
 .ug-notification-container #ug-notification-report {
     color: #66b3ff;
     text-decoration: none;
-    margin-left: 15px;
+    margin-left: 20px;
 }
 
 .ug-notification-container #ug-notification-report:hover {
@@ -389,4 +418,11 @@
         transform: translateX(-50%) translateY(100%);
         opacity: 0;
     }
+}
+
+/* --- Settings Content Alignment --- */
+.ug-settings-content > div {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 }
