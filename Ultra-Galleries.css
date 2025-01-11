@@ -1,6 +1,5 @@
 /* Ultra-Galleries.css */
 
-/* --- Gallery Overlay --- */
 #gallery-overlay {
     position: fixed;
     top: 0;
@@ -50,7 +49,6 @@
     overflow-y: auto;
 }
 
-/* --- Expanded View --- */
 .expanded-view {
     position: absolute;
     top: 0;
@@ -71,7 +69,6 @@
     object-fit: contain;
 }
 
-/* --- Thumbnail Container --- */
 .thumbnail-container {
     position: absolute;
     bottom: 0;
@@ -86,7 +83,6 @@
     padding: 10px;
 }
 
-/* --- Navigation Buttons --- */
 .navigation-button {
     position: absolute;
     top: 50%;
@@ -120,7 +116,6 @@
     transform: translateY(-50%);
 }
 
-/* --- Page Number --- */
 .page-number {
     position: absolute;
     bottom: 10px;
@@ -130,7 +125,6 @@
     font-size: 16px;
 }
 
-/* --- Thumbnails --- */
 .thumbnail {
     width: 100%;
     height: 200px;
@@ -158,7 +152,6 @@
     opacity: 1;
 }
 
-/* --- Settings Button --- */
 .settings-button {
     position: fixed;
     bottom: 20px;
@@ -176,7 +169,6 @@
     opacity: 1;
 }
 
-/* --- SweetAlert Overrides --- */
 .swal2-popup {
     background: #222 !important;
     color: #eee !important;
@@ -192,32 +184,46 @@
     background-color: #777 !important;
 }
 
-/* --- Settings Panel --- */
 .ug-settings-popup {
     background: #222 !important;
     color: #eee !important;
     font-family: sans-serif;
+    width: 90%;
+    max-width: 800px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+    position: relative;
 }
 
 .ug-settings-title {
-    font-size: 1.2em;
+    font-size: 1.5em;
     font-weight: bold;
-    margin-bottom: 1em;
+    margin-bottom: 0.5em;
+    text-align: center;
 }
 
 .ug-settings-container {
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
+    justify-content: space-between;
     gap: 1em;
+    margin-bottom: 1em;
 }
 
 .ug-setting {
     display: flex;
     flex-direction: column;
+    flex: 1 1 45%;
+    min-width: 250px;
 }
 
 .ug-setting label {
     margin-bottom: 0.5em;
+    text-align: left;
 }
 
 .ug-settings-input {
@@ -225,7 +231,8 @@
     color: #eee !important;
     border: 1px solid #555 !important;
     padding: 0.5em;
-    border-radius: 4px; /* Rounded corners */
+    border-radius: 4px;
+    margin-bottom: 0.5em;
 }
 
 .ug-placeholder-info {
@@ -241,18 +248,36 @@
 }
 
 .ug-settings-confirm {
-    background-color: #007bff !important; 
+    background-color: #007bff !important;
+    margin-right: 0.5em;
+    padding: 0.5em 1em;
+}
+
+.ug-settings-cancel {
+    background-color: #6c757d !important;
+    padding: 0.5em 1em;
+}
+.swal2-actions{
+    display: flex !important;
+    justify-content: center !important;
 }
 
 .ug-no-click {
     pointer-events: none;
     cursor: default;
 }
-.ug-settings-cancel {
-    background-color: #6c757d !important;
+.swal2-close {
+    position: absolute !important;
+    top: 10px !important;
+    right: 10px !important;
+    font-size: 24px !important;
+    background: none !important;
+    border: none !important;
+    color: white !important;
+    cursor: pointer !important;
+    z-index: 10;
 }
 
-/* --- Notification Area --- */
 .ug-notification-container {
     position: fixed;
     bottom: 20px;
@@ -263,7 +288,6 @@
     padding: 10px 20px;
     border-radius: 5px;
     display: none;
-    /* Initially hidden */
     align-items: center;
     z-index: 1000;
     box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.5);
@@ -305,7 +329,6 @@
     text-decoration: underline;
 }
 
-/* --- Animations --- */
 @keyframes slide-in {
     from {
         transform: translateX(-50%) translateY(100%);
