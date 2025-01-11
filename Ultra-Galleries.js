@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      2.4.5
+// @version      2.4.6
 // @description  Enhanced gallery experience (SPA-compatible Testing Phase)
 // @author       ntf (original), Meri/TearTyr
 // @match        *://kemono.su/*
@@ -843,7 +843,7 @@
             document.body.appendChild(elements.settingsButton);
         }
 
-        const fileDivs = document.querySelectorAll(website === 'nekohouse' ? '.scrape__thumbnail' : '.post__thumbnail');
+              const fileDivs = document.querySelectorAll(website === 'nekohouse' ? '.scrape__thumbnail' : '.post__thumbnail');
         const parentDiv = fileDivs[0]?.parentNode;
 
         if (parentDiv) {
@@ -1247,6 +1247,8 @@
         const observer = new MutationObserver(injectUI);
 
         observer.observe(targetNode, config);
+
+        // Show an initial notification (example)
         if (state.overallStatus === 'completed') {
             state.notification = `Images Done Loading! Total: ${state.totalImages}`;
             state.notificationType = 'success';
