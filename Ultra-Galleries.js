@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      2.4.1
+// @version      2.4.2
 // @description  Enhanced gallery experience (SPA-compatible Testing Phase)
 // @author       ntf (original), Meri/TearTyr
 // @match        *://kemono.su/*
@@ -16,8 +16,8 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @require      https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js
-// @require      https://cdn.bootcss.com/jszip/3.1.4/jszip.min.js
-// @require      https://cdn.bootcss.com/FileSaver.js/1.3.2/FileSaver.min.js
+// @require      https://cdn.jsdelivr.net/npm/jszip@3.1.4/dist/jszip.min.js
+// @require      https://cdn.jsdelivr.net/npm/file-saver@1.3.2/FileSaver.min.js
 // @require      https://cdn.jsdelivr.net/npm/sweetalert2@11
 // ==/UserScript==
 
@@ -289,57 +289,68 @@
             galleryKey: state.galleryKey,
         };
         Swal.fire({
-            html: `
-                <div class="ug-settings-popup">
-                    <div class="ug-settings-title">Ultra Galleries - Settings</div>
-                    <div class="ug-settings-container">
-                        <div class="ug-settings-tabs">
-                            <div class="ug-settings-tab active" data-tab="general">General</div>
-                            <div class="ug-settings-tab" data-tab="filenames">Filenames</div>
-                            <div class="ug-settings-tab" data-tab="notifications">Notifications</div>
-                        </div>
-                        <div class="ug-settings-content">
-                            <div data-tab-content="general" style="display: block;">
-                                <div class="ug-setting">
-                                    <label for="galleryKey">Gallery Key:</label>
-                                    <input type="text" id="galleryKey" class="ug-settings-input" value="${settings.galleryKey}" maxlength="1">
-                                    <p class="ug-placeholder-info">Press this key to open the gallery when it's loaded.</p>
-                                </div>
-                            </div>
-                            <div data-tab-content="filenames" style="display: none;">
-                                <div class="ug-setting">
-                                    <label for="zipFileNameFormat">Zip Filename Format:</label>
-                                    <input type="text" id="zipFileNameFormat" class="ug-settings-input" value="${settings.zipFileNameFormat}" placeholder="{title}-{artistName}.zip">
-                                    <p class="ug-placeholder-info">Available placeholders: {artistName}, {title}</p>
-                                </div>
-                                <div class="ug-setting">
-                                    <label for="imageFileNameFormat">Image Filename Format:</label>
-                                    <input type="text" id="imageFileNameFormat" class="ug-settings-input" value="${settings.imageFileNameFormat}" placeholder="{title}-{artistName}-{fileName}-{index}">
-                                    <p class="ug-placeholder-info">Available placeholders: {artistName}, {title}, {fileName}, {index}, {ext}</p>
-                                </div>
-                            </div>
-                             <div data-tab-content="notifications" style="display: none;">
-                                <div class="ug-setting">
-                                    <label for="notificationsEnabled">Enable Notifications:</label>
-                                    <input type="checkbox" id="notificationsEnabled" ${state.notificationsEnabled ? 'checked' : ''}>
-                                </div>
-                                <div class="ug-setting">
-                                    <label for="animationsEnabled">Enable Animations:</label>
-                                    <input type="checkbox" id="animationsEnabled" ${state.animationsEnabled ? 'checked' : ''}>
-                                </div>
-                             </div>
+        html: `
+        <div class="ug-settings-popup">
+            <div class="ug-settings-header">
+                <h2 class="ug-settings-title">Ultra Galleries - Settings</h2>
+                <button class="ug-settings-close" type="button" aria-label="Close">×</button>
+            </div>
+            <div class="ug-settings-tabs">
+                <button class="ug-settings-tab active" data-tab="general">General</button>
+                <button class="ug-settings-tab" data-tab="filenames">Filenames</button>
+                <button class="ug-settings-tab" data-tab="notifications">Notifications</button>
+            </div>
+            <div class="ug-settings-body">
+                <div class="ug-settings-content">
+                    <div data-tab-content="general" class="ug-settings-tab-content active">
+                        <div class="ug-setting">
+                            <label for="galleryKey">Gallery Key:</label>
+                            <input type="text" id="galleryKey" class="ug-settings-input" value="${settings.galleryKey}" maxlength="1">
+                            <p class="ug-placeholder-info">Press this key to open the gallery when it's loaded.</p>
                         </div>
                     </div>
-                    <div class="ug-credits"><p>Original author: ntf</p><p>Forked by: Meri/TearTyr</p></div>
+                    <div data-tab-content="filenames" class="ug-settings-tab-content">
+                        <div class="ug-setting">
+                            <label for="zipFileNameFormat">Zip Filename Format:</label>
+                            <input type="text" id="zipFileNameFormat" class="ug-settings-input" value="${settings.zipFileNameFormat}" placeholder="{title}-{artistName}.zip">
+                            <p class="ug-placeholder-info">Available placeholders: {artistName}, {title}</p>
+                        </div>
+                        <div class="ug-setting">
+                            <label for="imageFileNameFormat">Image Filename Format:</label>
+                            <input type="text" id="imageFileNameFormat" class="ug-settings-input" value="${settings.imageFileNameFormat}" placeholder="{title}-{artistName}-{fileName}-{index}">
+                            <p class="ug-placeholder-info">Available placeholders: {artistName}, {title}, {fileName}, {index}, {ext}</p>
+                        </div>
+                    </div>
+                    <div data-tab-content="notifications" class="ug-settings-tab-content">
+                        <div class="ug-setting">
+                            <label for="notificationsEnabled">Enable Notifications:</label>
+                            <input type="checkbox" id="notificationsEnabled" class="ug-settings-input" style="width: fit-content;" ${state.notificationsEnabled ? 'checked' : ''}>
+                        </div>
+                        <div class="ug-setting">
+                            <label for="animationsEnabled">Enable Animations:</label>
+                            <input type="checkbox" id="animationsEnabled" class="ug-settings-input" style="width: fit-content;" ${state.animationsEnabled ? 'checked' : ''}>
+                        </div>
+                    </div>
                 </div>
-            `,
+            </div>
+            <div class="ug-settings-footer">
+                <div class="ug-credits">
+                    <p>Original author: ntf</p>
+                    <p>Forked by: Meri/TearTyr</p>
+                </div>
+            </div>
+        </div>
+        `,
             confirmButtonText: 'Save',
             focusConfirm: false,
             showCloseButton: true,
             customClass: {
+                popup: 'ug-settings-popup',
+                title: 'ug-settings-title',
+                content: 'ug-settings-container',
                 confirmButton: 'ug-settings-confirm',
                 cancelButton: 'ug-settings-cancel',
-                 closeButton: 'swal2-close'
+                closeButton: 'swal2-close'
             },
             preConfirm: () => ({
                 zipFileNameFormat: document.getElementById('zipFileNameFormat').value,
@@ -833,7 +844,7 @@
         for (let i = 0; i < videoLinks.length; i++) {
             const videoLink = videoLinks[i];
             const videoSrc = videoLink.href;
-            const originalFileName = videoLink.getAttribute('download') || `video-${i + 1}.mp4`;
+            const originalFileName = videoLink.getAttribute('download') || 'video-${i + 1.mp4}';
             const ext = getExtension(originalFileName);
 
             const fileName = state.imageFileNameFormat
