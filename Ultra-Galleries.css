@@ -178,10 +178,17 @@
 }
 
 /* --- SweetAlert Overrides --- */
+/* (These are general overrides for SweetAlert. Keep them minimal) */
 .swal2-popup {
     background: #222 !important;
     color: #eee !important;
     font-size: 18px;
+    border-radius: 8px;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+}
+
+.swal2-content {
+    padding: 0 !important; /* Remove padding */
 }
 
 .swal2-input {
@@ -191,58 +198,51 @@
     font-size: 18px;
 }
 
-.swal2-confirm {
-    background-color: #777 !important;
-    font-size: 18px;
-}
-
 /* --- Settings Panel --- */
 .ug-settings-popup {
-    background: #222 !important;
-    color: #eee !important;
-    font-family: sans-serif;
-    width: 95vw;
-    max-width: 800px;
     display: flex;
     flex-direction: column;
-    border-radius: 8px;
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
-    position: relative;
-    overflow: hidden;
+    width: 95vw;
+    max-width: 800px;
+    max-height: 80vh;
 }
 
-.ug-settings-title {
-    font-size: 2em;
-    font-weight: bold;
-    margin-bottom: 0.5em;
-    text-align: center;
-    margin-top: 15px;
-    padding-bottom: 10px;
+.ug-settings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 15px;
     border-bottom: 1px solid #555;
 }
 
-.ug-settings-container {
-    display: flex;
-    flex-direction: row;
-    height: 100%;
-    margin-top: 0.5em;
+.ug-settings-title {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: #eee;
+}
+
+.ug-settings-close {
+    background: none;
+    border: none;
+    font-size: 2em;
+    color: #eee;
+    cursor: pointer;
 }
 
 .ug-settings-tabs {
     display: flex;
-    flex-direction: column;
-    width: 180px;
-    background-color: #333;
-    padding: 15px 0;
+    border-bottom: 1px solid #555;
 }
 
 .ug-settings-tab {
-    padding: 12px 20px;
-    cursor: pointer;
+    padding: 10px 15px;
+    border: none;
+    background: none;
     color: #eee;
-    border-left: 3px solid transparent;
-    transition: background-color 0.3s ease, border-left-color 0.3s ease;
-    font-size: 18px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    border-bottom: 3px solid transparent;
+    font-size: 1em;
 }
 
 .ug-settings-tab:hover {
@@ -250,96 +250,75 @@
 }
 
 .ug-settings-tab.active {
-    background-color: #444;
-    border-left-color: #007bff;
+    background-color: #222;
+    border-bottom-color: #007bff;
+}
+
+.ug-settings-body {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 15px;
 }
 
 .ug-settings-content {
-    flex: 1;
-    padding: 20px;
-    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 20px;
 }
 
+.ug-settings-tab-content {
+    display: none;
+}
+
+.ug-settings-tab-content.active {
+    display: block;
+}
+
 .ug-setting {
     display: flex;
     flex-direction: column;
-    margin-bottom: 1.2em;
+    margin-bottom: 15px;
 }
 
 .ug-setting label {
-    margin-bottom: 0.5em;
-    text-align: left;
-    font-size: 18px;
+    margin-bottom: 5px;
+    color: #eee;
 }
 
 .ug-settings-input {
-    background-color: #333 !important;
-    color: #eee !important;
-    border: 1px solid #555 !important;
-    padding: 0.6em;
+    background-color: #333;
+    color: #eee;
+    border: 1px solid #555;
+    padding: 8px;
     border-radius: 4px;
-    margin-bottom: 0.5em;
-    font-size: 18px;
-    width: fit-content;
+    font-size: 1em;
 }
 
 .ug-placeholder-info {
-    font-size: 1em;
+    font-size: 0.9em;
     color: #aaa;
-    margin-top: 0.5em;
+    margin-top: 5px;
+}
+
+.ug-settings-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    border-top: 1px solid #555;
 }
 
 .ug-credits {
-    text-align: center;
-    margin-top: 1.5em;
     color: #888;
-    font-size: 18px;
+    font-size: 0.9em;
 }
 
-.ug-settings-confirm {
+.swal2-confirm {
     background-color: #007bff !important;
-    margin-right: 0.7em;
-    padding: 0.7em 1.2em;
     font-size: 18px;
-    border-radius: 4px;
-    border: none;
-    color: white;
-    cursor: pointer;
-}
-
-.ug-settings-cancel {
-    background-color: #6c757d !important;
-    padding: 0.7em 1.2em;
-    font-size: 18px;
-    border-radius: 4px;
-    border: none;
-    color: white;
-    cursor: pointer;
-}
-
-.swal2-actions {
-    display: flex !important;
-    justify-content: center !important;
-}
-
-.ug-no-click {
-    pointer-events: none;
-    cursor: default;
-}
-
-.swal2-close {
-    position: absolute !important;
-    top: 15px !important;
-    right: 15px !important;
-    font-size: 30px !important;
-    background: none !important;
+    border-radius: 5px !important;
     border: none !important;
-    color: white !important;
-    cursor: pointer !important;
-    z-index: 10;
+    padding: 10px 20px !important;
 }
 
 /* --- Notification Area --- */
@@ -418,11 +397,4 @@
         transform: translateX(-50%) translateY(100%);
         opacity: 0;
     }
-}
-
-/* --- Settings Content Alignment --- */
-.ug-settings-content > div {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
 }
