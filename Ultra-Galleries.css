@@ -374,6 +374,11 @@
     text-decoration: underline;
 }
 
+.ug-no-click {
+    pointer-events: none; 
+    cursor: default;      
+}
+
 /* --- Animations --- */
 @keyframes slide-in {
     from {
