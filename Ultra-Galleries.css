@@ -199,79 +199,49 @@
 }
 
 /* --- Settings Panel --- */
-.ug-settings-popup {
+#ug-settings-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+     background-color: rgba(0, 0, 0, 0);
+    backdrop-filter: blur(0px);
+    z-index: 10001;
     display: flex;
-    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    transition: background-color 0.3s ease, backdrop-filter 0.3s ease;
+}
+
+#ug-settings-container {
+    display: flex;
     width: 95vw;
     max-width: 800px;
     max-height: 80vh;
-}
-
-.ug-settings-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 15px;
-    border-bottom: 1px solid #555;
-}
-
-.ug-settings-title {
-    font-size: 1.5em;
-    font-weight: bold;
-    color: #eee;
-}
-
-.ug-settings-close {
-    background: none;
-    border: none;
-    font-size: 2em;
-    color: #eee;
-    cursor: pointer;
-}
-
-.ug-settings-tabs {
-    display: flex;
-    border-bottom: 1px solid #555;
-}
-
-.ug-settings-tab {
-    padding: 10px 15px;
-    border: none;
-    background: none;
-    color: #eee;
-    cursor: pointer;
-    transition: background-color 0.3s ease;
-    border-bottom: 3px solid transparent;
-    font-size: 1em;
-}
-
-.ug-settings-tab:hover {
-    background-color: #444;
-}
-
-.ug-settings-tab.active {
     background-color: #222;
-    border-bottom-color: #007bff;
+    border-radius: 8px;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+     transition: transform 0.3s ease;
+	  transform: scale(0.9);
 }
 
-.ug-settings-body {
-    flex-grow: 1;
-    overflow-y: auto;
-    padding: 15px;
-}
-
-.ug-settings-content {
+#ug-settings-ribbon {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    padding: 10px;
+    border-right: 1px solid #555;
 }
 
-.ug-settings-tab-content {
-    display: none;
-}
-
-.ug-settings-tab-content.active {
-    display: block;
+#ug-settings-close-btn {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    font-size: 2em;
+    background: none;
+    border: none;
+    color: #eee;
+    cursor: pointer;
 }
 
 .ug-setting {
@@ -298,14 +268,6 @@
     font-size: 0.9em;
     color: #aaa;
     margin-top: 5px;
-}
-
-.ug-settings-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 15px;
-    border-top: 1px solid #555;
 }
 
 .ug-credits {
@@ -375,8 +337,8 @@
 }
 
 .ug-no-click {
-    pointer-events: none; 
-    cursor: default;      
+    pointer-events: none;
+    cursor: default;
 }
 
 /* --- Animations --- */
@@ -402,4 +364,12 @@
         transform: translateX(-50%) translateY(100%);
         opacity: 0;
     }
+}
+.gallery-container {
+    width: 100vw !important;
+    max-width: 100vw !important;
+}
+
+.hide-nav-arrows .navigation-button {
+    display: none;
 }
