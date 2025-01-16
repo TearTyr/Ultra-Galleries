@@ -367,12 +367,12 @@
 				content: () => {
 					const generalContent = document.createElement('div');
 					generalContent.innerHTML = `
-                         <div class="ug-setting">
-                            <label for="galleryKey">Gallery Key:</label>
-                            <input type="text" id="galleryKey" class="ug-settings-input" value="${state.galleryKey}" maxlength="1">
-                            <p class="ug-placeholder-info">Press this key to open the gallery when it's loaded.</p>
-                        </div>
-                `;
+							 <div class="ug-setting">
+								<label for="galleryKey">Gallery Key:</label>
+								<input type="text" id="galleryKey" class="ug-settings-input" value="${state.galleryKey}" maxlength="1">
+								<p class="ug-placeholder-info">Press this key to open the gallery when it's loaded.</p>
+							</div>
+					`;
 					return generalContent;
 				},
 			},
@@ -381,42 +381,54 @@
 				content: () => {
 					const optionsContent = document.createElement('div');
 					optionsContent.innerHTML = `
-                      <div class="ug-setting">
-                            <label for="hideNavArrows">Hide Gallery Navigation Arrows:</label>
-                            <input type="checkbox" id="hideNavArrows" class="ug-settings-input" style="width: fit-content;" ${state.hideNavArrows ? 'checked' : ''}>
-                        </div>
-                        <div class="ug-setting">
-                            <label for="hideRemoveButton">Hide Remove Button:</label>
-                            <input type="checkbox" id="hideRemoveButton" class="ug-settings-input" style="width: fit-content;" ${state.hideRemoveButton ? 'checked' : ''}>
-                        </div>
-                         <div class="ug-setting">
-                            <label for="hideFullButton">Hide Full Button:</label>
-                            <input type="checkbox" id="hideFullButton" class="ug-settings-input" style="width: fit-content;" ${state.hideFullButton ? 'checked' : ''}>
-                        </div>
-                         <div class="ug-setting">
-                            <label for="hideDownloadButton">Hide Download Button:</label>
-                            <input type="checkbox" id="hideDownloadButton" class="ug-settings-input" style="width: fit-content;" ${state.hideDownloadButton ? 'checked' : ''}>
-                        </div>
-                    `;
+						  <div class="ug-setting">
+								<label for="hideNavArrows">Hide Gallery Navigation Arrows:</label>
+								<input type="checkbox" id="hideNavArrows" class="ug-settings-input" style="width: fit-content;" ${state.hideNavArrows ? 'checked' : ''}>
+							</div>
+							<div class="ug-setting">
+								<label for="hideRemoveButton">Hide Remove Button:</label>
+								<input type="checkbox" id="hideRemoveButton" class="ug-settings-input" style="width: fit-content;" ${state.hideRemoveButton ? 'checked' : ''}>
+							</div>
+							 <div class="ug-setting">
+								<label for="hideFullButton">Hide Full Button:</label>
+								<input type="checkbox" id="hideFullButton" class="ug-settings-input" style="width: fit-content;" ${state.hideFullButton ? 'checked' : ''}>
+							</div>
+							 <div class="ug-setting">
+								<label for="hideDownloadButton">Hide Download Button:</label>
+								<input type="checkbox" id="hideDownloadButton" class="ug-settings-input" style="width: fit-content;" ${state.hideDownloadButton ? 'checked' : ''}>
+							</div>
+						`;
+
+					// Attach change events to the checkboxes to update the state
+					optionsContent.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+						checkbox.addEventListener('change', (e) => {
+							state[e.target.id] = e.target.checked; // Update state
+							GM_setValue(e.target.id, e.target.checked); // Persist setting
+							console.log(`Setting ${e.target.id} changed to ${e.target.checked}`);
+						});
+					});
+
+
 					return optionsContent;
 				},
+
 			},
 			filenames: {
 				label: 'Filenames',
 				content: () => {
 					const filenamesContent = document.createElement('div');
 					filenamesContent.innerHTML = `
-                         <div class="ug-setting">
-                            <label for="zipFileNameFormat">Zip Filename Format:</label>
-                            <input type="text" id="zipFileNameFormat" class="ug-settings-input" value="${state.zipFileNameFormat}" placeholder="{title}-{artistName}.zip">
-                            <p class="ug-placeholder-info">Available placeholders: {artistName}, {title}</p>
-                        </div>
-                        <div class="ug-setting">
-                            <label for="imageFileNameFormat">Image Filename Format:</label>
-                            <input type="text" id="imageFileNameFormat" class="ug-settings-input" value="${state.imageFileNameFormat}" placeholder="{title}-{artistName}-{fileName}-{index}">
-                            <p class="ug-placeholder-info">Available placeholders: {artistName}, {title}, {fileName}, {index}, {ext}</p>
-                        </div>
-                    `;
+							 <div class="ug-setting">
+								<label for="zipFileNameFormat">Zip Filename Format:</label>
+								<input type="text" id="zipFileNameFormat" class="ug-settings-input" value="${state.zipFileNameFormat}" placeholder="{title}-{artistName}.zip">
+								<p class="ug-placeholder-info">Available placeholders: {artistName}, {title}</p>
+							</div>
+							<div class="ug-setting">
+								<label for="imageFileNameFormat">Image Filename Format:</label>
+								<input type="text" id="imageFileNameFormat" class="ug-settings-input" value="${state.imageFileNameFormat}" placeholder="{title}-{artistName}-{fileName}-{index}">
+								<p class="ug-placeholder-info">Available placeholders: {artistName}, {title}, {fileName}, {index}, {ext}</p>
+							</div>
+						`;
 					return filenamesContent;
 				},
 			},
@@ -425,15 +437,15 @@
 				content: () => {
 					const notificationsContent = document.createElement('div');
 					notificationsContent.innerHTML = `
-                         <div class="ug-setting">
-                            <label for="notificationsEnabled">Enable Notifications:</label>
-                            <input type="checkbox" id="notificationsEnabled" class="ug-settings-input" style="width: fit-content;" ${state.notificationsEnabled ? 'checked' : ''}>
-                        </div>
-                        <div class="ug-setting">
-                            <label for="animationsEnabled">Enable Animations:</label>
-                            <input type="checkbox" id="animationsEnabled" class="ug-settings-input" style="width: fit-content;" ${state.animationsEnabled ? 'checked' : ''}>
-                        </div>
-                   `;
+							 <div class="ug-setting">
+								<label for="notificationsEnabled">Enable Notifications:</label>
+								<input type="checkbox" id="notificationsEnabled" class="ug-settings-input" style="width: fit-content;" ${state.notificationsEnabled ? 'checked' : ''}>
+							</div>
+							<div class="ug-setting">
+								<label for="animationsEnabled">Enable Animations:</label>
+								<input type="checkbox" id="animationsEnabled" class="ug-settings-input" style="width: fit-content;" ${state.animationsEnabled ? 'checked' : ''}>
+							</div>
+					   `;
 					return notificationsContent;
 				},
 			},
@@ -442,11 +454,11 @@
 				content: () => {
 					const creditsContent = document.createElement('div');
 					creditsContent.innerHTML = `
-                    <div class="ug-credits">
-                         <p>Original author: ntf</p>
-                         <p>Forked by: Meri/TearTyr</p>
-                     </div>
-                    `;
+						<div class="ug-credits">
+							 <p>Original author: ntf</p>
+							 <p>Forked by: Meri/TearTyr</p>
+						 </div>
+						`;
 					return creditsContent;
 				}
 			}
@@ -488,21 +500,10 @@
 			state.zipFileNameFormat = document.getElementById('zipFileNameFormat')?.value || state.zipFileNameFormat;
 			state.imageFileNameFormat = document.getElementById('imageFileNameFormat')?.value || state.imageFileNameFormat;
 			state.galleryKey = document.getElementById('galleryKey')?.value || state.galleryKey;
-			state.hideNavArrows = document.getElementById('hideNavArrows')?.checked || state.hideNavArrows;
-			state.notificationsEnabled = document.getElementById('notificationsEnabled')?.checked || state.notificationsEnabled;
-			state.animationsEnabled = document.getElementById('animationsEnabled')?.checked || state.animationsEnabled;
-			state.hideRemoveButton = document.getElementById('hideRemoveButton')?.checked || state.hideRemoveButton;
-			state.hideFullButton = document.getElementById('hideFullButton')?.checked || state.hideFullButton;
-			state.hideDownloadButton = document.getElementById('hideDownloadButton')?.checked || state.hideDownloadButton;
 			GM_setValue('zipFileNameFormat', state.zipFileNameFormat);
 			GM_setValue('imageFileNameFormat', state.imageFileNameFormat);
 			GM_setValue('galleryKey', state.galleryKey);
-			GM_setValue('hideNavArrows', state.hideNavArrows);
-			GM_setValue('notificationsEnabled', state.notificationsEnabled);
-			GM_setValue('animationsEnabled', state.animationsEnabled);
-			GM_setValue('hideRemoveButton', state.hideRemoveButton);
-			GM_setValue('hideFullButton', state.hideFullButton);
-			GM_setValue('hideDownloadButton', state.hideDownloadButton);
+
 			container.style.transform = 'scale(0.9)';
 			overlay.style.backgroundColor = 'rgba(0, 0, 0, 0)';
 			overlay.style.backdropFilter = 'blur(0px)';
@@ -698,54 +699,40 @@
 	const createGalleryOverlay = () => {
 		const overlay = document.createElement('div');
 		overlay.id = 'gallery-overlay';
-		const galleryContainer = document.createElement('div');
-		galleryContainer.className = CLASS_NAMES.GALLERY_CONTAINER;
-		if (state.hideNavArrows) {
-			galleryContainer.classList.add('hide-nav-arrows');
-		}
+		overlay.classList.add('ug-gallery-overlay');
+
+		const galleryModal = document.createElement('div');
+		galleryModal.classList.add('ug-gallery-modal');
+
 		const closeButton = document.createElement('button');
 		closeButton.textContent = '×';
 		closeButton.className = CLASS_NAMES.GALLERY_CLOSE_BUTTON;
 		closeButton.addEventListener('click', () => {
 			state.isGalleryMode = false;
 		});
-		const galleryContent = document.createElement('div');
-		galleryContent.className = CLASS_NAMES.GALLERY_CONTENT;
 
-		const expandedView = document.createElement('div');
-		expandedView.className = CLASS_NAMES.EXPANDED_VIEW;
-		const expandedImage = document.createElement('img');
-		expandedImage.className = CLASS_NAMES.EXPANDED_IMAGE;
-		const pageNumber = document.createElement('div');
-		pageNumber.className = CLASS_NAMES.PAGE_NUMBER;
-		const thumbnailContainer = document.createElement('div');
-		thumbnailContainer.className = CLASS_NAMES.THUMBNAIL_CONTAINER;
+
+		const expandedImageContainer = document.createElement('div');
+		expandedImageContainer.classList.add('ug-gallery-expanded-container');
+
+		const expandedMedia = document.createElement('div'); // Container for either img or video
+		expandedMedia.classList.add('ug-gallery-expanded-media');
 
 		const prevButton = createNavigationButton('prev');
 		const nextButton = createNavigationButton('next');
 
-		prevButton.addEventListener('click', () => {
-			if (currentIndex > 0) {
-				showExpandedImage(currentIndex - 1);
-			} else {
-				showExpandedImage(images.length - 1);
-			}
-		});
-		nextButton.addEventListener('click', () => {
-			if (currentIndex < images.length - 1) {
-				showExpandedImage(currentIndex + 1);
-			} else {
-				showExpandedImage(0);
-			}
-		});
+		const pageNumber = document.createElement('div');
+		pageNumber.className = CLASS_NAMES.PAGE_NUMBER;
 
-		expandedView.append(expandedImage, pageNumber, thumbnailContainer, prevButton, nextButton);
-		expandedView.addEventListener('click', (e) => {
-			if (e.target === expandedView) hideExpandedImage();
-		});
+		expandedImageContainer.append(expandedMedia, pageNumber, prevButton, nextButton);
+		galleryModal.append(closeButton, expandedImageContainer);
 
-		galleryContainer.append(closeButton, galleryContent, expandedView);
-		overlay.appendChild(galleryContainer);
+		const thumbnailGrid = document.createElement('div');
+		thumbnailGrid.classList.add('ug-gallery-thumbnail-grid');
+		galleryModal.appendChild(thumbnailGrid);
+
+
+		overlay.appendChild(galleryModal);
 		return overlay;
 	};
 
@@ -758,9 +745,11 @@
 
 	const hideExpandedImage = () => {
 		state.expandedViewActive = false;
-		const expandedView = document.querySelector(`.${CLASS_NAMES.EXPANDED_VIEW}`);
-		if (expandedView) {
-			expandedView.style.display = 'none';
+		const galleryOverlay = document.getElementById('gallery-overlay');
+		if (galleryOverlay) {
+			galleryOverlay.classList.remove('expanded');
+			const expandedMedia = galleryOverlay.querySelector('.ug-gallery-expanded-media');
+			expandedMedia.innerHTML = '';
 		}
 		state.loadingMessage = null;
 	};
@@ -781,82 +770,59 @@
 			return;
 		}
 
-		const isVideo = mediaSrc.toLowerCase().endsWith('.mp4');
-
-		let expandedView = document.querySelector(`.${CLASS_NAMES.EXPANDED_VIEW}`);
-		let loadingOverlay = expandedView.querySelector(`.${CLASS_NAMES.LOADING_OVERLAY}`);
+		// const isVideo = mediaSrc.toLowerCase().endsWith('.mp4');
+		const galleryOverlay = document.getElementById('gallery-overlay');
+		if (!galleryOverlay) return;
+		const expandedMedia = galleryOverlay.querySelector('.ug-gallery-expanded-media');
+		let loadingOverlay = galleryOverlay.querySelector(`.${CLASS_NAMES.LOADING_OVERLAY}`);
 
 		if (!loadingOverlay) {
 			loadingOverlay = createLoadingOverlay();
-			expandedView.appendChild(loadingOverlay);
+			expandedMedia.appendChild(loadingOverlay);
 		}
 
-		let expandedImage = expandedView.querySelector(`.${CLASS_NAMES.EXPANDED_IMAGE}`);
-
-		if (state.mediaLoaded[index]) {
-			if (expandedImage && expandedImage.parentNode) {
-				expandedImage.parentNode.querySelectorAll('video, img').forEach(el => {
-					if (el !== expandedImage) el.remove();
-				});
-			}
-		}
+		expandedMedia.innerHTML = '';
 
 		let mediaElement;
-		if (isVideo) {
-			mediaElement = document.createElement('video');
-			mediaElement.controls = true;
-		} else {
+		// if (isVideo) {
+		// 	mediaElement = document.createElement('video');
+		// 	mediaElement.controls = true;
+		// } else {
 			mediaElement = new Image();
-		}
+		// }
 
 		const onMediaLoad = () => {
-			if (expandedView.contains(loadingOverlay)) {
-				expandedView.removeChild(loadingOverlay);
+			if (expandedMedia.contains(loadingOverlay)) {
+				expandedMedia.removeChild(loadingOverlay);
 			}
-			expandedView.style.display = 'flex';
+			galleryOverlay.classList.add('expanded');
 
-			if (isVideo) {
-				if (expandedImage && expandedImage.parentNode && mediaElement !== expandedImage) {
-					expandedImage.replaceWith(mediaElement);
-				}
-			} else {
-				expandedImage.src = mediaSrc;
-			}
+			mediaElement.classList.add('ug-gallery-expanded-media-item');
+			expandedMedia.appendChild(mediaElement);
+
 			currentIndex = index;
-			const pageNumber = expandedView.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
+			const pageNumber = galleryOverlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
 			pageNumber.textContent = `${index + 1} / ${state.fullSizeImageSrcs.length}`;
-			const thumbnailContainer = expandedView.querySelector(`.${CLASS_NAMES.THUMBNAIL_CONTAINER}`);
-			thumbnailContainer
-				.querySelectorAll(`.${CLASS_NAMES.EXPANDED_THUMBNAIL}`)
-				.forEach((thumb, i) => thumb.classList.toggle('active', i === index));
 			state.loadingMessage = null;
-			state.mediaLoaded[index] = true;
 		};
 
 		const onMediaError = () => {
 			console.error('Failed to load media in expanded view:', mediaSrc);
-			if (expandedView.contains(loadingOverlay)) {
-				expandedView.removeChild(loadingOverlay);
+			if (expandedMedia.contains(loadingOverlay)) {
+				expandedMedia.removeChild(loadingOverlay);
 			}
 			state.loadingMessage = null;
-			if (!isVideo) {
-				expandedImage.src = '';
-			}
-			const pageNumber = expandedView.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
+			const pageNumber = galleryOverlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
 			pageNumber.textContent = 'Error loading media';
 		};
 
-		if (!state.mediaLoaded[index]) {
-			mediaElement.onload = onMediaLoad;
-			mediaElement.onerror = onMediaError;
-			mediaElement.src = mediaSrc;
+		mediaElement.onload = onMediaLoad;
+		mediaElement.onerror = onMediaError;
+		mediaElement.src = mediaSrc;
 
-			if (isVideo && mediaElement.readyState >= 2) {
-				onMediaLoad();
-			}
-		} else {
-			onMediaLoad();
-		}
+		// if (isVideo && mediaElement.readyState >= 2) {
+		// 	onMediaLoad();
+		// }
 	};
 
 	const showExpandedImage = (index) => {
@@ -867,53 +833,63 @@
 
 	const showGallery = () => {
 		if (!isPostPage() || !state.galleryReady) return;
-
-
 		const overlay = createGalleryOverlay();
-		const galleryContent = overlay.querySelector(`.${CLASS_NAMES.GALLERY_CONTENT}`);
-		const expandedView = overlay.querySelector(`.${CLASS_NAMES.EXPANDED_VIEW}`);
-		const expandedImage = expandedView.querySelector(`.${CLASS_NAMES.EXPANDED_IMAGE}`);
-		const thumbnailContainer = expandedView.querySelector(`.${CLASS_NAMES.THUMBNAIL_CONTAINER}`);
-		const pageNumber = expandedView.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
+		const galleryModal = overlay.querySelector('.ug-gallery-modal');
+		const thumbnailGrid = overlay.querySelector('.ug-gallery-thumbnail-grid');
+		const expandedImageContainer = overlay.querySelector('.ug-gallery-expanded-container');
+		const prevButton = overlay.querySelector('.navigation-button.prev');
+		const nextButton = overlay.querySelector('.navigation-button.next');
+
+
 		images = Array.from(elements.virtualGalleryContainer.querySelectorAll(`.${CLASS_NAMES.VIRTUAL_IMAGE}`));
 		currentIndex = 0;
 
-		if (!elements.galleryThumbnailsInitialized) {
-			galleryContent.innerHTML = '';
-			thumbnailContainer.innerHTML = '';
-			images.forEach((img, index) => {
-				const thumbnail = document.createElement('img');
-				thumbnail.src = img.src;
-				thumbnail.className = CLASS_NAMES.THUMBNAIL;
-				thumbnail.addEventListener('click', () => showExpandedImage(index));
-				galleryContent.appendChild(thumbnail);
 
-				const expandedThumbnail = thumbnail.cloneNode(true);
-				expandedThumbnail.className = CLASS_NAMES.EXPANDED_THUMBNAIL;
-				expandedThumbnail.addEventListener('click', () => showExpandedImage(index));
-				thumbnailContainer.appendChild(expandedThumbnail);
+		thumbnailGrid.innerHTML = '';
+		expandedImageContainer.style.display = 'none';
+		prevButton.style.display = 'none';
+		nextButton.style.display = 'none';
 
+
+		images.forEach((img, index) => {
+			const thumbnail = document.createElement('img');
+			thumbnail.src = img.src;
+			thumbnail.className = 'ug-gallery-thumbnail';
+			thumbnail.addEventListener('click', () => {
+				expandedImageContainer.style.display = 'flex';
+				prevButton.style.display = 'block';
+				nextButton.style.display = 'block';
+				showExpandedImage(index);
 			});
-
-			elements.galleryThumbnailsInitialized = true;
-		}
+			thumbnailGrid.appendChild(thumbnail);
+		});
 
 		document.body.appendChild(overlay);
-		showExpandedImage(currentIndex);
+		// Navigation button event listeners
+		prevButton.addEventListener('click', () => {
+			if (currentIndex > 0) {
+				showExpandedImage(currentIndex - 1);
+			} else {
+				showExpandedImage(images.length - 1);
+			}
+		});
+
+		nextButton.addEventListener('click', () => {
+			if (currentIndex < images.length - 1) {
+				showExpandedImage(currentIndex + 1);
+			} else {
+				showExpandedImage(0);
+			}
+		});
 	};
 
 	const closeGallery = () => {
 		const overlay = document.getElementById('gallery-overlay');
 		if (overlay) {
-			const galleryContent = overlay.querySelector(`.${CLASS_NAMES.GALLERY_CONTENT}`);
-			if (galleryContent) {
-				galleryContent.innerHTML = ''; // Clear the gallery content
-			}
 			document.body.removeChild(overlay);
 			state.isGalleryMode = false;
 			state.expandedViewActive = false;
 			state.loadingMessage = null;
-			elements.galleryThumbnailsInitialized = false; // Reset the flag
 		}
 	};
 
@@ -938,7 +914,6 @@
 			}
 		}
 	};
-
 
 	const clickAllImageButtons = (action) => {
 		const fileDivs = document.querySelectorAll(SELECTORS.FILE_DIVS);
@@ -1212,16 +1187,22 @@
 					const fullButton = createToggleButton(BUTTONS.FULL, () => imageActions.full(img));
 					const downloadButton = createToggleButton(BUTTONS.DOWNLOAD, () => downloadImageByIndex(index));
 					const removeButton = createToggleButton(BUTTONS.REMOVE, removeImage);
+					// Initial visibility based on settings
+					const optionsButtons = [];
 
 					if (!state.hideRemoveButton) {
-						newDiv.append(removeButton);
+						optionsButtons.push(removeButton);
 					}
 					if (!state.hideFullButton) {
-						newDiv.append(fullButton);
+						optionsButtons.push(fullButton);
 					}
 					if (!state.hideDownloadButton) {
-						newDiv.append(downloadButton);
+						optionsButtons.push(downloadButton);
 					}
+					optionsButtons.forEach(button => {
+						newDiv.append(button)
+					});
+
 					newDiv.append(heightButton);
 					newDiv.append(widthButton);
 
