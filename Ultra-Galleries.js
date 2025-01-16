@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      2.4.2
+// @version      2.4.3
 // @description  Enhanced gallery experience (SPA-compatible Testing Phase)
 // @author       ntf (original), Meri/TearTyr
 // @match        *://kemono.su/*
@@ -76,22 +76,31 @@
 		GALLERY_CONTAINER: 'gallery-container',
 		GALLERY_CLOSE_BUTTON: 'gallery-close-button',
 		GALLERY_CONTENT: 'gallery-content',
+		GALLERY_MAIN_VIEW: 'ug-gallery-main-view',
 		EXPANDED_VIEW: 'expanded-view',
 		EXPANDED_IMAGE: 'expanded-image',
 		PAGE_NUMBER: 'page-number',
 		THUMBNAIL_CONTAINER: 'thumbnail-container',
+		THUMBNAIL_GRID: 'thumbnail-grid',
 		NAVIGATION_BUTTON: 'navigation-button',
 		PREV_BUTTON: 'navigation-button prev',
 		NEXT_BUTTON: 'navigation-button next',
 		VIRTUAL_IMAGE: 'virtual-image',
 		THUMBNAIL: 'thumbnail',
+		THUMBNAIL_STRIP: 'thumbnail-strip',
 		EXPANDED_THUMBNAIL: 'expanded-thumbnail',
 		SETTINGS_BUTTON: 'settings-button',
 		NOTIFICATION_CONTAINER: 'ug-notification-container',
+		NOTIFICATION_AREA: 'ug-notification-area',
 		NOTIFICATION_TEXT: 'ug-notification-text',
 		NOTIFICATION_CLOSE: 'ug-notification-close',
 		NOTIFICATION_REPORT: 'ug-notification-report',
+		DOWNLOAD_BUTTON: 'ug-download-button',
 		NO_CLICK: 'ug-no-click',
+		FADE_OUT: 'fade-out',
+		FADE_IN: 'fade-in',
+		THUMBNAIL_CROPPED: 'thumbnail-cropped',
+		THUMBNAIL_VISIBLE: 'thumbnail-visible',
 	};
 
 	const MAX_RETRIES = 3;
@@ -196,6 +205,7 @@
 		galleryReady: false,
 		galleryActive: false,
 		expandedViewActive: false,
+		controlsVisible: true,
 		virtualGallery: [],
 		originalImageSrcs: [],
 		currentPostUrl: null,
@@ -211,6 +221,7 @@
 		mediaLoaded: {},
 		isGalleryMode: false,
 		notificationsEnabled: GM_getValue('notificationsEnabled', true),
+		notificationAreaVisible: GM_getValue('notificationAreaVisible', true),
 		animationsEnabled: GM_getValue('animationsEnabled', true),
 		notification: null,
 		notificationType: 'info',
@@ -218,6 +229,8 @@
 		hideRemoveButton: GM_getValue('hideRemoveButton', false),
 		hideFullButton: GM_getValue('hideFullButton', false),
 		hideDownloadButton: GM_getValue('hideDownloadButton', false),
+		settingsOpen: false,
+		currentGalleryIndex: 0,
 	}, {
 		galleryReady: (value) => {
 			if (value) {
@@ -288,6 +301,19 @@
 				hideNotification();
 			}
 		},
+		settingsOpen: (value) => {
+			if (value) {
+				showSettings();
+			} else {
+				closeSettings();
+			}
+		},
+		notificationAreaVisible: (value) => {
+			const notificationArea = document.getElementById(CLASS_NAMES.NOTIFICATION_AREA);
+			if (notificationArea) {
+				notificationArea.style.display = value ? 'flex' : 'none';
+			}
+		}
 	});
 
 	// --- Settings ---
@@ -326,7 +352,6 @@
 			container.style.transform = 'scale(1)';
 		}, 0);
 
-
 		const ribbon = document.createElement('div');
 		ribbon.id = 'ug-settings-ribbon';
 		ribbon.style.display = 'flex';
@@ -338,7 +363,6 @@
 		content.style.flexGrow = '1';
 		content.style.overflowY = 'auto';
 		content.style.padding = '20px';
-
 
 		const closeButton = document.createElement('button');
 		closeButton.id = 'ug-settings-close-btn';
@@ -352,13 +376,7 @@
 		closeButton.style.color = '#eee';
 		closeButton.style.cursor = 'pointer';
 		closeButton.addEventListener('click', () => {
-			container.style.transform = 'scale(0.9)';
-			overlay.style.backgroundColor = 'rgba(0, 0, 0, 0)';
-			overlay.style.backdropFilter = 'blur(0px)';
-			setTimeout(() => {
-				overlay.remove();
-			}, 300);
-
+			state.settingsOpen = false;
 		});
 
 		const tabs = {
@@ -367,12 +385,12 @@
 				content: () => {
 					const generalContent = document.createElement('div');
 					generalContent.innerHTML = `
-							 <div class="ug-setting">
-								<label for="galleryKey">Gallery Key:</label>
-								<input type="text" id="galleryKey" class="ug-settings-input" value="${state.galleryKey}" maxlength="1">
-								<p class="ug-placeholder-info">Press this key to open the gallery when it's loaded.</p>
-							</div>
-					`;
+                             <div class="ug-setting">
+                                <label for="galleryKey">Gallery Key:</label>
+                                <input type="text" id="galleryKey" class="ug-settings-input" value="${state.galleryKey}" maxlength="1">
+                                <p class="ug-placeholder-info">Press this key to open the gallery when it's loaded.</p>
+                            </div>
+                    `;
 					return generalContent;
 				},
 			},
@@ -381,23 +399,27 @@
 				content: () => {
 					const optionsContent = document.createElement('div');
 					optionsContent.innerHTML = `
-						  <div class="ug-setting">
-								<label for="hideNavArrows">Hide Gallery Navigation Arrows:</label>
-								<input type="checkbox" id="hideNavArrows" class="ug-settings-input" style="width: fit-content;" ${state.hideNavArrows ? 'checked' : ''}>
-							</div>
-							<div class="ug-setting">
-								<label for="hideRemoveButton">Hide Remove Button:</label>
-								<input type="checkbox" id="hideRemoveButton" class="ug-settings-input" style="width: fit-content;" ${state.hideRemoveButton ? 'checked' : ''}>
-							</div>
+                          <div class="ug-setting">
+                                <label for="hideNavArrows">Hide Gallery Navigation Arrows:</label>
+                                <input type="checkbox" id="hideNavArrows" class="ug-settings-input" style="width: fit-content;" ${state.hideNavArrows ? 'checked' : ''}>
+                            </div>
+                            <div class="ug-setting">
+                                <label for="hideRemoveButton">Hide Remove Button:</label>
+                                <input type="checkbox" id="hideRemoveButton" class="ug-settings-input" style="width: fit-content;" ${state.hideRemoveButton ? 'checked' : ''}>
+                            </div>
+                             <div class="ug-setting">
+                                <label for="hideFullButton">Hide Full Button:</label>
+                                <input type="checkbox" id="hideFullButton" class="ug-settings-input" style="width: fit-content;" ${state.hideFullButton ? 'checked' : ''}>
+                            </div>
+                             <div class="ug-setting">
+                                <label for="hideDownloadButton">Hide Download Button:</label>
+                                <input type="checkbox" id="hideDownloadButton" class="ug-settings-input" style="width: fit-content;" ${state.hideDownloadButton ? 'checked' : ''}>
+                            </div>
 							 <div class="ug-setting">
-								<label for="hideFullButton">Hide Full Button:</label>
-								<input type="checkbox" id="hideFullButton" class="ug-settings-input" style="width: fit-content;" ${state.hideFullButton ? 'checked' : ''}>
-							</div>
-							 <div class="ug-setting">
-								<label for="hideDownloadButton">Hide Download Button:</label>
-								<input type="checkbox" id="hideDownloadButton" class="ug-settings-input" style="width: fit-content;" ${state.hideDownloadButton ? 'checked' : ''}>
-							</div>
-						`;
+                                <label for="notificationAreaVisible">Hide Notification Area:</label>
+                                <input type="checkbox" id="notificationAreaVisible" class="ug-settings-input" style="width: fit-content;" ${state.notificationAreaVisible ? 'checked' : ''}>
+                            </div>
+                        `;
 
 					// Attach change events to the checkboxes to update the state
 					optionsContent.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
@@ -408,7 +430,6 @@
 						});
 					});
 
-
 					return optionsContent;
 				},
 
@@ -418,17 +439,17 @@
 				content: () => {
 					const filenamesContent = document.createElement('div');
 					filenamesContent.innerHTML = `
-							 <div class="ug-setting">
-								<label for="zipFileNameFormat">Zip Filename Format:</label>
-								<input type="text" id="zipFileNameFormat" class="ug-settings-input" value="${state.zipFileNameFormat}" placeholder="{title}-{artistName}.zip">
-								<p class="ug-placeholder-info">Available placeholders: {artistName}, {title}</p>
-							</div>
-							<div class="ug-setting">
-								<label for="imageFileNameFormat">Image Filename Format:</label>
-								<input type="text" id="imageFileNameFormat" class="ug-settings-input" value="${state.imageFileNameFormat}" placeholder="{title}-{artistName}-{fileName}-{index}">
-								<p class="ug-placeholder-info">Available placeholders: {artistName}, {title}, {fileName}, {index}, {ext}</p>
-							</div>
-						`;
+                             <div class="ug-setting">
+                                <label for="zipFileNameFormat">Zip Filename Format:</label>
+                                <input type="text" id="zipFileNameFormat" class="ug-settings-input" value="${state.zipFileNameFormat}" placeholder="{title}-{artistName}.zip">
+                                <p class="ug-placeholder-info">Available placeholders: {artistName}, {title}</p>
+                            </div>
+                            <div class="ug-setting">
+                                <label for="imageFileNameFormat">Image Filename Format:</label>
+                                <input type="text" id="imageFileNameFormat" class="ug-settings-input" value="${state.imageFileNameFormat}" placeholder="{title}-{artistName}-{fileName}-{index}">
+                                <p class="ug-placeholder-info">Available placeholders: {artistName}, {title}, {fileName}, {index}, {ext}</p>
+                            </div>
+                        `;
 					return filenamesContent;
 				},
 			},
@@ -437,15 +458,15 @@
 				content: () => {
 					const notificationsContent = document.createElement('div');
 					notificationsContent.innerHTML = `
-							 <div class="ug-setting">
-								<label for="notificationsEnabled">Enable Notifications:</label>
-								<input type="checkbox" id="notificationsEnabled" class="ug-settings-input" style="width: fit-content;" ${state.notificationsEnabled ? 'checked' : ''}>
-							</div>
-							<div class="ug-setting">
-								<label for="animationsEnabled">Enable Animations:</label>
-								<input type="checkbox" id="animationsEnabled" class="ug-settings-input" style="width: fit-content;" ${state.animationsEnabled ? 'checked' : ''}>
-							</div>
-					   `;
+                             <div class="ug-setting">
+                                <label for="notificationsEnabled">Enable Notifications:</label>
+                                <input type="checkbox" id="notificationsEnabled" class="ug-settings-input" style="width: fit-content;" ${state.notificationsEnabled ? 'checked' : ''}>
+                            </div>
+                            <div class="ug-setting">
+                                <label for="animationsEnabled">Enable Animations:</label>
+                                <input type="checkbox" id="animationsEnabled" class="ug-settings-input" style="width: fit-content;" ${state.animationsEnabled ? 'checked' : ''}>
+                            </div>
+                       `;
 					return notificationsContent;
 				},
 			},
@@ -454,11 +475,11 @@
 				content: () => {
 					const creditsContent = document.createElement('div');
 					creditsContent.innerHTML = `
-						<div class="ug-credits">
-							 <p>Original author: ntf</p>
-							 <p>Forked by: Meri/TearTyr</p>
-						 </div>
-						`;
+                        <div class="ug-credits">
+                             <p>Original author: ntf</p>
+                             <p>Forked by: Meri/TearTyr</p>
+                         </div>
+                        `;
 					return creditsContent;
 				}
 			}
@@ -477,7 +498,6 @@
 				ribbonButtons[tabKey].style.borderBottomColor = tabKey === activeTab ? '#007bff' : 'transparent';
 			}
 		};
-
 
 		for (const tabId in tabs) {
 			const button = document.createElement('button');
@@ -503,13 +523,10 @@
 			GM_setValue('zipFileNameFormat', state.zipFileNameFormat);
 			GM_setValue('imageFileNameFormat', state.imageFileNameFormat);
 			GM_setValue('galleryKey', state.galleryKey);
+			state.notificationAreaVisible = document.getElementById('notificationAreaVisible')?.checked;
+			GM_setValue('notificationAreaVisible', state.notificationAreaVisible);
 
-			container.style.transform = 'scale(0.9)';
-			overlay.style.backgroundColor = 'rgba(0, 0, 0, 0)';
-			overlay.style.backdropFilter = 'blur(0px)';
-			setTimeout(() => {
-				overlay.remove();
-			}, 300);
+			state.settingsOpen = false;
 		}
 
 		// Create the save button
@@ -531,6 +548,19 @@
 
 	const showSettings = () => {
 		createSettingsUI();
+	};
+
+	const closeSettings = () => {
+		const overlay = document.getElementById('ug-settings-overlay');
+		if (overlay) {
+			const container = overlay.querySelector('#ug-settings-container');
+			container.style.transform = 'scale(0.9)';
+			overlay.style.backgroundColor = 'rgba(0, 0, 0, 0)';
+			overlay.style.backdropFilter = 'blur(0px)';
+			setTimeout(() => {
+				overlay.remove();
+			}, 300);
+		}
 	};
 
 	// --- Image Loading and Gallery Functions ---
@@ -710,7 +740,19 @@
 		closeButton.addEventListener('click', () => {
 			state.isGalleryMode = false;
 		});
+		const downloadButton = document.createElement('button');
+		downloadButton.textContent = '↓';
+		downloadButton.className = CLASS_NAMES.DOWNLOAD_BUTTON;
+		downloadButton.addEventListener('click', () => {
+			downloadImageByIndex(state.currentGalleryIndex);
+		});
 
+		const mainView = document.createElement('div');
+		mainView.classList.add(CLASS_NAMES.GALLERY_MAIN_VIEW);
+		mainView.addEventListener('click', () => {
+			state.controlsVisible = !state.controlsVisible;
+			updateControlVisibility();
+		})
 
 		const expandedImageContainer = document.createElement('div');
 		expandedImageContainer.classList.add('ug-gallery-expanded-container');
@@ -724,15 +766,23 @@
 		const pageNumber = document.createElement('div');
 		pageNumber.className = CLASS_NAMES.PAGE_NUMBER;
 
-		expandedImageContainer.append(expandedMedia, pageNumber, prevButton, nextButton);
-		galleryModal.append(closeButton, expandedImageContainer);
-
 		const thumbnailGrid = document.createElement('div');
-		thumbnailGrid.classList.add('ug-gallery-thumbnail-grid');
-		galleryModal.appendChild(thumbnailGrid);
+		thumbnailGrid.classList.add(CLASS_NAMES.THUMBNAIL_GRID);
 
+		mainView.append(expandedImageContainer, prevButton, nextButton);
+		expandedImageContainer.append(expandedMedia, pageNumber);
+		galleryModal.append(closeButton, downloadButton, mainView, thumbnailGrid);
+
+		const thumbnailStrip = document.createElement('div');
+		thumbnailStrip.classList.add(CLASS_NAMES.THUMBNAIL_STRIP);
+		galleryModal.appendChild(thumbnailStrip);
+
+		const userId = document.createElement('div');
+		userId.classList.add('ug-gallery-user-id');
+		expandedImageContainer.appendChild(userId);
 
 		overlay.appendChild(galleryModal);
+
 		return overlay;
 	};
 
@@ -742,6 +792,66 @@
 		button.className = `${CLASS_NAMES.NAVIGATION_BUTTON} ${direction}`;
 		return button;
 	};
+	const updateControlVisibility = () => {
+		const galleryOverlay = document.getElementById('gallery-overlay');
+		if (!galleryOverlay) return;
+		const mainView = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_MAIN_VIEW}`);
+		const prevButton = mainView.querySelector('.navigation-button.prev');
+		const nextButton = mainView.querySelector('.navigation-button.next');
+		const closeButton = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_CLOSE_BUTTON}`);
+		const downloadButton = galleryOverlay.querySelector(`.${CLASS_NAMES.DOWNLOAD_BUTTON}`);
+		const thumbnailStrip = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_STRIP}`);
+		const pageNumber = galleryOverlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
+		const userId = galleryOverlay.querySelector(`.ug-gallery-user-id`);
+
+		if (state.controlsVisible) {
+			prevButton.classList.add(CLASS_NAMES.FADE_IN);
+			prevButton.classList.remove(CLASS_NAMES.FADE_OUT);
+			nextButton.classList.add(CLASS_NAMES.FADE_IN);
+			nextButton.classList.remove(CLASS_NAMES.FADE_OUT);
+			closeButton.classList.add(CLASS_NAMES.FADE_IN);
+			closeButton.classList.remove(CLASS_NAMES.FADE_OUT);
+			downloadButton.classList.add(CLASS_NAMES.FADE_IN);
+			downloadButton.classList.remove(CLASS_NAMES.FADE_OUT);
+			thumbnailStrip.classList.add(CLASS_NAMES.FADE_IN);
+			thumbnailStrip.classList.remove(CLASS_NAMES.FADE_OUT);
+			pageNumber.classList.add(CLASS_NAMES.FADE_IN);
+			pageNumber.classList.remove(CLASS_NAMES.FADE_OUT);
+			userId.classList.add(CLASS_NAMES.FADE_IN);
+			userId.classList.remove(CLASS_NAMES.FADE_OUT);
+			prevButton.style.display = 'flex';
+			nextButton.style.display = 'flex';
+			closeButton.style.display = 'block';
+			downloadButton.style.display = 'block';
+			thumbnailStrip.style.display = 'flex';
+			pageNumber.style.display = 'block';
+			userId.style.display = 'block';
+		} else {
+			prevButton.classList.add(CLASS_NAMES.FADE_OUT);
+			prevButton.classList.remove(CLASS_NAMES.FADE_IN);
+			nextButton.classList.add(CLASS_NAMES.FADE_OUT);
+			nextButton.classList.remove(CLASS_NAMES.FADE_IN);
+			closeButton.classList.add(CLASS_NAMES.FADE_OUT);
+			closeButton.classList.remove(CLASS_NAMES.FADE_IN);
+			downloadButton.classList.add(CLASS_NAMES.FADE_OUT);
+			downloadButton.classList.remove(CLASS_NAMES.FADE_IN);
+			thumbnailStrip.classList.add(CLASS_NAMES.FADE_OUT);
+			thumbnailStrip.classList.remove(CLASS_NAMES.FADE_IN);
+			pageNumber.classList.add(CLASS_NAMES.FADE_OUT);
+			pageNumber.classList.remove(CLASS_NAMES.FADE_IN);
+			userId.classList.add(CLASS_NAMES.FADE_OUT);
+			userId.classList.remove(CLASS_NAMES.FADE_IN);
+			setTimeout(() => {
+				prevButton.style.display = 'none';
+				nextButton.style.display = 'none';
+				closeButton.style.display = 'none';
+				downloadButton.style.display = 'none';
+				thumbnailStrip.style.display = 'none';
+				pageNumber.style.display = 'none';
+				userId.style.display = 'none';
+			}, 500);
+		}
+	};
 
 	const hideExpandedImage = () => {
 		state.expandedViewActive = false;
@@ -750,6 +860,15 @@
 			galleryOverlay.classList.remove('expanded');
 			const expandedMedia = galleryOverlay.querySelector('.ug-gallery-expanded-media');
 			expandedMedia.innerHTML = '';
+
+			// Hide navigation buttons
+			const mainView = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_MAIN_VIEW}`);
+			const prevButton = mainView.querySelector('.navigation-button.prev');
+			const nextButton = mainView.querySelector('.navigation-button.next');
+			if (prevButton && nextButton) {
+				prevButton.style.display = 'none';
+				nextButton.style.display = 'none';
+			}
 		}
 		state.loadingMessage = null;
 	};
@@ -770,10 +889,11 @@
 			return;
 		}
 
-		// const isVideo = mediaSrc.toLowerCase().endsWith('.mp4');
+		const isVideo = mediaSrc.toLowerCase().endsWith('.mp4');
 		const galleryOverlay = document.getElementById('gallery-overlay');
 		if (!galleryOverlay) return;
 		const expandedMedia = galleryOverlay.querySelector('.ug-gallery-expanded-media');
+		const userId = galleryOverlay.querySelector('.ug-gallery-user-id');
 		let loadingOverlay = galleryOverlay.querySelector(`.${CLASS_NAMES.LOADING_OVERLAY}`);
 
 		if (!loadingOverlay) {
@@ -783,13 +903,13 @@
 
 		expandedMedia.innerHTML = '';
 
-		let mediaElement;
-		// if (isVideo) {
-		// 	mediaElement = document.createElement('video');
-		// 	mediaElement.controls = true;
-		// } else {
+		let mediaElement; // Declaring mediaElement here
+		if (isVideo) {
+			mediaElement = document.createElement('video');
+			mediaElement.controls = true;
+		} else {
 			mediaElement = new Image();
-		// }
+		}
 
 		const onMediaLoad = () => {
 			if (expandedMedia.contains(loadingOverlay)) {
@@ -801,8 +921,11 @@
 			expandedMedia.appendChild(mediaElement);
 
 			currentIndex = index;
+			state.currentGalleryIndex = index;
 			const pageNumber = galleryOverlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
 			pageNumber.textContent = `${index + 1} / ${state.fullSizeImageSrcs.length}`;
+			userId.textContent = images[index].dataset.userId || "User ID not found";
+			userId.style.display = 'block';
 			state.loadingMessage = null;
 		};
 
@@ -816,55 +939,123 @@
 			pageNumber.textContent = 'Error loading media';
 		};
 
-		mediaElement.onload = onMediaLoad;
-		mediaElement.onerror = onMediaError;
-		mediaElement.src = mediaSrc;
+		if (isVideo) {
+			mediaElement.src = mediaSrc;
+			mediaElement.onloadeddata = onMediaLoad;
+			mediaElement.onerror = onMediaError;
 
-		// if (isVideo && mediaElement.readyState >= 2) {
-		// 	onMediaLoad();
-		// }
+			if (mediaElement.readyState >= 2) {
+				onMediaLoad();
+			}
+		} else {
+			mediaElement.onload = onMediaLoad;
+			mediaElement.onerror = onMediaError;
+			mediaElement.src = mediaSrc;
+		}
+	};
+
+	const updateThumbnailStrip = () => {
+		const galleryOverlay = document.getElementById('gallery-overlay');
+		if (!galleryOverlay) return;
+		const thumbnailStrip = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_STRIP}`);
+		if (!thumbnailStrip) return;
+
+		thumbnailStrip.innerHTML = ''; // Clear previous thumbnails
+		images.forEach((img, index) => {
+			const thumbnailContainer = document.createElement('div');
+			thumbnailContainer.classList.add('ug-gallery-thumbnail-container');
+
+			const thumbnail = document.createElement('img');
+			thumbnail.src = img.src;
+			thumbnail.className = `ug-gallery-thumbnail ${
+                index === state.currentGalleryIndex ? 'active' : ''
+            }`;
+			thumbnail.addEventListener('click', () => {
+				showExpandedImage(index);
+			});
+
+			thumbnailContainer.appendChild(thumbnail);
+			thumbnailStrip.appendChild(thumbnailContainer);
+		});
 	};
 
 	const showExpandedImage = (index) => {
 		state.expandedViewActive = true;
 		state.loadingMessage = 'Loading Media...';
+		const galleryOverlay = document.getElementById('gallery-overlay');
+		if (galleryOverlay) {
+			galleryOverlay.classList.add('expanded');
+			// Show navigation buttons
+			const mainView = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_MAIN_VIEW}`);
+			const prevButton = mainView.querySelector('.navigation-button.prev');
+			const nextButton = mainView.querySelector('.navigation-button.next');
+			const closeButton = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_CLOSE_BUTTON}`);
+			const downloadButton = galleryOverlay.querySelector(`.${CLASS_NAMES.DOWNLOAD_BUTTON}`);
+			const thumbnailStrip = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_STRIP}`);
+			const pageNumber = galleryOverlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
+			const userId = galleryOverlay.querySelector(`.ug-gallery-user-id`);
+			if (prevButton && nextButton && !state.hideNavArrows) {
+				prevButton.style.display = 'flex';
+				nextButton.style.display = 'flex';
+				closeButton.style.display = 'block';
+				downloadButton.style.display = 'block';
+				thumbnailStrip.style.display = 'block';
+				pageNumber.style.display = 'block';
+				userId.style.display = 'block';
+			}
+		}
+		state.controlsVisible = true;
+		updateControlVisibility();
 		loadAndDisplayMedia(index);
+		updateThumbnailStrip(); // Update thumbnail strip with the new active index
 	};
 
 	const showGallery = () => {
 		if (!isPostPage() || !state.galleryReady) return;
 		const overlay = createGalleryOverlay();
 		const galleryModal = overlay.querySelector('.ug-gallery-modal');
-		const thumbnailGrid = overlay.querySelector('.ug-gallery-thumbnail-grid');
-		const expandedImageContainer = overlay.querySelector('.ug-gallery-expanded-container');
-		const prevButton = overlay.querySelector('.navigation-button.prev');
-		const nextButton = overlay.querySelector('.navigation-button.next');
-
-
+		const mainView = overlay.querySelector(`.${CLASS_NAMES.GALLERY_MAIN_VIEW}`);
+		const thumbnailStrip = overlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_STRIP}`);
+		const thumbnailGrid = overlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_GRID}`);
+		const pageNumber = overlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
+		const userId = overlay.querySelector(`.ug-gallery-user-id`);
 		images = Array.from(elements.virtualGalleryContainer.querySelectorAll(`.${CLASS_NAMES.VIRTUAL_IMAGE}`));
 		currentIndex = 0;
-
+		state.currentGalleryIndex = 0;
 
 		thumbnailGrid.innerHTML = '';
-		expandedImageContainer.style.display = 'none';
-		prevButton.style.display = 'none';
-		nextButton.style.display = 'none';
-
-
 		images.forEach((img, index) => {
+			const thumbnailContainer = document.createElement('div');
+			thumbnailContainer.classList.add('ug-gallery-thumbnail-container');
+
 			const thumbnail = document.createElement('img');
 			thumbnail.src = img.src;
-			thumbnail.className = 'ug-gallery-thumbnail';
+			thumbnail.className = CLASS_NAMES.THUMBNAIL;
+			thumbnail.dataset.userId = `User: ${index + 1}`; // Example user ID, adjust as needed
 			thumbnail.addEventListener('click', () => {
-				expandedImageContainer.style.display = 'flex';
-				prevButton.style.display = 'block';
-				nextButton.style.display = 'block';
 				showExpandedImage(index);
 			});
-			thumbnailGrid.appendChild(thumbnail);
+			thumbnailContainer.appendChild(thumbnail);
+			thumbnailGrid.appendChild(thumbnailContainer);
 		});
 
 		document.body.appendChild(overlay);
+
+		// Hide navigation buttons initially
+		const prevButton = mainView.querySelector('.navigation-button.prev');
+		const nextButton = mainView.querySelector('.navigation-button.next');
+		const closeButton = galleryModal.querySelector(`.${CLASS_NAMES.GALLERY_CLOSE_BUTTON}`);
+		const downloadButton = galleryModal.querySelector(`.${CLASS_NAMES.DOWNLOAD_BUTTON}`);
+		if (prevButton && nextButton) {
+			prevButton.style.display = 'none';
+			nextButton.style.display = 'none';
+			closeButton.style.display = 'none';
+			downloadButton.style.display = 'none';
+			thumbnailStrip.style.display = 'none';
+			pageNumber.style.display = 'none';
+			userId.style.display = 'none';
+		}
+
 		// Navigation button event listeners
 		prevButton.addEventListener('click', () => {
 			if (currentIndex > 0) {
@@ -914,7 +1105,11 @@
 			}
 		}
 	};
-
+	const handleSettingsKey = (event) => {
+		if (state.settingsOpen && event.key === 'Escape') {
+			state.settingsOpen = false;
+		}
+	}
 	const clickAllImageButtons = (action) => {
 		const fileDivs = document.querySelectorAll(SELECTORS.FILE_DIVS);
 		const parentDiv = fileDivs[0]?.parentNode;
@@ -1048,7 +1243,9 @@
 
 	const downloadImageByIndex = (index) => {
 		const downloadFunction = typeof GM_download !== 'undefined' ? GM_download : GM.download;
-		const imgLink = document.querySelectorAll(SELECTORS.IMAGE_LINK)[index];
+		const mediaSrc = state.fullSizeImageSrcs[index];
+		const isVideo = mediaSrc.toLowerCase().endsWith('.mp4');
+		const imgLink = document.querySelectorAll(isVideo ? SELECTORS.VIDEO_LINK : SELECTORS.IMAGE_LINK)[index];
 
 		if (imgLink) {
 			const imgSrc = imgLink.href.split('?')[0];
@@ -1128,7 +1325,9 @@
 		}
 
 		if (!elements.settingsButton) {
-			elements.settingsButton = createToggleButton(BUTTONS.SETTINGS, showSettings);
+			elements.settingsButton = createToggleButton(BUTTONS.SETTINGS, () => {
+				state.settingsOpen = !state.settingsOpen;
+			});
 			elements.settingsButton.className = CLASS_NAMES.SETTINGS_BUTTON;
 			document.body.appendChild(elements.settingsButton);
 		}
@@ -1329,7 +1528,19 @@
 	};
 
 	// --- Notification System ---
+	const createNotificationArea = () => {
+		const notificationArea = document.createElement('div');
+		notificationArea.id = CLASS_NAMES.NOTIFICATION_AREA;
+		notificationArea.classList.add(CLASS_NAMES.NOTIFICATION_AREA);
+		document.body.appendChild(notificationArea);
+		return notificationArea;
+	};
 	const createNotification = () => {
+		let notificationArea = document.getElementById(CLASS_NAMES.NOTIFICATION_AREA);
+		if (!notificationArea) {
+			notificationArea = createNotificationArea();
+		}
+
 		const notificationContainer = document.createElement('div');
 		notificationContainer.id = CLASS_NAMES.NOTIFICATION_CONTAINER;
 		notificationContainer.classList.add(CLASS_NAMES.NOTIFICATION_CONTAINER);
@@ -1353,19 +1564,25 @@
 		reportButton.target = '_blank';
 		notificationContainer.appendChild(reportButton);
 
-		document.body.appendChild(notificationContainer);
+		notificationArea.appendChild(notificationContainer);
 		return notificationContainer;
 	};
 
 	const showNotification = (message, type = 'info') => {
 		if (!state.notificationsEnabled && type !== 'error') return;
+		let notificationArea = document.getElementById(CLASS_NAMES.NOTIFICATION_AREA);
 
-		let notificationContainer = document.getElementById(CLASS_NAMES.NOTIFICATION_CONTAINER);
+		if (!notificationArea) {
+			notificationArea = createNotificationArea();
+		}
+		let notificationContainer = notificationArea.querySelector(`.${CLASS_NAMES.NOTIFICATION_CONTAINER}`);
 		if (!notificationContainer) {
 			notificationContainer = createNotification();
 		}
-
-		const notificationText = document.getElementById(CLASS_NAMES.NOTIFICATION_TEXT);
+		if (notificationArea) {
+			notificationArea.style.display = state.notificationAreaVisible ? 'flex' : 'none';
+		}
+		const notificationText = notificationContainer.querySelector(`#${CLASS_NAMES.NOTIFICATION_TEXT}`);
 		notificationText.textContent = message;
 
 		notificationContainer.classList.remove('info', 'success', 'error');
@@ -1450,7 +1667,7 @@
 			state.galleryReady = false;
 			state.loadedImages = 0;
 			state.hasImages = false;
-			state.totalImages = currentTotalImages; // Update totalImages on a new post page
+			state.totalImages = currentTotalImages; // Update totalImages on 
 			// check for the presence of images or videos, create status container only if the page has them.
 			const hasMediaContent =
 				document.querySelectorAll(SELECTORS.IMAGE_LINK).length > 0 || document.querySelectorAll(SELECTORS.VIDEO_LINK).length > 0;
@@ -1473,8 +1690,6 @@
 			initPostActions();
 			state.currentPostUrl = currentPageUrl;
 			previousPageUrl = currentPageUrl;
-
-
 		} else if (currentPageUrl !== state.currentPostUrl) {
 			cleanupPostActions();
 			state.totalImages = currentTotalImages; // Update totalImages on URL change
@@ -1520,7 +1735,11 @@
 	const init = () => {
 		if (!galleryKeyListenerAttached) {
 			window.addEventListener('keydown', handleGalleryKey);
+			window.addEventListener('keydown', handleSettingsKey);
 			galleryKeyListenerAttached = true;
+		}
+		if (!document.getElementById(CLASS_NAMES.NOTIFICATION_AREA) && state.notificationAreaVisible) {
+			createNotificationArea();
 		}
 		const targetNode = document.body;
 		const config = {
@@ -1531,7 +1750,6 @@
 		const observer = new MutationObserver(injectUI);
 
 		observer.observe(targetNode, config);
-
 
 		if (isPostPage()) {
 			if (state.loadedImages === state.totalImages && state.totalImages > 0) {
@@ -1549,7 +1767,6 @@
 		}
 		elements.galleryThumbnailsInitialized = false;
 	};
-
 
 	init();
 })();
