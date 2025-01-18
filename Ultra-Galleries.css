@@ -2,7 +2,6 @@
 
 /* --- CSS Variables --- */
 :root {
-	--ug-main-bg-color: rgba(0, 0, 0, 0.8);
     --ug-main-bg-color: rgba(0, 0, 0, 0.8);
     --ug-overlay-bg-color: rgba(255, 255, 255, 0.1);
     --ug-border-color: rgba(255, 255, 255, 0.3);
@@ -11,16 +10,12 @@
     --ug-button-hover-opacity: 1;
     --ug-transition-duration: 0.3s;
     --ug-transition-ease: ease;
-	--ug-notification-info: rgba(0, 0, 0, 0.8);
-	--ug-notification-success: rgba(40, 167, 69, 0.8);
-	--ug-notification-error: rgba(220, 53, 69, 0.8);
     --ug-notification-info: rgba(0, 0, 0, 0.8);
     --ug-notification-success: rgba(40, 167, 69, 0.8);
     --ug-notification-error: rgba(220, 53, 69, 0.8);
     --ug-settings-bg-color: #222;
     --ug-settings-input-bg-color: #333;
     --ug-settings-input-border-color: #555;
-	--ug-settings-text-color: #eee;
     --ug-settings-text-color: #eee;
 }
 
