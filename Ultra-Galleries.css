@@ -3,6 +3,7 @@
 /* --- CSS Variables --- */
 :root {
 	--ug-main-bg-color: rgba(0, 0, 0, 0.8);
+    --ug-main-bg-color: rgba(0, 0, 0, 0.8);
     --ug-overlay-bg-color: rgba(255, 255, 255, 0.1);
     --ug-border-color: rgba(255, 255, 255, 0.3);
     --ug-text-color: white;
@@ -13,10 +14,14 @@
 	--ug-notification-info: rgba(0, 0, 0, 0.8);
 	--ug-notification-success: rgba(40, 167, 69, 0.8);
 	--ug-notification-error: rgba(220, 53, 69, 0.8);
+    --ug-notification-info: rgba(0, 0, 0, 0.8);
+    --ug-notification-success: rgba(40, 167, 69, 0.8);
+    --ug-notification-error: rgba(220, 53, 69, 0.8);
     --ug-settings-bg-color: #222;
     --ug-settings-input-bg-color: #333;
     --ug-settings-input-border-color: #555;
 	--ug-settings-text-color: #eee;
+    --ug-settings-text-color: #eee;
 }
 
 /* --- Gallery Overlay --- */
@@ -33,27 +38,19 @@
     align-items: center;
     justify-content: center;
     overflow: hidden;
-	opacity: 0;
-	pointer-events: none;
-	transition: opacity 0.3s ease;
-}
-
-.ug-gallery-overlay.expanded {
-	opacity: 1;
-	pointer-events: auto;
 }
 
 .ug-gallery-modal {
-    width: 98%;
-    height: 98%;
+    width: 95vw;
+    max-width: 1000px; /* Increased max width */
+    height: 90vh;
     background-color: var(--ug-overlay-bg-color);
-    border-radius: 8px;
+    border-radius: 10px;
     box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
     border: 1px solid var(--ug-border-color);
     display: flex;
-	flex-direction: column;
+    flex-direction: column;
     position: relative;
-	overflow: hidden;
 }
 
 .ug-gallery-modal .gallery-close-button {
@@ -68,20 +65,33 @@
     z-index: 10;
 }
 
-.ug-gallery-expanded-container {
-	display: flex;
-	flex: 1;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	position: relative;
+.ug-gallery-modal .ug-download-button {
+    position: absolute;
+    top: 15px;
+    right: 60px;
+    font-size: 30px;
+    background: none;
+    border: none;
+    color: var(--ug-text-color);
+    cursor: pointer;
+    z-index: 10;
 }
+
+.ug-gallery-expanded-container {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
 .ug-gallery-expanded-media {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	max-width: 95vw;
-    max-height: 85vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+     max-width: 95vw;
+     max-height: calc(100vh - 70px); /* Height will be determined by aspect-ratio */
 }
 
 .ug-gallery-expanded-media-item {
@@ -93,9 +103,9 @@
 /* --- Navigation Buttons --- */
 .navigation-button {
     position: absolute;
-    top: 50%;
-    font-size: 30px;
-    background: rgba(0, 0, 0, 0.5);
+    top: 40%;
+    font-size: 25px;
+    background: none;
     color: var(--ug-text-color);
     border: none;
     border-radius: 50%;
@@ -107,8 +117,8 @@
     cursor: pointer;
     opacity: 0.7;
     transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
-    z-index: 12;
-	display: none;
+    z-index: 10;
+    display: block;
 }
 
 .navigation-button:hover {
@@ -128,30 +138,38 @@
 /* --- Page Number --- */
 .page-number {
     position: absolute;
-    bottom: 15px;
+    bottom: 5px;
     left: 50%;
     transform: translateX(-50%);
     color: var(--ug-text-color);
     font-size: 20px;
-	display: none;
 }
 
 /* --- Thumbnail Grid --- */
-.ug-gallery-thumbnail-grid {
+.thumbnail-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    grid-gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    grid-gap: 5px;
     padding: 10px;
     overflow-y: auto;
-	flex: 1;
+    margin-top: 70px;
+    margin-bottom: 70px;
+}
+
+.ug-gallery-thumbnail-container {
+    overflow: hidden;
+    border-radius: 5px;
+    display: flex;
+    justify-content: center;
 }
 
 .ug-gallery-thumbnail {
-    width: 100%;
-    height: 100px;
+    width: auto;
+     height: 60px;
     object-fit: cover;
+    object-position: center;
     cursor: pointer;
-    transition: transform var(--ug-transition-duration) var(--ug-transition-ease);
+    transition: object-position var(--ug-transition-duration) var(--ug-transition-ease);
 }
 
 .ug-gallery-thumbnail:hover {
@@ -178,7 +196,6 @@
 }
 
 /* --- SweetAlert Overrides --- */
-/* (These are general overrides for SweetAlert. Keep them minimal) */
 .swal2-popup {
     background: var(--ug-settings-bg-color) !important;
     color: var(--ug-settings-text-color) !important;
@@ -188,7 +205,8 @@
 }
 
 .swal2-content {
-    padding: 0 !important; /* Remove padding */
+    padding: 0 !important;
+    /* Remove padding */
 }
 
 .swal2-input {
@@ -285,32 +303,32 @@
 
 /* --- Notification Area --- */
 .ug-notification-area {
-	position: fixed;
-	bottom: 0;
-	left: 0;
-	width: 100%;
-	display: flex;
-	justify-content: center;
-	z-index: 1000;
-	pointer-events: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    z-index: 1000;
+    pointer-events: none;
 }
 
 .ug-notification-container {
-	position: relative;
-	transform: none;
-	left: auto;
-	bottom: auto;
-	background-color: var(--ug-notification-info);
-	margin-bottom: 10px;
-	color: var(--ug-text-color);
-	padding: 12px 25px;
-	border-radius: 5px;
-	display: none;
-	align-items: center;
-	box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.5);
-	font-family: sans-serif;
-	font-size: 18px;
-	pointer-events: auto;
+    position: relative;
+    transform: none;
+    left: auto;
+    bottom: auto;
+    background-color: var(--ug-notification-info);
+    margin-bottom: 10px;
+    color: var(--ug-text-color);
+    padding: 12px 25px;
+    border-radius: 5px;
+    display: none;
+    align-items: center;
+    box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.5);
+    font-family: sans-serif;
+    font-size: 18px;
+    pointer-events: auto;
 }
 
 .ug-notification-container.info {
@@ -386,55 +404,22 @@
     }
 }
 
-/* --- Thumbnail Grid Adjustments --- */
-.ug-gallery-thumbnail-grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); /* Adjust minmax as needed */
-}
-
-.ug-gallery-thumbnail-container {
-    aspect-ratio: 1 / 0.5; /* Adjust this ratio for desired cropping */
-    overflow: hidden;
-    border-radius: 5px;
-	display: flex;
-}
-
-.ug-gallery-thumbnail {
-    width: 100%;
-    height: auto; /* Height will be determined by aspect-ratio */
-    object-fit: cover;
-    object-position: center;
-    cursor: pointer;
-    transition: object-position var(--ug-transition-duration) var(--ug-transition-ease);
-}
-
-.ug-gallery-thumbnail:hover {
-    object-position: bottom; /* Reveal top on hover */
-}
-
-/* --- Modal Adjustments --- */
-.ug-gallery-modal {
-    width: 95vw; /* Adjust as needed */
-    max-width: 900px; /* Adjust as needed */
-    height: 90vh; /* Adjust as needed */
-    border-radius: 10px;
-}
-
-.ug-gallery-expanded-media {
-    max-width: 100%;
-    max-height: calc(90vh - 70px - 20px); /* Adjust based on thumbnail strip height and padding */
-}
-
 /* --- Thumbnail Strip --- */
-.ug-gallery-thumbnail-strip {
+.thumbnail-strip {
     display: flex;
     justify-content: center;
     padding: 10px;
-    height: 70px; /* Adjust as needed */
+    position: absolute;
+     top: 0;
+    left: 0;
+    width: 100%;
+    height: 70px;
+    /* Adjust as needed */
 }
 
-.ug-gallery-thumbnail-strip .ug-gallery-thumbnail {
+.thumbnail-strip .ug-gallery-thumbnail {
     width: auto;
-    height: 100%;
+     height: 100%;
     margin: 0 5px;
     border-radius: 5px;
     object-fit: cover;
@@ -443,11 +428,11 @@
     transition: transform var(--ug-transition-duration) var(--ug-transition-ease);
 }
 
-.ug-gallery-thumbnail-strip .ug-gallery-thumbnail:hover {
+.thumbnail-strip .ug-gallery-thumbnail:hover {
     transform: scale(1.1);
 }
 
-.ug-gallery-thumbnail-strip .ug-gallery-thumbnail.active {
+.thumbnail-strip .ug-gallery-thumbnail.active {
     border: 2px solid var(--ug-text-color);
 }
 
@@ -459,24 +444,23 @@
     color: var(--ug-text-color);
     font-size: 16px;
     z-index: 10;
-	display: none;
 }
 
 /* --- Media Queries --- */
 @media (max-width: 800px) {
-    .ug-gallery-thumbnail-grid {
-        grid-template-columns: repeat(3, 1fr);
+    .thumbnail-grid {
+        grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
     }
 }
 
 @media (max-width: 600px) {
-    .ug-gallery-thumbnail-grid {
-        grid-template-columns: repeat(2, 1fr);
+    .thumbnail-grid {
+      grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
     }
 }
 
 @media (max-width: 400px) {
-    .ug-gallery-thumbnail-grid {
-        grid-template-columns: 1fr;
+    .thumbnail-grid {
+      grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
     }
 }

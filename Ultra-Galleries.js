@@ -730,10 +730,10 @@
 		const overlay = document.createElement('div');
 		overlay.id = 'gallery-overlay';
 		overlay.classList.add('ug-gallery-overlay');
-
+	
 		const galleryModal = document.createElement('div');
 		galleryModal.classList.add('ug-gallery-modal');
-
+	
 		const closeButton = document.createElement('button');
 		closeButton.textContent = '×';
 		closeButton.className = CLASS_NAMES.GALLERY_CLOSE_BUTTON;
@@ -746,43 +746,44 @@
 		downloadButton.addEventListener('click', () => {
 			downloadImageByIndex(state.currentGalleryIndex);
 		});
-
+	
 		const mainView = document.createElement('div');
 		mainView.classList.add(CLASS_NAMES.GALLERY_MAIN_VIEW);
 		mainView.addEventListener('click', () => {
 			state.controlsVisible = !state.controlsVisible;
 			updateControlVisibility();
 		})
-
+	
 		const expandedImageContainer = document.createElement('div');
 		expandedImageContainer.classList.add('ug-gallery-expanded-container');
-
+	
 		const expandedMedia = document.createElement('div'); // Container for either img or video
 		expandedMedia.classList.add('ug-gallery-expanded-media');
-
+	
 		const prevButton = createNavigationButton('prev');
 		const nextButton = createNavigationButton('next');
-
+	
 		const pageNumber = document.createElement('div');
 		pageNumber.className = CLASS_NAMES.PAGE_NUMBER;
-
+	
 		const thumbnailGrid = document.createElement('div');
 		thumbnailGrid.classList.add(CLASS_NAMES.THUMBNAIL_GRID);
-
-		mainView.append(expandedImageContainer, prevButton, nextButton);
+	
+		mainView.append(expandedImageContainer);
+		 galleryModal.append(closeButton, downloadButton, mainView, thumbnailGrid);
 		expandedImageContainer.append(expandedMedia, pageNumber);
-		galleryModal.append(closeButton, downloadButton, mainView, thumbnailGrid);
-
+		  galleryModal.append( prevButton, nextButton);
+	
 		const thumbnailStrip = document.createElement('div');
 		thumbnailStrip.classList.add(CLASS_NAMES.THUMBNAIL_STRIP);
 		galleryModal.appendChild(thumbnailStrip);
-
+	
 		const userId = document.createElement('div');
 		userId.classList.add('ug-gallery-user-id');
 		expandedImageContainer.appendChild(userId);
-
+	
 		overlay.appendChild(galleryModal);
-
+	
 		return overlay;
 	};
 
@@ -792,64 +793,119 @@
 		button.className = `${CLASS_NAMES.NAVIGATION_BUTTON} ${direction}`;
 		return button;
 	};
+
 	const updateControlVisibility = () => {
 		const galleryOverlay = document.getElementById('gallery-overlay');
 		if (!galleryOverlay) return;
 		const mainView = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_MAIN_VIEW}`);
-		const prevButton = mainView.querySelector('.navigation-button.prev');
-		const nextButton = mainView.querySelector('.navigation-button.next');
+		const prevButton = mainView?.querySelector('.navigation-button.prev');
+		const nextButton = mainView?.querySelector('.navigation-button.next');
 		const closeButton = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_CLOSE_BUTTON}`);
 		const downloadButton = galleryOverlay.querySelector(`.${CLASS_NAMES.DOWNLOAD_BUTTON}`);
 		const thumbnailStrip = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_STRIP}`);
 		const pageNumber = galleryOverlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
 		const userId = galleryOverlay.querySelector(`.ug-gallery-user-id`);
-
+	
 		if (state.controlsVisible) {
-			prevButton.classList.add(CLASS_NAMES.FADE_IN);
-			prevButton.classList.remove(CLASS_NAMES.FADE_OUT);
-			nextButton.classList.add(CLASS_NAMES.FADE_IN);
-			nextButton.classList.remove(CLASS_NAMES.FADE_OUT);
-			closeButton.classList.add(CLASS_NAMES.FADE_IN);
-			closeButton.classList.remove(CLASS_NAMES.FADE_OUT);
-			downloadButton.classList.add(CLASS_NAMES.FADE_IN);
-			downloadButton.classList.remove(CLASS_NAMES.FADE_OUT);
-			thumbnailStrip.classList.add(CLASS_NAMES.FADE_IN);
-			thumbnailStrip.classList.remove(CLASS_NAMES.FADE_OUT);
-			pageNumber.classList.add(CLASS_NAMES.FADE_IN);
-			pageNumber.classList.remove(CLASS_NAMES.FADE_OUT);
-			userId.classList.add(CLASS_NAMES.FADE_IN);
-			userId.classList.remove(CLASS_NAMES.FADE_OUT);
-			prevButton.style.display = 'flex';
-			nextButton.style.display = 'flex';
-			closeButton.style.display = 'block';
-			downloadButton.style.display = 'block';
-			thumbnailStrip.style.display = 'flex';
-			pageNumber.style.display = 'block';
-			userId.style.display = 'block';
+		   if(prevButton)
+		   {
+			 prevButton.classList.add(CLASS_NAMES.FADE_IN);
+			  prevButton.classList.remove(CLASS_NAMES.FADE_OUT);
+			  prevButton.style.display = 'flex';
+		   }
+			if(nextButton)
+		   {
+			 nextButton.classList.add(CLASS_NAMES.FADE_IN);
+			 nextButton.classList.remove(CLASS_NAMES.FADE_OUT);
+			  nextButton.style.display = 'flex';
+		   }
+			if(closeButton)
+			{
+				closeButton.classList.add(CLASS_NAMES.FADE_IN);
+				closeButton.classList.remove(CLASS_NAMES.FADE_OUT);
+				closeButton.style.display = 'block';
+			}
+			 if(downloadButton)
+			 {
+				downloadButton.classList.add(CLASS_NAMES.FADE_IN);
+				downloadButton.classList.remove(CLASS_NAMES.FADE_OUT);
+				downloadButton.style.display = 'block';
+			 }
+			if(thumbnailStrip)
+			{
+				 thumbnailStrip.classList.add(CLASS_NAMES.FADE_IN);
+				thumbnailStrip.classList.remove(CLASS_NAMES.FADE_OUT);
+				 thumbnailStrip.style.display = 'flex';
+			}
+			if(pageNumber)
+			{
+				pageNumber.classList.add(CLASS_NAMES.FADE_IN);
+				pageNumber.classList.remove(CLASS_NAMES.FADE_OUT);
+				pageNumber.style.display = 'block';
+			}
+			if(userId)
+			{
+				 userId.classList.add(CLASS_NAMES.FADE_IN);
+				userId.classList.remove(CLASS_NAMES.FADE_OUT);
+				userId.style.display = 'block';
+			}
 		} else {
-			prevButton.classList.add(CLASS_NAMES.FADE_OUT);
-			prevButton.classList.remove(CLASS_NAMES.FADE_IN);
-			nextButton.classList.add(CLASS_NAMES.FADE_OUT);
-			nextButton.classList.remove(CLASS_NAMES.FADE_IN);
-			closeButton.classList.add(CLASS_NAMES.FADE_OUT);
-			closeButton.classList.remove(CLASS_NAMES.FADE_IN);
-			downloadButton.classList.add(CLASS_NAMES.FADE_OUT);
-			downloadButton.classList.remove(CLASS_NAMES.FADE_IN);
-			thumbnailStrip.classList.add(CLASS_NAMES.FADE_OUT);
-			thumbnailStrip.classList.remove(CLASS_NAMES.FADE_IN);
-			pageNumber.classList.add(CLASS_NAMES.FADE_OUT);
-			pageNumber.classList.remove(CLASS_NAMES.FADE_IN);
-			userId.classList.add(CLASS_NAMES.FADE_OUT);
-			userId.classList.remove(CLASS_NAMES.FADE_IN);
-			setTimeout(() => {
-				prevButton.style.display = 'none';
-				nextButton.style.display = 'none';
-				closeButton.style.display = 'none';
-				downloadButton.style.display = 'none';
-				thumbnailStrip.style.display = 'none';
-				pageNumber.style.display = 'none';
-				userId.style.display = 'none';
-			}, 500);
+			if(prevButton)
+			{
+			   prevButton.classList.add(CLASS_NAMES.FADE_OUT);
+			  prevButton.classList.remove(CLASS_NAMES.FADE_IN);
+			 setTimeout(() => {
+				 prevButton.style.display = 'none';
+			 }, 500);
+			}
+			if(nextButton)
+			{
+				 nextButton.classList.add(CLASS_NAMES.FADE_OUT);
+				 nextButton.classList.remove(CLASS_NAMES.FADE_IN);
+				  setTimeout(() => {
+					nextButton.style.display = 'none';
+				}, 500);
+			}
+			if(closeButton)
+			{
+				 closeButton.classList.add(CLASS_NAMES.FADE_OUT);
+			   closeButton.classList.remove(CLASS_NAMES.FADE_IN);
+			   setTimeout(() => {
+				  closeButton.style.display = 'none';
+				}, 500);
+			}
+			 if(downloadButton)
+			 {
+				 downloadButton.classList.add(CLASS_NAMES.FADE_OUT);
+				 downloadButton.classList.remove(CLASS_NAMES.FADE_IN);
+				  setTimeout(() => {
+				   downloadButton.style.display = 'none';
+				}, 500);
+			 }
+			 if(thumbnailStrip)
+			 {
+				 thumbnailStrip.classList.add(CLASS_NAMES.FADE_OUT);
+			   thumbnailStrip.classList.remove(CLASS_NAMES.FADE_IN);
+				setTimeout(() => {
+				  thumbnailStrip.style.display = 'none';
+			   }, 500);
+			 }
+		   if(pageNumber)
+		   {
+				pageNumber.classList.add(CLASS_NAMES.FADE_OUT);
+			   pageNumber.classList.remove(CLASS_NAMES.FADE_IN);
+			   setTimeout(() => {
+				 pageNumber.style.display = 'none';
+			 }, 500);
+		   }
+			if(userId)
+			{
+				 userId.classList.add(CLASS_NAMES.FADE_OUT);
+				userId.classList.remove(CLASS_NAMES.FADE_IN);
+				 setTimeout(() => {
+				   userId.style.display = 'none';
+				}, 500);
+			}
 		}
 	};
 
@@ -873,6 +929,39 @@
 		state.loadingMessage = null;
 	};
 
+	const updateMediaElementSize = (mediaElement, galleryOverlay) => {
+        const expandedMedia = galleryOverlay.querySelector('.ug-gallery-expanded-media');
+
+       if (mediaElement.tagName === 'VIDEO') {
+           mediaElement.style.maxWidth = '95vw';
+           mediaElement.style.maxHeight = 'calc(100vh - 70px)';
+           mediaElement.style.width = 'auto';
+           mediaElement.style.height = 'auto';
+       } else {
+        const availableWidth = window.innerWidth;
+       const availableHeight = window.innerHeight - 70;
+
+          mediaElement.style.maxWidth = availableWidth + 'px';
+           mediaElement.style.maxHeight = availableHeight + 'px';
+            mediaElement.style.width = 'auto';
+           mediaElement.style.height = 'auto';
+       }
+      if (mediaElement.naturalWidth && mediaElement.naturalHeight) {
+             const availableWidth = expandedMedia.offsetWidth;
+            const availableHeight = expandedMedia.offsetHeight;
+            const aspectRatio = mediaElement.naturalWidth / mediaElement.naturalHeight;
+            let newWidth = availableWidth;
+            let newHeight = availableWidth / aspectRatio;
+
+            if (newHeight > availableHeight) {
+                newHeight = availableHeight;
+                newWidth = availableHeight * aspectRatio;
+            }
+            mediaElement.style.width = `${newWidth}px`;
+            mediaElement.style.height = `${newHeight}px`;
+        }
+   };
+
 	const loadAndDisplayMedia = (index) => {
 		if (
 			state.fullSizeImageSrcs.length === 0 ||
@@ -882,27 +971,27 @@
 			console.error('Invalid media index:', index);
 			return;
 		}
-
+	
 		const mediaSrc = state.fullSizeImageSrcs[index];
 		if (!mediaSrc) {
 			console.error('Media source is undefined for index:', index);
 			return;
 		}
-
+	
 		const isVideo = mediaSrc.toLowerCase().endsWith('.mp4');
 		const galleryOverlay = document.getElementById('gallery-overlay');
 		if (!galleryOverlay) return;
 		const expandedMedia = galleryOverlay.querySelector('.ug-gallery-expanded-media');
 		const userId = galleryOverlay.querySelector('.ug-gallery-user-id');
 		let loadingOverlay = galleryOverlay.querySelector(`.${CLASS_NAMES.LOADING_OVERLAY}`);
-
+	
 		if (!loadingOverlay) {
 			loadingOverlay = createLoadingOverlay();
 			expandedMedia.appendChild(loadingOverlay);
 		}
-
+	
 		expandedMedia.innerHTML = '';
-
+	
 		let mediaElement; // Declaring mediaElement here
 		if (isVideo) {
 			mediaElement = document.createElement('video');
@@ -910,16 +999,15 @@
 		} else {
 			mediaElement = new Image();
 		}
-
+	
 		const onMediaLoad = () => {
 			if (expandedMedia.contains(loadingOverlay)) {
 				expandedMedia.removeChild(loadingOverlay);
 			}
 			galleryOverlay.classList.add('expanded');
-
 			mediaElement.classList.add('ug-gallery-expanded-media-item');
 			expandedMedia.appendChild(mediaElement);
-
+	
 			currentIndex = index;
 			state.currentGalleryIndex = index;
 			const pageNumber = galleryOverlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
@@ -927,8 +1015,17 @@
 			userId.textContent = images[index].dataset.userId || "User ID not found";
 			userId.style.display = 'block';
 			state.loadingMessage = null;
+	
+			 // Update media element size after it has loaded
+				updateMediaElementSize(mediaElement, galleryOverlay);
+			
+				// Add resize observer for dynamic resizing
+				const resizeObserver = new ResizeObserver(() => {
+					updateMediaElementSize(mediaElement, galleryOverlay);
+				});
+				resizeObserver.observe(galleryOverlay);
 		};
-
+	
 		const onMediaError = () => {
 			console.error('Failed to load media in expanded view:', mediaSrc);
 			if (expandedMedia.contains(loadingOverlay)) {
@@ -938,12 +1035,12 @@
 			const pageNumber = galleryOverlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
 			pageNumber.textContent = 'Error loading media';
 		};
-
+	
 		if (isVideo) {
 			mediaElement.src = mediaSrc;
 			mediaElement.onloadeddata = onMediaLoad;
 			mediaElement.onerror = onMediaError;
-
+	
 			if (mediaElement.readyState >= 2) {
 				onMediaLoad();
 			}
@@ -978,6 +1075,14 @@
 			thumbnailStrip.appendChild(thumbnailContainer);
 		});
 	};
+
+    const updateThumbnailGrid = () => {
+        const galleryModal = document.querySelector('.ug-gallery-modal');
+        const thumbnailGrid = galleryModal.querySelector(`.${CLASS_NAMES.THUMBNAIL_GRID}`);
+        const modalWidth = galleryModal.offsetWidth;
+        const numColumns = Math.max(2, Math.floor((modalWidth - 20) / 100));
+        thumbnailGrid.style.gridTemplateColumns = `repeat(${numColumns}, 1fr)`;
+    };
 
 	const showExpandedImage = (index) => {
 		state.expandedViewActive = true;
@@ -1031,33 +1136,34 @@
 			const thumbnail = document.createElement('img');
 			thumbnail.src = img.src;
 			thumbnail.className = CLASS_NAMES.THUMBNAIL;
-			thumbnail.dataset.userId = `User: ${index + 1}`; // Example user ID, adjust as needed
+			thumbnail.dataset.userId = `User: ${index + 1}`;
 			thumbnail.addEventListener('click', () => {
 				showExpandedImage(index);
 			});
 			thumbnailContainer.appendChild(thumbnail);
-			thumbnailGrid.appendChild(thumbnailContainer);
+				thumbnailGrid.appendChild(thumbnailContainer);
 		});
 
 		document.body.appendChild(overlay);
-
-		// Hide navigation buttons initially
-		const prevButton = mainView.querySelector('.navigation-button.prev');
-		const nextButton = mainView.querySelector('.navigation-button.next');
-		const closeButton = galleryModal.querySelector(`.${CLASS_NAMES.GALLERY_CLOSE_BUTTON}`);
-		const downloadButton = galleryModal.querySelector(`.${CLASS_NAMES.DOWNLOAD_BUTTON}`);
+		// Show navigation buttons initially
+		const prevButton = mainView?.querySelector('.navigation-button.prev');
+		const nextButton = mainView?.querySelector('.navigation-button.next');
+		const closeButton = galleryModal?.querySelector(`.${CLASS_NAMES.GALLERY_CLOSE_BUTTON}`);
+		const downloadButton = galleryModal?.querySelector(`.${CLASS_NAMES.DOWNLOAD_BUTTON}`);
 		if (prevButton && nextButton) {
-			prevButton.style.display = 'none';
-			nextButton.style.display = 'none';
-			closeButton.style.display = 'none';
-			downloadButton.style.display = 'none';
-			thumbnailStrip.style.display = 'none';
-			pageNumber.style.display = 'none';
-			userId.style.display = 'none';
+			prevButton.style.display = 'flex';
+			nextButton.style.display = 'flex';
+			if (closeButton) closeButton.style.display = 'block';
+			if (downloadButton) downloadButton.style.display = 'block';
+			if (thumbnailStrip) thumbnailStrip.style.display = 'block';
+			if(pageNumber) pageNumber.style.display = 'block';
+			if (userId) userId.style.display = 'block';
 		}
 
 		// Navigation button event listeners
-		prevButton.addEventListener('click', () => {
+		if(prevButton && nextButton)
+		{
+			prevButton.addEventListener('click', () => {
 			if (currentIndex > 0) {
 				showExpandedImage(currentIndex - 1);
 			} else {
@@ -1072,8 +1178,15 @@
 				showExpandedImage(0);
 			}
 		});
-	};
+		}
 
+		// Add resize observer for dynamic resizing
+		const resizeObserver = new ResizeObserver(() => {
+			updateThumbnailGrid();
+		});
+		resizeObserver.observe(galleryModal);
+	};
+	 
 	const closeGallery = () => {
 		const overlay = document.getElementById('gallery-overlay');
 		if (overlay) {
