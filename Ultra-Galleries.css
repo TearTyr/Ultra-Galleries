@@ -9,7 +9,7 @@
     --ug-button-bg-color: #333;
     --ug-button-hover-opacity: 1;
     --ug-transition-duration: 0.3s;
-    --ug-transition-ease: ease;
+    --ug-transition-ease: ease-in-out;
     --ug-notification-info: rgba(0, 0, 0, 0.8);
     --ug-notification-success: rgba(40, 167, 69, 0.8);
     --ug-notification-error: rgba(220, 53, 69, 0.8);
@@ -32,12 +32,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
+    overflow: auto;
 }
 
 .ug-gallery-modal {
     width: 95vw;
-    max-width: 1000px; /* Increased max width */
+    max-width: 1000px; 
     height: 90vh;
     background-color: var(--ug-overlay-bg-color);
     border-radius: 10px;
@@ -48,96 +48,108 @@
     position: relative;
 }
 
-.ug-gallery-modal .gallery-close-button {
-    position: absolute;
-    top: 15px;
-    right: 15px;
-    font-size: 30px;
-    background: none;
-    border: none;
-    color: var(--ug-text-color);
-    cursor: pointer;
-    z-index: 10;
-}
-
+/* --- Buttons --- */
+.ug-gallery-modal .gallery-close-button,
 .ug-gallery-modal .ug-download-button {
     position: absolute;
     top: 15px;
-    right: 60px;
     font-size: 30px;
     background: none;
     border: none;
     color: var(--ug-text-color);
     cursor: pointer;
     z-index: 10;
+    opacity: 0.7;
+    transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
 }
 
+.ug-gallery-modal .gallery-close-button {
+    right: 15px;
+}
+
+.ug-gallery-modal .ug-download-button {
+    right: 60px;
+}
+
+/* Hover effect for buttons */
+.ug-gallery-modal .gallery-close-button:hover,
+.ug-gallery-modal .ug-download-button:hover {
+    opacity: 1;
+}
+
+/* --- Expanded Media Container --- */
 .ug-gallery-expanded-container {
     display: flex;
-    flex: 1;
     flex-direction: column;
+    flex: 1;
     align-items: center;
     justify-content: center;
     position: relative;
+    overflow: hidden;
 }
 
+/* --- Expanded Media --- */
 .ug-gallery-expanded-media {
     display: flex;
     align-items: center;
     justify-content: center;
-     max-width: 95vw;
-     max-height: calc(100vh - 70px); /* Height will be determined by aspect-ratio */
+    max-width: 100%;
+    max-height: 100%;
+    overflow: hidden;
 }
 
 .ug-gallery-expanded-media-item {
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
+    transition: transform var(--ug-transition-duration) var(--ug-transition-ease);
 }
 
 /* --- Navigation Buttons --- */
 .navigation-button {
     position: absolute;
-    top: 40%;
+    top: 50%;
     font-size: 25px;
     background: none;
     color: var(--ug-text-color);
     border: none;
     border-radius: 50%;
-    width: 50px;
-    height: 50px;
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     opacity: 0.7;
-    transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
+    transition: opacity var(--ug-transition-duration) var(--ug-transition-ease), transform var(--ug-transition-duration) var(--ug-transition-ease); 
     z-index: 10;
-    display: block;
 }
 
 .navigation-button:hover {
-    opacity: var(--ug-button-hover-opacity);
+    opacity: 1;
+    transform: translateY(-50%) scale(1.1);
 }
 
 .navigation-button.prev {
-    left: 15px;
-    transform: translateY(-50%);
+    left: 10px; 
 }
 
 .navigation-button.next {
-    right: 15px;
-    transform: translateY(-50%);
+    right: 10px; 
 }
 
 /* --- Page Number --- */
 .page-number {
     position: absolute;
-    bottom: 5px;
+    bottom: 10px;
     left: 50%;
     transform: translateX(-50%);
     color: var(--ug-text-color);
-    font-size: 20px;
+    font-size: 18px; 
+    z-index: 10;
+    padding: 5px 10px;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-radius: 5px;
 }
 
 /* --- Thumbnail Grid --- */
@@ -147,8 +159,9 @@
     grid-gap: 5px;
     padding: 10px;
     overflow-y: auto;
-    margin-top: 70px;
-    margin-bottom: 70px;
+    margin-top: 5px; 
+    margin-bottom: 5px; 
+    max-height: 30vh; 
 }
 
 .ug-gallery-thumbnail-container {
@@ -156,19 +169,21 @@
     border-radius: 5px;
     display: flex;
     justify-content: center;
+    align-items: center;
+    height: 100px;
 }
 
 .ug-gallery-thumbnail {
     width: auto;
-     height: 60px;
+    height: 100%; 
     object-fit: cover;
     object-position: center;
     cursor: pointer;
-    transition: object-position var(--ug-transition-duration) var(--ug-transition-ease);
+    transition: transform var(--ug-transition-duration) var(--ug-transition-ease);
 }
 
 .ug-gallery-thumbnail:hover {
-    transform: scale(1.05);
+    transform: scale(1.1);
 }
 
 /* --- Settings Button --- */
@@ -201,7 +216,6 @@
 
 .swal2-content {
     padding: 0 !important;
-    /* Remove padding */
 }
 
 .swal2-input {
@@ -405,7 +419,7 @@
     justify-content: center;
     padding: 10px;
     position: absolute;
-     top: 0;
+    top: 0;
     left: 0;
     width: 100%;
     height: 70px;
@@ -414,7 +428,7 @@
 
 .thumbnail-strip .ug-gallery-thumbnail {
     width: auto;
-     height: 100%;
+    height: 100%;
     margin: 0 5px;
     border-radius: 5px;
     object-fit: cover;
@@ -450,12 +464,41 @@
 
 @media (max-width: 600px) {
     .thumbnail-grid {
-      grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+    }
+
+    /* Adjust modal for smaller screens */
+    .ug-gallery-modal {
+        width: 100vw;
+        height: 100vh;
+        border-radius: 0; /* Remove border radius on small screens */
+    }
+
+    /* Adjust buttons for smaller screens */
+    .ug-gallery-modal .gallery-close-button,
+    .ug-gallery-modal .ug-download-button {
+        font-size: 24px; /* Smaller font size */
+        top: 10px;
+    }
+
+    .ug-gallery-modal .ug-download-button {
+        right: 50px;
     }
 }
 
 @media (max-width: 400px) {
     .thumbnail-grid {
-      grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
     }
+}
+
+/* --- Fade Animation Classes --- */
+.fade-in {
+    opacity: 1;
+    transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
+}
+
+.fade-out {
+    opacity: 0;
+    transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
 }

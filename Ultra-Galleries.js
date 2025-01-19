@@ -930,37 +930,43 @@
 	};
 
 	const updateMediaElementSize = (mediaElement, galleryOverlay) => {
-        const expandedMedia = galleryOverlay.querySelector('.ug-gallery-expanded-media');
+		const expandedMedia = galleryOverlay.querySelector('.ug-gallery-expanded-media');
+		if (!expandedMedia || !mediaElement) {
+			return;
+		}
 
-       if (mediaElement.tagName === 'VIDEO') {
-           mediaElement.style.maxWidth = '95vw';
-           mediaElement.style.maxHeight = 'calc(100vh - 70px)';
-           mediaElement.style.width = 'auto';
-           mediaElement.style.height = 'auto';
-       } else {
-        const availableWidth = window.innerWidth;
-       const availableHeight = window.innerHeight - 70;
+		// Set initial styles to make the container as big as possible
+		mediaElement.style.maxWidth = '100%';
+		mediaElement.style.maxHeight = '100%';
+		mediaElement.style.width = 'auto';
+		mediaElement.style.height = 'auto';
 
-          mediaElement.style.maxWidth = availableWidth + 'px';
-           mediaElement.style.maxHeight = availableHeight + 'px';
-            mediaElement.style.width = 'auto';
-           mediaElement.style.height = 'auto';
-       }
-      if (mediaElement.naturalWidth && mediaElement.naturalHeight) {
-             const availableWidth = expandedMedia.offsetWidth;
-            const availableHeight = expandedMedia.offsetHeight;
-            const aspectRatio = mediaElement.naturalWidth / mediaElement.naturalHeight;
-            let newWidth = availableWidth;
-            let newHeight = availableWidth / aspectRatio;
+		// Determine if it is a video element
+		const isVideo = mediaElement.tagName === 'VIDEO';
 
-            if (newHeight > availableHeight) {
-                newHeight = availableHeight;
-                newWidth = availableHeight * aspectRatio;
-            }
-            mediaElement.style.width = `${newWidth}px`;
-            mediaElement.style.height = `${newHeight}px`;
-        }
-   };
+		// Use natural dimensions for images, video dimensions for videos
+		const naturalWidth = isVideo ? mediaElement.videoWidth : mediaElement.naturalWidth;
+		const naturalHeight = isVideo ? mediaElement.videoHeight : mediaElement.naturalHeight;
+
+		if (naturalWidth && naturalHeight) {
+			const availableWidth = expandedMedia.offsetWidth;
+			const availableHeight = expandedMedia.offsetHeight;
+			const aspectRatio = naturalWidth / naturalHeight;
+			let newWidth = availableWidth;
+			let newHeight = availableWidth / aspectRatio;
+			// Check if the height exceeds the available height
+			if (newHeight > availableHeight) {
+				newHeight = availableHeight;
+				newWidth = availableHeight * aspectRatio;
+			}
+
+			// Apply the new dimensions
+			mediaElement.style.width = `${newWidth}px`;
+			mediaElement.style.height = `${newHeight}px`;
+		} else {
+			console.warn('Could not determine natural dimensions for', mediaElement);
+		}
+	};
 
 	const loadAndDisplayMedia = (index) => {
 		if (
@@ -1115,6 +1121,7 @@
 		updateThumbnailStrip(); // Update thumbnail strip with the new active index
 	};
 
+	// Function: showGallery
 	const showGallery = () => {
 		if (!isPostPage() || !state.galleryReady) return;
 		const overlay = createGalleryOverlay();
@@ -1155,7 +1162,7 @@
 			nextButton.style.display = 'flex';
 			if (closeButton) closeButton.style.display = 'block';
 			if (downloadButton) downloadButton.style.display = 'block';
-			if (thumbnailStrip) thumbnailStrip.style.display = 'block';
+			if (thumbnailStrip) thumbnailStrip.style.display = 'flex'; // Make sure this is flex
 			if(pageNumber) pageNumber.style.display = 'block';
 			if (userId) userId.style.display = 'block';
 		}
