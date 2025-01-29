@@ -17,7 +17,28 @@
     --ug-settings-input-bg-color: #333;
     --ug-settings-input-border-color: #555;
     --ug-settings-text-color: #eee;
+    --ug-settings-ribbon-active-color: #007bff; /* Active ribbon button color */
 }
+
+/* --- General Utility Classes --- */
+.fade-in {
+    animation: fade-in var(--ug-transition-duration) var(--ug-transition-ease) forwards;
+}
+
+.fade-out {
+    animation: fade-out var(--ug-transition-duration) var(--ug-transition-ease) forwards;
+}
+
+@keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes fade-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
 
 /* --- Gallery Overlay --- */
 .ug-gallery-overlay {
@@ -37,7 +58,7 @@
 
 .ug-gallery-modal {
     width: 95vw;
-    max-width: 1000px;
+    max-width: 1000px; /* Increased max width */
     height: 90vh;
     background-color: var(--ug-overlay-bg-color);
     border-radius: 10px;
@@ -85,9 +106,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    max-width: 95vw;
-    max-height: calc(100vh - 70px);
-    /* Height will be determined by aspect-ratio */
+     max-width: 95vw;
+     max-height: calc(100vh - 70px); /* Height will be determined by aspect-ratio */
 }
 
 .ug-gallery-expanded-media-item {
@@ -104,8 +124,7 @@
     background: none;
     color: var(--ug-text-color);
     border: none;
-    border-radius: 10px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    border-radius: 50%;
     width: 50px;
     height: 50px;
     display: flex;
@@ -113,15 +132,13 @@
     justify-content: center;
     cursor: pointer;
     opacity: 0.7;
-    transition: opacity var(--ug-transition-duration) var(--ug-transition-ease), transform var(--ug-transition-duration) var(--ug-transition-ease), box-shadow var(--ug-transition-duration) var(--ug-transition-ease);
+    transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
     z-index: 10;
     display: block;
 }
 
 .navigation-button:hover {
     opacity: var(--ug-button-hover-opacity);
-    transform: translateY(-2px);
-    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
 }
 
 .navigation-button.prev {
@@ -148,39 +165,31 @@
 .thumbnail-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-    grid-gap: 10px;
+    grid-gap: 5px;
     padding: 10px;
     overflow-y: auto;
     margin-top: 70px;
     margin-bottom: 70px;
-    background-color: #f8f8f8;
 }
 
 .ug-gallery-thumbnail-container {
     overflow: hidden;
-    border-radius: 25px;
+    border-radius: 5px;
     display: flex;
     justify-content: center;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-    transition: transform var(--ug-transition-duration) var(--ug-transition-ease), box-shadow var(--ug-transition-duration) var(--ug-transition-ease);
-}
-
-.ug-gallery-thumbnail-container:hover {
-    transform: scale(1.05);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
 }
 
 .ug-gallery-thumbnail {
     width: auto;
-    height: 60px;
+     height: 60px;
     object-fit: cover;
     object-position: center;
     cursor: pointer;
+    transition: object-position var(--ug-transition-duration) var(--ug-transition-ease);
 }
 
-/* --- Active Thumbnail Style --- */
-.thumbnail-strip .ug-gallery-thumbnail.active {
-    border: 3px solid #ff9900;
+.ug-gallery-thumbnail:hover {
+    transform: scale(1.05);
 }
 
 /* --- Settings Button --- */
@@ -191,18 +200,16 @@
     padding: 12px 18px;
     background-color: var(--ug-button-bg-color);
     color: var(--ug-text-color);
-    border-radius: 10px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    border-radius: 5px;
     z-index: 10000;
     opacity: 0.8;
-    transition: opacity var(--ug-transition-duration) var(--ug-transition-ease), transform var(--ug-transition-duration) var(--ug-transition-ease), box-shadow var(--ug-transition-duration) var(--ug-transition-ease);
+    transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
     font-size: 18px;
+    cursor: pointer;
 }
 
 .settings-button:hover {
     opacity: var(--ug-button-hover-opacity);
-    transform: translateY(-2px);
-    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
 }
 
 /* --- SweetAlert Overrides --- */
@@ -216,6 +223,7 @@
 
 .swal2-content {
     padding: 0 !important;
+    /* Remove padding */
 }
 
 .swal2-input {
@@ -226,7 +234,7 @@
 }
 
 /* --- Settings Panel --- */
-#ug-settings-overlay {
+.ug-settings-overlay {
     position: fixed;
     top: 0;
     left: 0;
@@ -241,7 +249,14 @@
     transition: background-color var(--ug-transition-duration) var(--ug-transition-ease), backdrop-filter var(--ug-transition-duration) var(--ug-transition-ease);
 }
 
-#ug-settings-container {
+.ug-settings-overlay.closing {
+    background-color: rgba(0, 0, 0, 0);
+    backdrop-filter: blur(0px);
+    transition: background-color 0.3s ease, backdrop-filter 0.3s ease; /* Ensure transition for closing */
+}
+
+
+.ug-settings-container {
     display: flex;
     width: 95vw;
     max-width: 800px;
@@ -253,30 +268,62 @@
     transform: scale(0.9);
 }
 
-#ug-settings-ribbon {
+.ug-settings-overlay:not(.closing) .ug-settings-container {
+    transform: scale(1); /* Animate open scale */
+}
+.ug-settings-overlay.closing  .ug-settings-container {
+    transform: scale(0.9); /* Animate close scale */
+}
+
+
+.ug-settings-ribbon {
     display: flex;
     flex-direction: column;
     padding: 10px;
     border-right: 1px solid var(--ug-settings-input-border-color);
 }
 
-#ug-settings-close-btn {
+.ug-settings-ribbon-button {
+    padding: 10px 15px;
+    border: none;
+    background: none;
+    color: var(--ug-settings-text-color);
+    cursor: pointer;
+    transition: background-color 0.3s ease, color 0.3s ease;
+    border-bottom: 3px solid transparent;
+    font-size: 1em;
+    text-align: left; /* Align text to the left */
+    display: block; /* Make each button take full width */
+    width: 100%;
+}
+
+.ug-settings-ribbon-button:hover,
+.ug-settings-ribbon-button.active {
+    background-color: #333; /* Slightly darker on hover or active */
+    border-bottom-color: var(--ug-settings-ribbon-active-color);
+}
+
+
+.ug-settings-content {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+.ug-settings-tab-content {
+    padding: 10px 0; /* Add some padding for content within tabs */
+}
+
+
+.ug-settings-close-btn {
     position: absolute;
     top: 15px;
     right: 15px;
     font-size: 2em;
     background: none;
     border: none;
-    border-radius: 10px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     color: var(--ug-settings-text-color);
     cursor: pointer;
-    transition: transform var(--ug-transition-duration) var(--ug-transition-ease), box-shadow var(--ug-transition-duration) var(--ug-transition-ease);
-}
-
-#ug-settings-close-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
 }
 
 .ug-setting {
@@ -310,29 +357,23 @@
     font-size: 0.9em;
 }
 
-/* Updated */
 .swal2-confirm,
-.ug-settings-ribbon-button,
-.ug-settings-save-button {
-    border-radius: 10px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    transition: transform var(--ug-transition-duration) var(--ug-transition-ease), box-shadow var(--ug-transition-duration) var(--ug-transition-ease);
-}
-
-/* Updated */
-.swal2-confirm:hover,
-.ug-settings-ribbon-button:hover,
-.ug-settings-save-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
-}
-
-.swal2-confirm {
+.ug-settings-save-button { /* Apply styles to the save button */
     background-color: #007bff !important;
     font-size: 18px;
+    border-radius: 5px !important;
     border: none !important;
     padding: 10px 20px !important;
+    color: var(--ug-text-color) !important; /* Ensure text color is white */
+    cursor: pointer; /* Make it look clickable */
+    transition: background-color 0.3s ease; /* Smooth hover transition */
 }
+
+.swal2-confirm:hover,
+.ug-settings-save-button:hover {
+    background-color: #0056b3 !important; /* Darken on hover */
+}
+
 
 /* --- Notification Area --- */
 .ug-notification-area {
@@ -406,14 +447,14 @@
 
 /* --- Animations --- */
 .ug-slide-in {
-    animation: slide-in 0.5s ease-in-out forwards;
+    animation: ug-slide-in 0.5s ease-in-out forwards;
 }
 
 .ug-slide-out {
-    animation: slide-out 0.5s ease-in-out forwards;
+    animation: ug-slide-out 0.5s ease-in-out forwards;
 }
 
-@keyframes slide-in {
+@keyframes ug-slide-in {
     from {
         transform: translateY(100%);
         opacity: 0;
@@ -425,7 +466,7 @@
     }
 }
 
-@keyframes slide-out {
+@keyframes ug-slide-out {
     from {
         transform: translateY(0);
         opacity: 1;
@@ -443,7 +484,8 @@
     justify-content: center;
     padding: 10px;
     position: absolute;
-    top: 0;
+    /* top: 0;  <-- Remove this line */
+    bottom: 0; /* <-- Add this line to position at the bottom */
     left: 0;
     width: 100%;
     height: 70px;
@@ -452,7 +494,7 @@
 
 .thumbnail-strip .ug-gallery-thumbnail {
     width: auto;
-    height: 100%;
+     height: 100%;
     margin: 0 5px;
     border-radius: 5px;
     object-fit: cover;
@@ -465,58 +507,35 @@
     transform: scale(1.1);
 }
 
-/* --- User ID in Modal --- */
-.ug-gallery-user-id {
-    position: absolute;
-    bottom: 15px;
-    right: 15px;
-    color: var(--ug-text-color);
-    font-size: 16px;
-    z-index: 10;
+.thumbnail-strip .ug-gallery-thumbnail.active {
+    border: 2px solid var(--ug-text-color);
 }
 
-/* --- Gallery Control Visibility --- */
-.ug-gallery-controls-container.ug-controls-hidden .navigation-button,
-.ug-gallery-controls-container.ug-controls-hidden .gallery-close-button,
-.ug-gallery-controls-container.ug-controls-hidden .ug-download-button,
-.ug-gallery-controls-container.ug-controls-hidden .ug-gallery-thumbnail-strip,
-.ug-gallery-controls-container.ug-controls-hidden .page-number {
-    display: none;
-}
-
-.ug-gallery-controls-container.ug-controls-visible .navigation-button,
-.ug-gallery-controls-container.ug-controls-visible .gallery-close-button,
-.ug-gallery-controls-container.ug-controls-visible .ug-download-button,
-.ug-gallery-controls-container.ug-controls-visible .ug-gallery-thumbnail-strip,
-.ug-gallery-controls-container.ug-controls-visible .page-number {
-    display: flex;
-}
+/* --- Removed User ID in Modal CSS --- */
+/*.ug-gallery-user-id {*/
+/*    position: absolute;*/
+/*    bottom: 15px;*/
+/*    right: 15px;*/
+/*    color: var(--ug-text-color);*/
+/*    font-size: 16px;*/
+/*    z-index: 10;*/
+/*}*/
 
 /* --- Media Queries --- */
 @media (max-width: 800px) {
     .thumbnail-grid {
         grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
     }
-
-
-    .ug-gallery-thumbnail-container {
-        border-radius: 20px;
-    }
 }
 
 @media (max-width: 600px) {
     .thumbnail-grid {
-        grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-    }
-
-
-    .ug-gallery-thumbnail-container {
-        border-radius: 15px;
+      grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
     }
 }
 
 @media (max-width: 400px) {
     .thumbnail-grid {
-        grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
     }
 }
