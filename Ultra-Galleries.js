@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      2.4.3
+// @version      2.4
 // @description  Enhanced gallery experience (SPA-compatible Testing Phase)
-// @author       ntf (original), Meri/TearTyr
+// @author       ntf (original), Meri/TearTyr (maintained and improved)
 // @match        *://kemono.su/*
 // @match        *://coomer.su/*
 // @match        *://nekohouse.su/*
@@ -19,7 +19,7 @@
 // @require      https://cdn.jsdelivr.net/npm/jszip@3.1.4/dist/jszip.min.js
 // @require      https://cdn.jsdelivr.net/npm/file-saver@1.3.2/FileSaver.min.js
 // @require      https://cdn.jsdelivr.net/npm/sweetalert2@11
-// ==/UserScript==
+// ==UserScript==
 
 (function() {
 	'use strict';
@@ -101,11 +101,14 @@
 		FADE_IN: 'fade-in',
 		THUMBNAIL_CROPPED: 'thumbnail-cropped',
 		THUMBNAIL_VISIBLE: 'thumbnail-visible',
+		GALLERY_CONTROLS_CONTAINER: 'ug-gallery-controls-container',
+		CONTROLS_VISIBLE: 'ug-controls-visible',
+		CONTROLS_HIDDEN: 'ug-controls-hidden',
 	};
 
 	const MAX_RETRIES = 3;
 	const RETRY_DELAY = 1500;
-	const IMAGE_BATCH_SIZE = 3; // Number of images to load at a time
+	const IMAGE_BATCH_SIZE = 5;
 	const DEBOUNCE_DELAY = 300;
 
 	// --- Utility Functions ---
@@ -182,6 +185,18 @@
 			container: containerStatus,
 			element: statusElement
 		};
+	};
+
+	// --- Helper function to create button groups (for redundancy reduction) ---
+	const createButtonGroup = (buttonsConfig) => {
+		const newDiv = document.createElement('div');
+		newDiv.classList.add(CLASS_NAMES.UG_BUTTON_CONTAINER);
+		buttonsConfig.forEach(config => {
+			const button = createToggleButton(config.text, config.action);
+			newDiv.append(button);
+			button.classList.add(CLASS_NAMES.UG_BUTTON); // Ensure class is added
+		});
+		return newDiv;
 	};
 
 	// --- State Management ---
@@ -320,61 +335,23 @@
 	const createSettingsUI = () => {
 		const overlay = document.createElement('div');
 		overlay.id = 'ug-settings-overlay';
-		overlay.style.display = 'flex';
-		overlay.style.justifyContent = 'center';
-		overlay.style.alignItems = 'center';
-		overlay.style.position = 'fixed';
-		overlay.style.top = '0';
-		overlay.style.left = '0';
-		overlay.style.width = '100%';
-		overlay.style.height = '100%';
-		overlay.style.backgroundColor = 'rgba(0, 0, 0, 0)';
-		overlay.style.backdropFilter = 'blur(0px)';
-		overlay.style.zIndex = '10001';
-		overlay.style.transition = 'background-color 0.3s ease, backdrop-filter 0.3s ease';
-		setTimeout(() => {
-			overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
-			overlay.style.backdropFilter = 'blur(10px)';
-		}, 0);
+		overlay.classList.add('ug-settings-overlay');
 
 		const container = document.createElement('div');
 		container.id = 'ug-settings-container';
-		container.style.display = 'flex';
-		container.style.width = '95vw';
-		container.style.maxWidth = '800px';
-		container.style.maxHeight = '80vh';
-		container.style.backgroundColor = '#222';
-		container.style.borderRadius = '8px';
-		container.style.boxShadow = '0 4px 30px rgba(0, 0, 0, 0.1)';
-		container.style.transition = 'transform 0.3s ease';
-		container.style.transform = 'scale(0.9)';
-		setTimeout(() => {
-			container.style.transform = 'scale(1)';
-		}, 0);
+		container.classList.add('ug-settings-container');
 
 		const ribbon = document.createElement('div');
 		ribbon.id = 'ug-settings-ribbon';
-		ribbon.style.display = 'flex';
-		ribbon.style.flexDirection = 'column';
-		ribbon.style.padding = '10px';
-		ribbon.style.borderRight = '1px solid #555';
+		ribbon.classList.add('ug-settings-ribbon');
 
 		const content = document.createElement('div');
-		content.style.flexGrow = '1';
-		content.style.overflowY = 'auto';
-		content.style.padding = '20px';
+		content.classList.add('ug-settings-content');
 
 		const closeButton = document.createElement('button');
 		closeButton.id = 'ug-settings-close-btn';
+		closeButton.classList.add('ug-settings-close-btn');
 		closeButton.innerHTML = '×';
-		closeButton.style.position = 'absolute';
-		closeButton.style.top = '15px';
-		closeButton.style.right = '15px';
-		closeButton.style.fontSize = '2em';
-		closeButton.style.background = 'none';
-		closeButton.style.border = 'none';
-		closeButton.style.color = '#eee';
-		closeButton.style.cursor = 'pointer';
 		closeButton.addEventListener('click', () => {
 			state.settingsOpen = false;
 		});
@@ -384,6 +361,7 @@
 				label: 'General',
 				content: () => {
 					const generalContent = document.createElement('div');
+					generalContent.classList.add('ug-settings-tab-content');
 					generalContent.innerHTML = `
                              <div class="ug-setting">
                                 <label for="galleryKey">Gallery Key:</label>
@@ -398,6 +376,7 @@
 				label: 'Options',
 				content: () => {
 					const optionsContent = document.createElement('div');
+					optionsContent.classList.add('ug-settings-tab-content');
 					optionsContent.innerHTML = `
                           <div class="ug-setting">
                                 <label for="hideNavArrows">Hide Gallery Navigation Arrows:</label>
@@ -438,6 +417,7 @@
 				label: 'Filenames',
 				content: () => {
 					const filenamesContent = document.createElement('div');
+					filenamesContent.classList.add('ug-settings-tab-content');
 					filenamesContent.innerHTML = `
                              <div class="ug-setting">
                                 <label for="zipFileNameFormat">Zip Filename Format:</label>
@@ -457,6 +437,7 @@
 				label: 'Notifications',
 				content: () => {
 					const notificationsContent = document.createElement('div');
+					notificationsContent.classList.add('ug-settings-tab-content');
 					notificationsContent.innerHTML = `
                              <div class="ug-setting">
                                 <label for="notificationsEnabled">Enable Notifications:</label>
@@ -474,6 +455,7 @@
 				label: 'Credits',
 				content: () => {
 					const creditsContent = document.createElement('div');
+					creditsContent.classList.add('ug-settings-tab-content');
 					creditsContent.innerHTML = `
                         <div class="ug-credits">
                              <p>Original author: ntf</p>
@@ -494,22 +476,14 @@
 			activeTab = tabId; // Update activeTab
 			// Update styles based on activeTab
 			for (const tabKey in ribbonButtons) {
-				ribbonButtons[tabKey].style.backgroundColor = tabKey === activeTab ? '#222' : 'transparent';
-				ribbonButtons[tabKey].style.borderBottomColor = tabKey === activeTab ? '#007bff' : 'transparent';
+				ribbonButtons[tabKey].classList.toggle('active', tabKey === activeTab);
 			}
 		};
 
 		for (const tabId in tabs) {
 			const button = document.createElement('button');
 			button.textContent = tabs[tabId].label;
-			button.style.padding = '10px 15px';
-			button.style.border = 'none';
-			button.style.background = 'none';
-			button.style.color = '#eee';
-			button.style.cursor = 'pointer';
-			button.style.transition = 'background-color 0.3s ease';
-			button.style.borderBottom = '3px solid transparent';
-			button.style.fontSize = '1em';
+			button.classList.add('ug-settings-ribbon-button');
 			button.addEventListener('click', () => showTabContent(tabId));
 			ribbon.appendChild(button);
 			ribbonButtons[tabId] = button; // Store the button
@@ -520,6 +494,12 @@
 			state.zipFileNameFormat = document.getElementById('zipFileNameFormat')?.value || state.zipFileNameFormat;
 			state.imageFileNameFormat = document.getElementById('imageFileNameFormat')?.value || state.imageFileNameFormat;
 			state.galleryKey = document.getElementById('galleryKey')?.value || state.galleryKey;
+
+			// Trim whitespace from input values before saving
+			state.zipFileNameFormat = state.zipFileNameFormat.trim();
+			state.imageFileNameFormat = state.imageFileNameFormat.trim();
+			state.galleryKey = state.galleryKey.trim();
+
 			GM_setValue('zipFileNameFormat', state.zipFileNameFormat);
 			GM_setValue('imageFileNameFormat', state.imageFileNameFormat);
 			GM_setValue('galleryKey', state.galleryKey);
@@ -533,8 +513,7 @@
 		const saveButton = document.createElement('button');
 		saveButton.textContent = 'Save';
 		saveButton.className = 'swal2-confirm';
-		saveButton.style.marginLeft = 'auto';
-		saveButton.style.marginTop = '20px';
+		saveButton.classList.add('ug-settings-save-button'); // Added class for styling
 		saveButton.addEventListener('click', saveSettings);
 		content.appendChild(saveButton);
 		showTabContent(activeTab); // Default active tab
@@ -553,10 +532,7 @@
 	const closeSettings = () => {
 		const overlay = document.getElementById('ug-settings-overlay');
 		if (overlay) {
-			const container = overlay.querySelector('#ug-settings-container');
-			container.style.transform = 'scale(0.9)';
-			overlay.style.backgroundColor = 'rgba(0, 0, 0, 0)';
-			overlay.style.backdropFilter = 'blur(0px)';
+			overlay.classList.add('closing'); // Add closing class for animation
 			setTimeout(() => {
 				overlay.remove();
 			}, 300);
@@ -650,6 +626,7 @@
 		}
 	};
 
+	// --- Modified loadImages for Batch Loading ---
 	const loadImages = async () => {
 		if (!isPostPage() || state.galleryReady || state.isLoading) return;
 
@@ -669,12 +646,15 @@
 		state.loadedImages = 0;
 		state.mediaLoaded = {}; // Reset media loaded status
 
-		const loadingPromises = [];
-		for (let i = 0; i < mediaLinks.length; i++) {
-			loadingPromises.push(loadImage(mediaLinks[i], i));
+		// Load images in batches
+		const batchSize = IMAGE_BATCH_SIZE;
+		for (let i = 0; i < mediaLinks.length; i += batchSize) {
+			const batchPromises = [];
+			for (let j = 0; j < batchSize && i + j < mediaLinks.length; j++) {
+				batchPromises.push(loadImage(mediaLinks[i + j], i + j));
+			}
+			await Promise.all(batchPromises);
 		}
-
-		await Promise.all(loadingPromises);
 
 		// Check if all images/videos failed to load
 		if (state.loadedImages === state.totalImages && state.virtualGallery.every((item) => item === null)) {
@@ -730,10 +710,14 @@
 		const overlay = document.createElement('div');
 		overlay.id = 'gallery-overlay';
 		overlay.classList.add('ug-gallery-overlay');
-	
+
 		const galleryModal = document.createElement('div');
 		galleryModal.classList.add('ug-gallery-modal');
-	
+
+		// Container for controls (to manage visibility with CSS classes)
+		const controlsContainer = document.createElement('div');
+		controlsContainer.classList.add(CLASS_NAMES.GALLERY_CONTROLS_CONTAINER, CLASS_NAMES.CONTROLS_VISIBLE);
+
 		const closeButton = document.createElement('button');
 		closeButton.textContent = '×';
 		closeButton.className = CLASS_NAMES.GALLERY_CLOSE_BUTTON;
@@ -746,44 +730,39 @@
 		downloadButton.addEventListener('click', () => {
 			downloadImageByIndex(state.currentGalleryIndex);
 		});
-	
+
 		const mainView = document.createElement('div');
 		mainView.classList.add(CLASS_NAMES.GALLERY_MAIN_VIEW);
 		mainView.addEventListener('click', () => {
 			state.controlsVisible = !state.controlsVisible;
 			updateControlVisibility();
 		})
-	
+
 		const expandedImageContainer = document.createElement('div');
 		expandedImageContainer.classList.add('ug-gallery-expanded-container');
-	
+
 		const expandedMedia = document.createElement('div'); // Container for either img or video
 		expandedMedia.classList.add('ug-gallery-expanded-media');
-	
+
 		const prevButton = createNavigationButton('prev');
 		const nextButton = createNavigationButton('next');
-	
+
 		const pageNumber = document.createElement('div');
 		pageNumber.className = CLASS_NAMES.PAGE_NUMBER;
-	
+
 		const thumbnailGrid = document.createElement('div');
 		thumbnailGrid.classList.add(CLASS_NAMES.THUMBNAIL_GRID);
-	
-		mainView.append(expandedImageContainer);
-		 galleryModal.append(closeButton, downloadButton, mainView, thumbnailGrid);
-		expandedImageContainer.append(expandedMedia, pageNumber);
-		  galleryModal.append( prevButton, nextButton);
-	
+
 		const thumbnailStrip = document.createElement('div');
 		thumbnailStrip.classList.add(CLASS_NAMES.THUMBNAIL_STRIP);
-		galleryModal.appendChild(thumbnailStrip);
-	
-		const userId = document.createElement('div');
-		userId.classList.add('ug-gallery-user-id');
-		expandedImageContainer.appendChild(userId);
-	
+
+		mainView.append(expandedImageContainer);
+		controlsContainer.append(closeButton, downloadButton, thumbnailStrip, pageNumber);
+		galleryModal.append(controlsContainer, mainView, thumbnailGrid); // Added controlsContainer
+		expandedImageContainer.append(expandedMedia);
+		galleryModal.append(prevButton, nextButton);
 		overlay.appendChild(galleryModal);
-	
+
 		return overlay;
 	};
 
@@ -794,118 +773,20 @@
 		return button;
 	};
 
+	// Updated to use CSS classes for control visibility
 	const updateControlVisibility = () => {
 		const galleryOverlay = document.getElementById('gallery-overlay');
 		if (!galleryOverlay) return;
-		const mainView = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_MAIN_VIEW}`);
-		const prevButton = mainView?.querySelector('.navigation-button.prev');
-		const nextButton = mainView?.querySelector('.navigation-button.next');
-		const closeButton = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_CLOSE_BUTTON}`);
-		const downloadButton = galleryOverlay.querySelector(`.${CLASS_NAMES.DOWNLOAD_BUTTON}`);
-		const thumbnailStrip = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_STRIP}`);
-		const pageNumber = galleryOverlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
-		const userId = galleryOverlay.querySelector(`.ug-gallery-user-id`);
-	
+
+		const controlsContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_CONTROLS_CONTAINER}`);
+		if (!controlsContainer) return;
+
 		if (state.controlsVisible) {
-		   if(prevButton)
-		   {
-			 prevButton.classList.add(CLASS_NAMES.FADE_IN);
-			  prevButton.classList.remove(CLASS_NAMES.FADE_OUT);
-			  prevButton.style.display = 'flex';
-		   }
-			if(nextButton)
-		   {
-			 nextButton.classList.add(CLASS_NAMES.FADE_IN);
-			 nextButton.classList.remove(CLASS_NAMES.FADE_OUT);
-			  nextButton.style.display = 'flex';
-		   }
-			if(closeButton)
-			{
-				closeButton.classList.add(CLASS_NAMES.FADE_IN);
-				closeButton.classList.remove(CLASS_NAMES.FADE_OUT);
-				closeButton.style.display = 'block';
-			}
-			 if(downloadButton)
-			 {
-				downloadButton.classList.add(CLASS_NAMES.FADE_IN);
-				downloadButton.classList.remove(CLASS_NAMES.FADE_OUT);
-				downloadButton.style.display = 'block';
-			 }
-			if(thumbnailStrip)
-			{
-				 thumbnailStrip.classList.add(CLASS_NAMES.FADE_IN);
-				thumbnailStrip.classList.remove(CLASS_NAMES.FADE_OUT);
-				 thumbnailStrip.style.display = 'flex';
-			}
-			if(pageNumber)
-			{
-				pageNumber.classList.add(CLASS_NAMES.FADE_IN);
-				pageNumber.classList.remove(CLASS_NAMES.FADE_OUT);
-				pageNumber.style.display = 'block';
-			}
-			if(userId)
-			{
-				 userId.classList.add(CLASS_NAMES.FADE_IN);
-				userId.classList.remove(CLASS_NAMES.FADE_OUT);
-				userId.style.display = 'block';
-			}
+			controlsContainer.classList.remove(CLASS_NAMES.CONTROLS_HIDDEN);
+			controlsContainer.classList.add(CLASS_NAMES.CONTROLS_VISIBLE);
 		} else {
-			if(prevButton)
-			{
-			   prevButton.classList.add(CLASS_NAMES.FADE_OUT);
-			  prevButton.classList.remove(CLASS_NAMES.FADE_IN);
-			 setTimeout(() => {
-				 prevButton.style.display = 'none';
-			 }, 500);
-			}
-			if(nextButton)
-			{
-				 nextButton.classList.add(CLASS_NAMES.FADE_OUT);
-				 nextButton.classList.remove(CLASS_NAMES.FADE_IN);
-				  setTimeout(() => {
-					nextButton.style.display = 'none';
-				}, 500);
-			}
-			if(closeButton)
-			{
-				 closeButton.classList.add(CLASS_NAMES.FADE_OUT);
-			   closeButton.classList.remove(CLASS_NAMES.FADE_IN);
-			   setTimeout(() => {
-				  closeButton.style.display = 'none';
-				}, 500);
-			}
-			 if(downloadButton)
-			 {
-				 downloadButton.classList.add(CLASS_NAMES.FADE_OUT);
-				 downloadButton.classList.remove(CLASS_NAMES.FADE_IN);
-				  setTimeout(() => {
-				   downloadButton.style.display = 'none';
-				}, 500);
-			 }
-			 if(thumbnailStrip)
-			 {
-				 thumbnailStrip.classList.add(CLASS_NAMES.FADE_OUT);
-			   thumbnailStrip.classList.remove(CLASS_NAMES.FADE_IN);
-				setTimeout(() => {
-				  thumbnailStrip.style.display = 'none';
-			   }, 500);
-			 }
-		   if(pageNumber)
-		   {
-				pageNumber.classList.add(CLASS_NAMES.FADE_OUT);
-			   pageNumber.classList.remove(CLASS_NAMES.FADE_IN);
-			   setTimeout(() => {
-				 pageNumber.style.display = 'none';
-			 }, 500);
-		   }
-			if(userId)
-			{
-				 userId.classList.add(CLASS_NAMES.FADE_OUT);
-				userId.classList.remove(CLASS_NAMES.FADE_IN);
-				 setTimeout(() => {
-				   userId.style.display = 'none';
-				}, 500);
-			}
+			controlsContainer.classList.remove(CLASS_NAMES.CONTROLS_VISIBLE);
+			controlsContainer.classList.add(CLASS_NAMES.CONTROLS_HIDDEN);
 		}
 	};
 
@@ -977,27 +858,28 @@
 			console.error('Invalid media index:', index);
 			return;
 		}
-	
+
 		const mediaSrc = state.fullSizeImageSrcs[index];
 		if (!mediaSrc) {
 			console.error('Media source is undefined for index:', index);
 			return;
 		}
-	
+
 		const isVideo = mediaSrc.toLowerCase().endsWith('.mp4');
 		const galleryOverlay = document.getElementById('gallery-overlay');
 		if (!galleryOverlay) return;
 		const expandedMedia = galleryOverlay.querySelector('.ug-gallery-expanded-media');
-		const userId = galleryOverlay.querySelector('.ug-gallery-user-id');
+		// Removed User ID Element
+		// const userId = galleryOverlay.querySelector('.ug-gallery-user-id');
 		let loadingOverlay = galleryOverlay.querySelector(`.${CLASS_NAMES.LOADING_OVERLAY}`);
-	
+
 		if (!loadingOverlay) {
 			loadingOverlay = createLoadingOverlay();
 			expandedMedia.appendChild(loadingOverlay);
 		}
-	
+
 		expandedMedia.innerHTML = '';
-	
+
 		let mediaElement; // Declaring mediaElement here
 		if (isVideo) {
 			mediaElement = document.createElement('video');
@@ -1005,7 +887,7 @@
 		} else {
 			mediaElement = new Image();
 		}
-	
+
 		const onMediaLoad = () => {
 			if (expandedMedia.contains(loadingOverlay)) {
 				expandedMedia.removeChild(loadingOverlay);
@@ -1013,25 +895,26 @@
 			galleryOverlay.classList.add('expanded');
 			mediaElement.classList.add('ug-gallery-expanded-media-item');
 			expandedMedia.appendChild(mediaElement);
-	
+
 			currentIndex = index;
 			state.currentGalleryIndex = index;
 			const pageNumber = galleryOverlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
 			pageNumber.textContent = `${index + 1} / ${state.fullSizeImageSrcs.length}`;
-			userId.textContent = images[index].dataset.userId || "User ID not found";
-			userId.style.display = 'block';
+			// Removed User ID Element
+			// userId.textContent = images[index].dataset.userId || "User ID not found";
+			// userId.style.display = 'block';
 			state.loadingMessage = null;
-	
-			 // Update media element size after it has loaded
+
+			// Update media element size after it has loaded
+			updateMediaElementSize(mediaElement, galleryOverlay);
+
+			// Add resize observer for dynamic resizing
+			const resizeObserver = new ResizeObserver(() => {
 				updateMediaElementSize(mediaElement, galleryOverlay);
-			
-				// Add resize observer for dynamic resizing
-				const resizeObserver = new ResizeObserver(() => {
-					updateMediaElementSize(mediaElement, galleryOverlay);
-				});
-				resizeObserver.observe(galleryOverlay);
+			});
+			resizeObserver.observe(galleryOverlay);
 		};
-	
+
 		const onMediaError = () => {
 			console.error('Failed to load media in expanded view:', mediaSrc);
 			if (expandedMedia.contains(loadingOverlay)) {
@@ -1041,12 +924,12 @@
 			const pageNumber = galleryOverlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
 			pageNumber.textContent = 'Error loading media';
 		};
-	
+
 		if (isVideo) {
 			mediaElement.src = mediaSrc;
 			mediaElement.onloadeddata = onMediaLoad;
 			mediaElement.onerror = onMediaError;
-	
+
 			if (mediaElement.readyState >= 2) {
 				onMediaLoad();
 			}
@@ -1082,13 +965,13 @@
 		});
 	};
 
-    const updateThumbnailGrid = () => {
-        const galleryModal = document.querySelector('.ug-gallery-modal');
-        const thumbnailGrid = galleryModal.querySelector(`.${CLASS_NAMES.THUMBNAIL_GRID}`);
-        const modalWidth = galleryModal.offsetWidth;
-        const numColumns = Math.max(2, Math.floor((modalWidth - 20) / 100));
-        thumbnailGrid.style.gridTemplateColumns = `repeat(${numColumns}, 1fr)`;
-    };
+	const updateThumbnailGrid = () => {
+		const galleryModal = document.querySelector('.ug-gallery-modal');
+		const thumbnailGrid = galleryModal.querySelector(`.${CLASS_NAMES.THUMBNAIL_GRID}`);
+		const modalWidth = galleryModal.offsetWidth;
+		const numColumns = Math.max(2, Math.floor((modalWidth - 20) / 100));
+		thumbnailGrid.style.gridTemplateColumns = `repeat(${numColumns}, 1fr)`;
+	};
 
 	const showExpandedImage = (index) => {
 		state.expandedViewActive = true;
@@ -1104,7 +987,8 @@
 			const downloadButton = galleryOverlay.querySelector(`.${CLASS_NAMES.DOWNLOAD_BUTTON}`);
 			const thumbnailStrip = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_STRIP}`);
 			const pageNumber = galleryOverlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
-			const userId = galleryOverlay.querySelector(`.ug-gallery-user-id`);
+			// Removed User ID Element
+			// const userId = galleryOverlay.querySelector(`.ug-gallery-user-id`);
 			if (prevButton && nextButton && !state.hideNavArrows) {
 				prevButton.style.display = 'flex';
 				nextButton.style.display = 'flex';
@@ -1112,7 +996,8 @@
 				downloadButton.style.display = 'block';
 				thumbnailStrip.style.display = 'block';
 				pageNumber.style.display = 'block';
-				userId.style.display = 'block';
+				// Removed User ID Element
+				// userId.style.display = 'block';
 			}
 		}
 		state.controlsVisible = true;
@@ -1121,7 +1006,6 @@
 		updateThumbnailStrip(); // Update thumbnail strip with the new active index
 	};
 
-	// Function: showGallery
 	const showGallery = () => {
 		if (!isPostPage() || !state.galleryReady) return;
 		const overlay = createGalleryOverlay();
@@ -1130,7 +1014,6 @@
 		const thumbnailStrip = overlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_STRIP}`);
 		const thumbnailGrid = overlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_GRID}`);
 		const pageNumber = overlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
-		const userId = overlay.querySelector(`.ug-gallery-user-id`);
 		images = Array.from(elements.virtualGalleryContainer.querySelectorAll(`.${CLASS_NAMES.VIRTUAL_IMAGE}`));
 		currentIndex = 0;
 		state.currentGalleryIndex = 0;
@@ -1143,12 +1026,11 @@
 			const thumbnail = document.createElement('img');
 			thumbnail.src = img.src;
 			thumbnail.className = CLASS_NAMES.THUMBNAIL;
-			thumbnail.dataset.userId = `User: ${index + 1}`;
 			thumbnail.addEventListener('click', () => {
 				showExpandedImage(index);
 			});
 			thumbnailContainer.appendChild(thumbnail);
-				thumbnailGrid.appendChild(thumbnailContainer);
+			thumbnailGrid.appendChild(thumbnailContainer);
 		});
 
 		document.body.appendChild(overlay);
@@ -1163,28 +1045,26 @@
 			if (closeButton) closeButton.style.display = 'block';
 			if (downloadButton) downloadButton.style.display = 'block';
 			if (thumbnailStrip) thumbnailStrip.style.display = 'flex'; // Make sure this is flex
-			if(pageNumber) pageNumber.style.display = 'block';
-			if (userId) userId.style.display = 'block';
+			if (pageNumber) pageNumber.style.display = 'block';
 		}
 
 		// Navigation button event listeners
-		if(prevButton && nextButton)
-		{
+		if (prevButton && nextButton) {
 			prevButton.addEventListener('click', () => {
-			if (currentIndex > 0) {
-				showExpandedImage(currentIndex - 1);
-			} else {
-				showExpandedImage(images.length - 1);
-			}
-		});
+				if (currentIndex > 0) {
+					showExpandedImage(currentIndex - 1);
+				} else {
+					showExpandedImage(images.length - 1);
+				}
+			});
 
-		nextButton.addEventListener('click', () => {
-			if (currentIndex < images.length - 1) {
-				showExpandedImage(currentIndex + 1);
-			} else {
-				showExpandedImage(0);
-			}
-		});
+			nextButton.addEventListener('click', () => {
+				if (currentIndex < images.length - 1) {
+					showExpandedImage(currentIndex + 1);
+				} else {
+					showExpandedImage(0);
+				}
+			});
 		}
 
 		// Add resize observer for dynamic resizing
@@ -1193,7 +1073,7 @@
 		});
 		resizeObserver.observe(galleryModal);
 	};
-	 
+
 	const closeGallery = () => {
 		const overlay = document.getElementById('gallery-overlay');
 		if (overlay) {
@@ -1250,18 +1130,16 @@
 		const images = document.querySelectorAll(SELECTORS.IMAGE_LINK);
 		const videoLinks = document.querySelectorAll(SELECTORS.VIDEO_LINK);
 		const attachmentLinks = document.querySelectorAll(SELECTORS.ATTACHMENT_LINK);
-		const title =
-			document.querySelector(SELECTORS.POST_TITLE)?.textContent?.trim() ||
-			'Untitled';
-		const artistName =
-			document.querySelector(SELECTORS.POST_USER_NAME)?.textContent?.trim() ||
-			'Unknown Artist';
+		const title = document.querySelector(SELECTORS.POST_TITLE)?.textContent?.trim() || "Untitled";
+		const artistName = document.querySelector(SELECTORS.POST_USER_NAME)?.textContent?.trim() || "Unknown Artist";
 
 		const total = images.length + videoLinks.length + attachmentLinks.length;
 		if (total === 0) return;
 
-		state.notification = `Downloading... (0/${total})`;
+		state.isDownloading = true;
+		state.loadingMessage = "Downloading...";
 		state.downloadedCount = 0;
+		state.notification = `Downloading... (0/${total})`;
 
 		const sanitizedTitle = sanitizeFileName(title);
 		const sanitizedArtistName = sanitizeFileName(artistName);
@@ -1270,77 +1148,91 @@
 		let downloaded = 0;
 		const downloadPromises = [];
 
-		const downloadAndAddToZip = (url, filename) => {
+		const downloadAndAddToZip = (url, originalFilename, index) => {
 			return new Promise((resolve, reject) => {
 				GM.xmlHttpRequest({
-					method: 'GET',
+					method: "GET",
 					url: url,
+					headers: {
+						referer: `https://${website}.su/`
+					},
 					responseType: 'blob',
 					onload: function(response) {
 						if (response.status === 200) {
-							const decodedFilename = decodeURIComponent(filename);
-							zip.file(decodedFilename, response.response);
+							let filename = originalFilename;
+							let ext = getExtension(filename);
+
+							// If extension is missing or not detected, try to determine from MIME type
+							if (!ext || ext === 'jpg') { // Default to jpg if not detected or if it's just 'jpg'
+								const contentType = response.responseHeaders.match(/content-type:\s*([^;]*)/i)?.[1];
+								if (contentType) {
+									if (contentType.startsWith('image/')) {
+										const imageExt = contentType.split('/')[1].replace('jpeg', 'jpg'); // Normalize jpeg to jpg
+										if (imageExt && imageExt !== 'octet-stream' && imageExt !== 'x-icon') { // Basic filtering
+											ext = imageExt;
+											filename = originalFilename.replace(/\.[^/.]+$/, '') + '.' + ext; // Re-apply extension
+										}
+									} else if (contentType.startsWith('video/')) {
+										ext = contentType.split('/')[1];
+										filename = originalFilename.replace(/\.[^/.]+$/, '') + '.' + ext;
+									} else if (contentType === 'application/octet-stream' && originalFilename.includes('.')) {
+										// If octet-stream and original filename has extension, use it
+										ext = getExtension(originalFilename);
+									}
+									// Default to jpg if still no valid extension
+									if (!ext || !['jpg', 'png', 'gif', 'webp', 'mp4', 'webm', 'ogg', 'mp3', 'flac'].includes(ext)) {
+										ext = 'jpg';
+										filename = originalFilename.replace(/\.[^/.]+$/, '') + '.jpg';
+									}
+								} else {
+									ext = 'jpg'; // Fallback to jpg if content-type is not available
+									filename = originalFilename.replace(/\.[^/.]+$/, '') + '.jpg';
+								}
+							}
+
+							const finalFilename = state.imageFileNameFormat
+								.replace("{title}", sanitizedTitle)
+								.replace("{artistName}", sanitizedArtistName)
+								.replace("{fileName}", sanitizeFileName(filename.replace(/\.[^/.]+$/, ""))) // Sanitize filename part
+								.replace("{index}", index + 1)
+								.replace("{ext}", ext.toLowerCase());
+
+							zip.file(finalFilename + '.' + ext, response.response); // Add extension here to zip file
 							downloaded++;
 							state.downloadedCount = downloaded;
 							resolve();
 						} else {
-							console.error('Error downloading:', response.status, filename);
-							reject(new Error(`Failed to fetch ${filename}: ${response.status}`));
+							console.error('Error downloading:', response.status, originalFilename);
+							reject(new Error(`Failed to fetch ${originalFilename}: ${response.status}`));
 						}
 					},
 					onerror: function(error) {
-						console.error('Error downloading:', error, filename);
+						console.error('Error downloading:', error, originalFilename);
 						reject(error);
-					},
+					}
 				});
 			});
 		};
 
 		for (let i = 0; i < images.length; i++) {
 			const imgLink = images[i];
-			const imgSrc = imgLink.href.split('?')[0];
-			const originalFileName = imgLink.getAttribute('download') || `image-${i + 1}.jpg`;
-			const ext = getExtension(originalFileName);
-
-			const fileName = state.imageFileNameFormat
-				.replace('{title}', sanitizedTitle)
-				.replace('{artistName}', sanitizedArtistName)
-				.replace('{fileName}', originalFileName.replace(/\.[^/.]+$/, ''))
-				.replace('{index}', i + 1)
-				.replace('{ext}', ext);
-
-			downloadPromises.push(downloadAndAddToZip(imgSrc, fileName));
+			const imgSrc = imgLink.href.split("?")[0];
+			const originalFileName = imgLink.getAttribute("download") || `image-${i + 1}.jpg`;
+			downloadPromises.push(downloadAndAddToZip(imgSrc, originalFileName, i));
 		}
 
 		for (let i = 0; i < videoLinks.length; i++) {
 			const videoLink = videoLinks[i];
 			const videoSrc = videoLink.href;
-			const originalFileName = videoLink.getAttribute('download') || 'video-${i + 1.mp4}';
-			const ext = getExtension(originalFileName);
-
-			const fileName = state.imageFileNameFormat
-				.replace('{title}', sanitizedTitle)
-				.replace('{artistName}', sanitizedArtistName)
-				.replace('{fileName}', originalFileName.replace(/\.[^/.]+$/, ''))
-				.replace('{ext}', ext);
-
-			downloadPromises.push(downloadAndAddToZip(videoSrc, fileName));
+			const originalFileName = videoLink.getAttribute("download") || `video-${i + 1}.mp4`;
+			downloadPromises.push(downloadAndAddToZip(videoSrc, originalFileName, i));
 		}
 
 		for (let i = 0; i < attachmentLinks.length; i++) {
 			const link = attachmentLinks[i];
 			const attachmentSrc = link.href;
-			const originalFileName = link.textContent.trim().replace('Download ', '');
-			const ext = getExtension(originalFileName);
-
-			const fileName = state.imageFileNameFormat
-				.replace('{title}', sanitizedTitle)
-				.replace('{artistName}', sanitizedArtistName)
-				.replace('{fileName}', originalFileName.replace(/\.[^/.]+$/, ''))
-				.replace('{index}', i + 1)
-				.replace('{ext}', ext);
-
-			downloadPromises.push(downloadAndAddToZip(attachmentSrc, fileName));
+			const originalFileName = link.textContent.trim().replace("Download ", "");
+			downloadPromises.push(downloadAndAddToZip(attachmentSrc, originalFileName, i));
 		}
 
 		try {
@@ -1349,32 +1241,83 @@
 			const zipBlob = await zip.generateAsync({
 				type: 'blob'
 			});
-			const zipFileName = state.zipFileNameFormat.replace('{artistName}', sanitizedArtistName).replace('{title}', sanitizedTitle);
+			const zipFileName = state.zipFileNameFormat
+				.replace("{artistName}", sanitizedArtistName)
+				.replace("{title}", sanitizedTitle);
 			saveAs(zipBlob, zipFileName);
+			state.isDownloading = false;
+			state.loadingMessage = null;
 			state.notification = `Done! Total: ${total}`;
 			state.notificationType = 'success';
 		} catch (error) {
 			console.error('Error creating zip:', error);
 			Swal.fire('Error!', `Failed to create zip file: ${error.message}`, 'error');
+			state.isDownloading = false;
+			state.loadingMessage = null;
 			state.notification = `Failed to create zip file: ${error.message}`;
 			state.notificationType = 'error';
 		}
 	};
 
+	const downloadByAnchor = (url, filename) => {
+		const anchor = document.createElement('a');
+		anchor.href = url;
+		anchor.download = filename;
+		anchor.style.display = 'none';
+		document.body.appendChild(anchor);
+		anchor.click();
+		setTimeout(() => {
+			document.body.removeChild(anchor);
+		}, 100);
+	};
+
 	const downloadImageByIndex = (index) => {
-		const downloadFunction = typeof GM_download !== 'undefined' ? GM_download : GM.download;
+		console.log("downloadImageByIndex called with index:", index);
+		const downloadFunction = typeof GM.download === 'function' ? GM.download : downloadByAnchor; // Choose download method
 		const mediaSrc = state.fullSizeImageSrcs[index];
+		console.log("mediaSrc:", mediaSrc);
 		const isVideo = mediaSrc.toLowerCase().endsWith('.mp4');
 		const imgLink = document.querySelectorAll(isVideo ? SELECTORS.VIDEO_LINK : SELECTORS.IMAGE_LINK)[index];
+		console.log("imgLink:", imgLink);
 
 		if (imgLink) {
-			const imgSrc = imgLink.href.split('?')[0];
-			const fileName = imgLink.getAttribute('download');
-			const options = {
-				url: imgSrc,
-				name: fileName
-			};
-			downloadFunction(options);
+			const imgSrc = imgLink.href.split("?")[0];
+			console.log("imgSrc:", imgSrc);
+			let fileName = imgLink.getAttribute('download');
+			console.log("fileName (original):", fileName);
+
+			if (!fileName) {
+				fileName = `image_${index + 1}.jpg`;
+				console.warn("Download attribute missing, using fallback filename:", fileName);
+			}
+
+			if (typeof GM.download === 'function') {
+				// Use GM.download if available
+				const options = {
+					url: imgSrc,
+					name: fileName,
+					headers: {
+						referer: `https://${website}.su/`
+					},
+				};
+
+				GM.download(options)
+					.then(() => {
+						console.log("GM.download promise resolved (download initiated) - Filename:", fileName);
+					})
+					.catch(error => {
+						console.error("GM.download error:", error);
+						console.warn("GM.download failed, falling back to downloadByAnchor.");
+						downloadByAnchor(imgSrc, fileName); // Fallback to downloadByAnchor on GM.download error
+					});
+			} else {
+				// Fallback to downloadByAnchor if GM.download is not available
+				downloadByAnchor(imgSrc, fileName);
+				console.log("GM.download not available, using downloadByAnchor.");
+			}
+
+		} else {
+			console.error("imgLink not found for index:", index);
 		}
 	};
 
@@ -1498,37 +1441,36 @@
 					.closest(SELECTORS.THUMBNAIL)
 					.previousElementSibling?.classList.contains(CLASS_NAMES.UG_BUTTON_CONTAINER)
 				) {
-					const newDiv = document.createElement('div');
-					newDiv.classList.add(CLASS_NAMES.UG_BUTTON_CONTAINER);
+					// Use the helper function to create button groups
+					const newDiv = createButtonGroup([{
+							text: BUTTONS.HEIGHT,
+							action: resizeImage
+						},
+						{
+							text: BUTTONS.WIDTH,
+							action: resizeImage
+						},
+						{
+							text: BUTTONS.FULL,
+							action: () => imageActions.full(img)
+						},
+						{
+							text: BUTTONS.DOWNLOAD,
+							action: () => downloadImageByIndex(index)
+						},
+						{
+							text: BUTTONS.REMOVE,
+							action: removeImage
+						}
+					]);
 
-					const heightButton = createToggleButton(BUTTONS.HEIGHT, resizeImage);
-					const widthButton = createToggleButton(BUTTONS.WIDTH, resizeImage);
-					const fullButton = createToggleButton(BUTTONS.FULL, () => imageActions.full(img));
-					const downloadButton = createToggleButton(BUTTONS.DOWNLOAD, () => downloadImageByIndex(index));
-					const removeButton = createToggleButton(BUTTONS.REMOVE, removeImage);
-					// Initial visibility based on settings
-					const optionsButtons = [];
+					//parentDiv.insertBefore(newDiv, img.closest(SELECTORS.THUMBNAIL));
+					const thumbnail = img.closest(SELECTORS.THUMBNAIL);
 
-					if (!state.hideRemoveButton) {
-						optionsButtons.push(removeButton);
+					// Insert the newDiv before the thumbnail
+					if (thumbnail && thumbnail.parentNode) {
+						thumbnail.parentNode.insertBefore(newDiv, thumbnail);
 					}
-					if (!state.hideFullButton) {
-						optionsButtons.push(fullButton);
-					}
-					if (!state.hideDownloadButton) {
-						optionsButtons.push(downloadButton);
-					}
-					optionsButtons.forEach(button => {
-						newDiv.append(button)
-					});
-
-					newDiv.append(heightButton);
-					newDiv.append(widthButton);
-
-					// Add 'ug-button' class to the buttons in the newDiv
-					Array.from(newDiv.children).forEach((button) => button.classList.add(CLASS_NAMES.UG_BUTTON));
-
-					parentDiv.insertBefore(newDiv, img.closest(SELECTORS.THUMBNAIL));
 				}
 				img.addEventListener('click', () => showExpandedImage(index));
 			});
@@ -1538,28 +1480,24 @@
 
 			const favoriteButton = document.querySelector(SELECTORS.FAVORITE_BUTTON);
 			if (favoriteButton) {
-				const newDiv = document.createElement('div');
-				newDiv.style.display = 'inline-block';
+				// Use the helper function to create button groups
+				const newDiv = createButtonGroup([{
+						text: BUTTONS.HEIGHT,
+						action: () => resizeAllImages('height')
+					},
+					{
+						text: BUTTONS.WIDTH,
+						action: () => resizeAllImages('width')
+					},
+					{
+						text: BUTTONS.FULL,
+						action: () => resizeAllImages('full')
+					}
+				]);
 				// Check if buttons already exist before adding them
 				if (!favoriteButton.nextElementSibling?.classList.contains(CLASS_NAMES.UG_BUTTON_CONTAINER)) {
-					newDiv.classList.add(CLASS_NAMES.UG_BUTTON_CONTAINER);
-					newDiv.append(
-						createToggleButton(BUTTONS.HEIGHT, () => resizeAllImages('height')),
-						createToggleButton(BUTTONS.WIDTH, () => resizeAllImages('width')),
-						createToggleButton(BUTTONS.FULL, () => resizeAllImages('full'))
-					);
-
-					// Add 'ug-button' class to the buttons in the newDiv
-					Array.from(newDiv.children).forEach((button) => button.classList.add(CLASS_NAMES.UG_BUTTON));
 					favoriteButton.parentNode.insertBefore(newDiv, favoriteButton.nextSibling);
 				}
-			}
-			// Cache the UI state
-			if (currentPageUrl) {
-				uiCache[currentPageUrl] = {
-					cachedButtonGroups: Array.from(parentDiv.querySelectorAll(`.${CLASS_NAMES.UG_BUTTON_CONTAINER}`)).map(group => group.cloneNode(true)),
-					cachedTotalImages: state.totalImages,
-				};
 			}
 		}
 		state.currentPostUrl = currentPageUrl;
@@ -1709,7 +1647,7 @@
 		notificationContainer.classList.add(type);
 
 		if (state.animationsEnabled) {
-			notificationContainer.style.animation = 'slide-in 0.5s ease-in-out forwards';
+			notificationContainer.style.animation = 'ug-slide-in 0.5s ease-in-out forwards';
 		} else {
 			notificationContainer.style.animation = 'none';
 		}
@@ -1721,7 +1659,7 @@
 		if (!notificationContainer) return;
 
 		if (state.animationsEnabled) {
-			notificationContainer.style.animation = 'slide-out 0.5s ease-in-out forwards';
+			notificationContainer.style.animation = 'ug-slide-out 0.5s ease-in-out forwards';
 			setTimeout(() => {
 				notificationContainer.style.display = 'none';
 			}, 500);
@@ -1730,8 +1668,6 @@
 			notificationContainer.style.display = 'none';
 		}
 	};
-
-	const updateOverallStatus = () => {};
 
 	// --- Mutation Observer and Initialization ---
 	const isPostPage = () => {
@@ -1787,7 +1723,7 @@
 			state.galleryReady = false;
 			state.loadedImages = 0;
 			state.hasImages = false;
-			state.totalImages = currentTotalImages; // Update totalImages on 
+			state.totalImages = currentTotalImages; // Update totalImages on
 			// check for the presence of images or videos, create status container only if the page has them.
 			const hasMediaContent =
 				document.querySelectorAll(SELECTORS.IMAGE_LINK).length > 0 || document.querySelectorAll(SELECTORS.VIDEO_LINK).length > 0;
@@ -1885,7 +1821,6 @@
 			state.isLoading = false;
 			state.galleryReady = false;
 		}
-		elements.galleryThumbnailsInitialized = false;
 	};
 
 	init();
