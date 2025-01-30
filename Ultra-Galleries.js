@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Ultra Galleries
-// @namespace    https://sleazyfork.org/en/users/1027300-ntf
+// @namespace    https://sleazyfork.org/en/users/1027300-teri
 // @version      2.4
 // @description  Enhanced gallery experience (SPA-compatible Testing Phase)
 // @author       ntf (original), Meri/TearTyr (maintained and improved)
@@ -19,7 +19,7 @@
 // @require      https://cdn.jsdelivr.net/npm/jszip@3.1.4/dist/jszip.min.js
 // @require      https://cdn.jsdelivr.net/npm/file-saver@1.3.2/FileSaver.min.js
 // @require      https://cdn.jsdelivr.net/npm/sweetalert2@11
-// ==UserScript==
+// ==/UserScript==
 
 (function() {
 	'use strict';
@@ -52,11 +52,11 @@
 		WIDTH: '【FILL WIDTH】',
 		GALLERY: '【GALLERY】',
 		SETTINGS: '⚙️',
+		FULLSCREEN: '【FULLSCREEN】', // Added FULLSCREEN button
 	};
 
 	const SELECTORS = {
 		IMAGE_LINK: website === 'nekohouse' ? 'a.image-link:not(.scrape__user-profile)' : 'a.fileThumb.image-link',
-		VIDEO_LINK: '.post__video-link',
 		ATTACHMENT_LINK: website === 'nekohouse' ? '.scrape__attachment-link' : '.post__attachment-link',
 		POST_TITLE: website === 'nekohouse' ? '.scrape__title' : '.post__title',
 		POST_USER_NAME: website === 'nekohouse' ? '.scrape__user-name' : '.post__user-name',
@@ -66,7 +66,6 @@
 		FAVORITE_BUTTON: website === 'nekohouse' ? '.scrape__actions a.favorite-button' : '.post__actions a.favorite-button',
 		FILE_DIVS: website === 'nekohouse' ? '.scrape__thumbnail' : '.post__thumbnail',
 		FILES_IMG: website === 'nekohouse' ? '.scrape__files img' : 'img.post__image',
-		VIDEO_ELEMENT: 'video.post__video',
 	};
 
 	const CLASS_NAMES = {
@@ -96,6 +95,7 @@
 		NOTIFICATION_CLOSE: 'ug-notification-close',
 		NOTIFICATION_REPORT: 'ug-notification-report',
 		DOWNLOAD_BUTTON: 'ug-download-button',
+		FULLSCREEN_BUTTON: 'ug-fullscreen-button', // Added FULLSCREEN_BUTTON class
 		NO_CLICK: 'ug-no-click',
 		FADE_OUT: 'fade-out',
 		FADE_IN: 'fade-in',
@@ -104,6 +104,7 @@
 		GALLERY_CONTROLS_CONTAINER: 'ug-gallery-controls-container',
 		CONTROLS_VISIBLE: 'ug-controls-visible',
 		CONTROLS_HIDDEN: 'ug-controls-hidden',
+		FULLSCREEN_GALLERY: 'fullscreen-gallery', // Added FULLSCREEN_GALLERY class
 	};
 
 	const MAX_RETRIES = 3;
@@ -246,6 +247,7 @@
 		hideDownloadButton: GM_getValue('hideDownloadButton', false),
 		settingsOpen: false,
 		currentGalleryIndex: 0,
+		isFullscreen: false, // Added isFullscreen state
 	}, {
 		galleryReady: (value) => {
 			if (value) {
@@ -257,7 +259,7 @@
 		loadedImages: (value, oldValue) => {
 			// Update status when loadedImages changes
 			if (value === state.totalImages && state.totalImages > 0) {
-				state.notification = `Images and Videos Done Loading! Total: ${state.totalImages}`;
+				state.notification = `Images Done Loading! Total: ${state.totalImages}`;
 				state.notificationType = 'success';
 			} else if (state.totalImages > 0) {
 				state.notification = `Loading media (${value}/${state.totalImages})...`;
@@ -328,7 +330,13 @@
 			if (notificationArea) {
 				notificationArea.style.display = value ? 'flex' : 'none';
 			}
-		}
+		},
+		isFullscreen: (value, oldValue) => {
+			const galleryOverlay = document.getElementById('gallery-overlay');
+			if (galleryOverlay) {
+				galleryOverlay.classList.toggle(CLASS_NAMES.FULLSCREEN_GALLERY, value);
+			}
+		},
 	});
 
 	// --- Settings ---
@@ -544,13 +552,7 @@
 	let elements = {};
 
 	const handleMediaSrc = (mediaLink) => {
-		if (mediaLink.href && mediaLink.href.toLowerCase().endsWith('.mp4')) {
-			const videoElement = mediaLink.querySelector('video');
-			if (videoElement && videoElement.src) {
-				return videoElement.src;
-			}
-			return mediaLink.href;
-		}
+		// Removed video check here, only handle image links
 		const fileThumbDiv = mediaLink.querySelector('.fileThumb');
 		if (fileThumbDiv && fileThumbDiv.getAttribute('href')) {
 			return fileThumbDiv.getAttribute('href').split('?')[0];
@@ -635,8 +637,7 @@
 
 		const mediaLinks = [
 			...document.querySelectorAll(SELECTORS.IMAGE_LINK),
-			...document.querySelectorAll(SELECTORS.VIDEO_ELEMENT),
-			...document.querySelectorAll(SELECTORS.VIDEO_LINK),
+			// Removed video selectors
 			...document.querySelectorAll(SELECTORS.ATTACHMENT_LINK), // Include attachments
 		];
 
@@ -656,7 +657,7 @@
 			await Promise.all(batchPromises);
 		}
 
-		// Check if all images/videos failed to load
+		// Check if all images failed to load
 		if (state.loadedImages === state.totalImages && state.virtualGallery.every((item) => item === null)) {
 			state.notification = 'Error loading some media.';
 			state.notificationType = 'error';
@@ -675,16 +676,9 @@
 		elements.virtualGalleryContainer.style.display = 'none';
 		state.virtualGallery.forEach((mediaSrc) => {
 			if (mediaSrc) {
-				const isVideo = mediaSrc.toLowerCase().endsWith('.mp4');
-				let mediaElement;
-				if (isVideo) {
-					mediaElement = document.createElement('video');
-					mediaElement.src = mediaSrc;
-					mediaElement.controls = true;
-				} else {
-					mediaElement = document.createElement('img');
-					mediaElement.src = mediaSrc;
-				}
+				// Only create image elements now
+				const mediaElement = document.createElement('img');
+				mediaElement.src = mediaSrc;
 				mediaElement.className = CLASS_NAMES.VIRTUAL_IMAGE;
 				elements.virtualGalleryContainer.appendChild(mediaElement);
 			}
@@ -723,6 +717,7 @@
 		closeButton.className = CLASS_NAMES.GALLERY_CLOSE_BUTTON;
 		closeButton.addEventListener('click', () => {
 			state.isGalleryMode = false;
+			state.isFullscreen = false; // Exit fullscreen when closing gallery
 		});
 		const downloadButton = document.createElement('button');
 		downloadButton.textContent = '↓';
@@ -730,6 +725,13 @@
 		downloadButton.addEventListener('click', () => {
 			downloadImageByIndex(state.currentGalleryIndex);
 		});
+		const fullscreenButton = document.createElement('button'); // Create fullscreen button
+		fullscreenButton.textContent = '⛶';
+		fullscreenButton.className = CLASS_NAMES.FULLSCREEN_BUTTON;
+		fullscreenButton.addEventListener('click', () => {
+			toggleFullscreenGallery();
+		});
+
 
 		const mainView = document.createElement('div');
 		mainView.classList.add(CLASS_NAMES.GALLERY_MAIN_VIEW);
@@ -741,7 +743,7 @@
 		const expandedImageContainer = document.createElement('div');
 		expandedImageContainer.classList.add('ug-gallery-expanded-container');
 
-		const expandedMedia = document.createElement('div'); // Container for either img or video
+		const expandedMedia = document.createElement('div'); // Container for images
 		expandedMedia.classList.add('ug-gallery-expanded-media');
 
 		const prevButton = createNavigationButton('prev');
@@ -757,7 +759,7 @@
 		thumbnailStrip.classList.add(CLASS_NAMES.THUMBNAIL_STRIP);
 
 		mainView.append(expandedImageContainer);
-		controlsContainer.append(closeButton, downloadButton, thumbnailStrip, pageNumber);
+		controlsContainer.append(closeButton, downloadButton, fullscreenButton, thumbnailStrip, pageNumber); // Added fullscreenButton
 		galleryModal.append(controlsContainer, mainView, thumbnailGrid); // Added controlsContainer
 		expandedImageContainer.append(expandedMedia);
 		galleryModal.append(prevButton, nextButton);
@@ -765,6 +767,12 @@
 
 		return overlay;
 	};
+
+	// Function to toggle fullscreen mode
+	const toggleFullscreenGallery = () => {
+		state.isFullscreen = !state.isFullscreen;
+	};
+
 
 	const createNavigationButton = (direction) => {
 		const button = document.createElement('button');
@@ -822,12 +830,12 @@
 		mediaElement.style.width = 'auto';
 		mediaElement.style.height = 'auto';
 
-		// Determine if it is a video element
-		const isVideo = mediaElement.tagName === 'VIDEO';
+		// Determine if it is a video element (always false now as we only handle images)
+		const isVideo = false; //mediaElement.tagName === 'VIDEO';
 
-		// Use natural dimensions for images, video dimensions for videos
-		const naturalWidth = isVideo ? mediaElement.videoWidth : mediaElement.naturalWidth;
-		const naturalHeight = isVideo ? mediaElement.videoHeight : mediaElement.naturalHeight;
+		// Use natural dimensions for images
+		const naturalWidth = mediaElement.naturalWidth;
+		const naturalHeight = mediaElement.naturalHeight;
 
 		if (naturalWidth && naturalHeight) {
 			const availableWidth = expandedMedia.offsetWidth;
@@ -865,7 +873,7 @@
 			return;
 		}
 
-		const isVideo = mediaSrc.toLowerCase().endsWith('.mp4');
+		const isVideo = false; //mediaSrc.toLowerCase().endsWith('.mp4'); // Always false now
 		const galleryOverlay = document.getElementById('gallery-overlay');
 		if (!galleryOverlay) return;
 		const expandedMedia = galleryOverlay.querySelector('.ug-gallery-expanded-media');
@@ -880,13 +888,7 @@
 
 		expandedMedia.innerHTML = '';
 
-		let mediaElement; // Declaring mediaElement here
-		if (isVideo) {
-			mediaElement = document.createElement('video');
-			mediaElement.controls = true;
-		} else {
-			mediaElement = new Image();
-		}
+		const mediaElement = new Image(); // Only handle images now
 
 		const onMediaLoad = () => {
 			if (expandedMedia.contains(loadingOverlay)) {
@@ -925,19 +927,9 @@
 			pageNumber.textContent = 'Error loading media';
 		};
 
-		if (isVideo) {
-			mediaElement.src = mediaSrc;
-			mediaElement.onloadeddata = onMediaLoad;
-			mediaElement.onerror = onMediaError;
-
-			if (mediaElement.readyState >= 2) {
-				onMediaLoad();
-			}
-		} else {
-			mediaElement.onload = onMediaLoad;
-			mediaElement.onerror = onMediaError;
-			mediaElement.src = mediaSrc;
-		}
+		mediaElement.onload = onMediaLoad;
+		mediaElement.onerror = onMediaError;
+		mediaElement.src = mediaSrc;
 	};
 
 	const updateThumbnailStrip = () => {
@@ -985,6 +977,7 @@
 			const nextButton = mainView.querySelector('.navigation-button.next');
 			const closeButton = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_CLOSE_BUTTON}`);
 			const downloadButton = galleryOverlay.querySelector(`.${CLASS_NAMES.DOWNLOAD_BUTTON}`);
+			const fullscreenButton = galleryOverlay.querySelector(`.${CLASS_NAMES.FULLSCREEN_BUTTON}`); // Get fullscreen button
 			const thumbnailStrip = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_STRIP}`);
 			const pageNumber = galleryOverlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
 			// Removed User ID Element
@@ -994,6 +987,7 @@
 				nextButton.style.display = 'flex';
 				closeButton.style.display = 'block';
 				downloadButton.style.display = 'block';
+				fullscreenButton.style.display = 'block'; // Show fullscreen button
 				thumbnailStrip.style.display = 'block';
 				pageNumber.style.display = 'block';
 				// Removed User ID Element
@@ -1039,11 +1033,13 @@
 		const nextButton = mainView?.querySelector('.navigation-button.next');
 		const closeButton = galleryModal?.querySelector(`.${CLASS_NAMES.GALLERY_CLOSE_BUTTON}`);
 		const downloadButton = galleryModal?.querySelector(`.${CLASS_NAMES.DOWNLOAD_BUTTON}`);
+		const fullscreenButton = galleryModal?.querySelector(`.${CLASS_NAMES.FULLSCREEN_BUTTON}`); // Get fullscreen button
 		if (prevButton && nextButton) {
 			prevButton.style.display = 'flex';
 			nextButton.style.display = 'flex';
 			if (closeButton) closeButton.style.display = 'block';
 			if (downloadButton) downloadButton.style.display = 'block';
+			if (fullscreenButton) fullscreenButton.style.display = 'block'; // Show fullscreen button
 			if (thumbnailStrip) thumbnailStrip.style.display = 'flex'; // Make sure this is flex
 			if (pageNumber) pageNumber.style.display = 'block';
 		}
@@ -1081,6 +1077,7 @@
 			state.isGalleryMode = false;
 			state.expandedViewActive = false;
 			state.loadingMessage = null;
+			state.isFullscreen = false; // Exit fullscreen when closing gallery
 		}
 	};
 
@@ -1088,6 +1085,7 @@
 		if (!isPostPage()) return;
 		if (event.key === state.galleryKey && state.galleryReady) {
 			state.isGalleryMode = !state.isGalleryMode;
+			if (!state.isGalleryMode) state.isFullscreen = false; // Exit fullscreen if gallery is closed via key
 		} else if (state.isGalleryMode) {
 			if (event.key === 'Escape') {
 				if (state.expandedViewActive) {
@@ -1128,12 +1126,12 @@
 	// --- Downloading and Post Actions ---
 	const downloadAllImagesAndVideos = async () => {
 		const images = document.querySelectorAll(SELECTORS.IMAGE_LINK);
-		const videoLinks = document.querySelectorAll(SELECTORS.VIDEO_LINK);
+		// Removed videoLinks from here
 		const attachmentLinks = document.querySelectorAll(SELECTORS.ATTACHMENT_LINK);
 		const title = document.querySelector(SELECTORS.POST_TITLE)?.textContent?.trim() || "Untitled";
 		const artistName = document.querySelector(SELECTORS.POST_USER_NAME)?.textContent?.trim() || "Unknown Artist";
 
-		const total = images.length + videoLinks.length + attachmentLinks.length;
+		const total = images.length + attachmentLinks.length; // Only count images and attachments
 		if (total === 0) return;
 
 		state.isDownloading = true;
@@ -1173,14 +1171,13 @@
 											filename = originalFilename.replace(/\.[^/.]+$/, '') + '.' + ext; // Re-apply extension
 										}
 									} else if (contentType.startsWith('video/')) {
-										ext = contentType.split('/')[1];
-										filename = originalFilename.replace(/\.[^/.]+$/, '') + '.' + ext;
+										// Removed video handling logic here
 									} else if (contentType === 'application/octet-stream' && originalFilename.includes('.')) {
 										// If octet-stream and original filename has extension, use it
 										ext = getExtension(originalFilename);
 									}
 									// Default to jpg if still no valid extension
-									if (!ext || !['jpg', 'png', 'gif', 'webp', 'mp4', 'webm', 'ogg', 'mp3', 'flac'].includes(ext)) {
+									if (!ext || !['jpg', 'png', 'gif', 'webp'].includes(ext)) { // Removed video extensions
 										ext = 'jpg';
 										filename = originalFilename.replace(/\.[^/.]+$/, '') + '.jpg';
 									}
@@ -1221,12 +1218,7 @@
 			downloadPromises.push(downloadAndAddToZip(imgSrc, originalFileName, i));
 		}
 
-		for (let i = 0; i < videoLinks.length; i++) {
-			const videoLink = videoLinks[i];
-			const videoSrc = videoLink.href;
-			const originalFileName = videoLink.getAttribute("download") || `video-${i + 1}.mp4`;
-			downloadPromises.push(downloadAndAddToZip(videoSrc, originalFileName, i));
-		}
+		// Removed video link loop
 
 		for (let i = 0; i < attachmentLinks.length; i++) {
 			const link = attachmentLinks[i];
@@ -1276,8 +1268,8 @@
 		const downloadFunction = typeof GM.download === 'function' ? GM.download : downloadByAnchor; // Choose download method
 		const mediaSrc = state.fullSizeImageSrcs[index];
 		console.log("mediaSrc:", mediaSrc);
-		const isVideo = mediaSrc.toLowerCase().endsWith('.mp4');
-		const imgLink = document.querySelectorAll(isVideo ? SELECTORS.VIDEO_LINK : SELECTORS.IMAGE_LINK)[index];
+		// const isVideo = mediaSrc.toLowerCase().endsWith('.mp4'); // Not needed anymore
+		const imgLink = document.querySelectorAll(SELECTORS.IMAGE_LINK)[index]; // Only image links now
 		console.log("imgLink:", imgLink);
 
 		if (imgLink) {
@@ -1338,10 +1330,9 @@
 		elements.postActions = document.querySelector(SELECTORS.POST_ACTIONS);
 		if (!elements.postActions) return;
 
-		// Check for the presence of images or videos
+		// Check for the presence of images
 		const hasMediaContent =
-			document.querySelectorAll(SELECTORS.IMAGE_LINK).length > 0 ||
-			document.querySelectorAll(SELECTORS.VIDEO_LINK).length > 0;
+			document.querySelectorAll(SELECTORS.IMAGE_LINK).length > 0; // Only check for images
 
 		if (hasMediaContent) {
 			// Add status container only if it doesn't exist
@@ -1712,7 +1703,7 @@
 		}
 		const mediaLinks = [
 			...document.querySelectorAll(SELECTORS.IMAGE_LINK),
-			...document.querySelectorAll(SELECTORS.VIDEO_LINK),
+			// Removed video links selector
 		];
 		const currentTotalImages = mediaLinks.length;
 		const currentPageUrl = window.location.href;
@@ -1724,9 +1715,9 @@
 			state.loadedImages = 0;
 			state.hasImages = false;
 			state.totalImages = currentTotalImages; // Update totalImages on
-			// check for the presence of images or videos, create status container only if the page has them.
+			// check for the presence of images, create status container only if the page has them.
 			const hasMediaContent =
-				document.querySelectorAll(SELECTORS.IMAGE_LINK).length > 0 || document.querySelectorAll(SELECTORS.VIDEO_LINK).length > 0;
+				document.querySelectorAll(SELECTORS.IMAGE_LINK).length > 0; // Only check for images
 			if (hasMediaContent) {
 				if (!elements.statusContainer) {
 					const {
@@ -1756,9 +1747,9 @@
 			state.notificationType = 'info';
 			state.loadingMessage = null;
 			state.isLoading = false;
-			// check for the presence of images or videos, create status container only if the page has them.
+			// check for the presence of images, create status container only if the page has them.
 			const hasMediaContent =
-				document.querySelectorAll(SELECTORS.IMAGE_LINK).length > 0 || document.querySelectorAll(SELECTORS.VIDEO_LINK).length > 0;
+				document.querySelectorAll(SELECTORS.IMAGE_LINK).length > 0; // Only check for images
 			if (hasMediaContent) {
 				if (!elements.statusContainer) {
 					const {
@@ -1809,7 +1800,7 @@
 
 		if (isPostPage()) {
 			if (state.loadedImages === state.totalImages && state.totalImages > 0) {
-				state.notification = `Images and Videos Done Loading! Total: ${state.totalImages}`;
+				state.notification = `Images Done Loading! Total: ${state.totalImages}`;
 				state.notificationType = 'success';
 			} else if (state.notificationType === 'error') {
 				state.notification = 'Error loading some media.';
