@@ -147,7 +147,7 @@
 .ug-gallery-overlay.fullscreen-gallery .ug-gallery-modal .ug-download-button {
     font-size: var(--ug-fullscreen-icon-size);
     top: 25px;
-    right: 135px;
+    right: calc(100vw - 90%);
 }
 
 
@@ -181,7 +181,13 @@
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
-    transition: max-width var(--ug-transition-duration) var(--ug-transition-ease), max-height var(--ug-transition-duration) var(--ug-transition-ease);
+    transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
+    opacity: 0;
+}
+
+
+.ug-gallery-expanded-media-item.visible {
+    opacity: 1;
 }
 
 .ug-gallery-overlay.fullscreen-gallery .ug-gallery-expanded-media-item {

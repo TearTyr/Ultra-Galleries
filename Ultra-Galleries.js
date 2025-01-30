@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Ultra Galleries
-// @namespace    https://sleazyfork.org/en/users/1027300-teri
+// @namespace    https://sleazyfork.org/en/users/1027300-ntf
 // @version      2.4
-// @description  Enhanced gallery experience (SPA-compatible Testing Phase)
+// @description  Modern image gallery with enhanced browsing, fullscreen, and download features.
 // @author       ntf (original), Meri/TearTyr (maintained and improved)
 // @match        *://kemono.su/*
 // @match        *://coomer.su/*
@@ -105,6 +105,7 @@
 		CONTROLS_VISIBLE: 'ug-controls-visible',
 		CONTROLS_HIDDEN: 'ug-controls-hidden',
 		FULLSCREEN_GALLERY: 'fullscreen-gallery', // Added FULLSCREEN_GALLERY class
+		EXPANDED_VIEW_CONTAINER: 'ug-expanded-view-container', // Added container for expanded view
 	};
 
 	const MAX_RETRIES = 3;
@@ -402,7 +403,7 @@
                                 <label for="hideDownloadButton">Hide Download Button:</label>
                                 <input type="checkbox" id="hideDownloadButton" class="ug-settings-input" style="width: fit-content;" ${state.hideDownloadButton ? 'checked' : ''}>
                             </div>
-							 <div class="ug-setting">
+                            <div class="ug-setting">
                                 <label for="notificationAreaVisible">Hide Notification Area:</label>
                                 <input type="checkbox" id="notificationAreaVisible" class="ug-settings-input" style="width: fit-content;" ${state.notificationAreaVisible ? 'checked' : ''}>
                             </div>
@@ -447,15 +448,22 @@
 					const notificationsContent = document.createElement('div');
 					notificationsContent.classList.add('ug-settings-tab-content');
 					notificationsContent.innerHTML = `
-                             <div class="ug-setting">
-                                <label for="notificationsEnabled">Enable Notifications:</label>
-                                <input type="checkbox" id="notificationsEnabled" class="ug-settings-input" style="width: fit-content;" ${state.notificationsEnabled ? 'checked' : ''}>
-                            </div>
-                            <div class="ug-setting">
-                                <label for="animationsEnabled">Enable Animations:</label>
-                                <input type="checkbox" id="animationsEnabled" class="ug-settings-input" style="width: fit-content;" ${state.animationsEnabled ? 'checked' : ''}>
-                            </div>
-                       `;
+							 <div class="ug-setting">
+								<label for="notificationsEnabled">Enable Notifications:</label>
+								<input type="checkbox" id="notificationsEnabled" class="ug-settings-input" style="width: fit-content;" ${state.notificationsEnabled ? 'checked' : ''}>
+							</div>
+							<div class="ug-setting">
+								<label for="animationsEnabled">Enable Animations:</label>
+								<input type="checkbox" id="animationsEnabled" class="ug-settings-input" style="width: fit-content;" ${state.animationsEnabled ? 'checked' : ''}>
+							</div>
+					   `;
+
+					notificationsContent.querySelector('#animationsEnabled').addEventListener('change', (e) => {
+						state.animationsEnabled = e.target.checked;
+						GM_setValue('animationsEnabled', e.target.checked);
+						console.log(`Setting animationsEnabled changed to ${e.target.checked}`);
+					});
+
 					return notificationsContent;
 				},
 			},
@@ -562,6 +570,19 @@
 		}
 		return null;
 	};
+	const simulateScrollDown = async () => {
+		const originalScrollPosition = window.pageYOffset;
+		const maxScrollHeight = document.body.scrollHeight - window.innerHeight;
+		const scrollStep = window.innerHeight * 0.75; // Adjust scroll step as needed
+
+		for (let scrollPos = originalScrollPosition; scrollPos < maxScrollHeight; scrollPos += scrollStep) {
+			window.scrollTo(0, scrollPos);
+			await new Promise(resolve => setTimeout(resolve, 100)); // Short delay
+		}
+
+		// Return to the original position
+		window.scrollTo(0, originalScrollPosition);
+	};
 
 	const loadImage = async (mediaLink, index) => {
 		try {
@@ -646,6 +667,8 @@
 		state.fullSizeImageSrcs = Array(state.totalImages).fill(null);
 		state.loadedImages = 0;
 		state.mediaLoaded = {}; // Reset media loaded status
+
+		await simulateScrollDown();
 
 		// Load images in batches
 		const batchSize = IMAGE_BATCH_SIZE;
@@ -732,7 +755,6 @@
 			toggleFullscreenGallery();
 		});
 
-
 		const mainView = document.createElement('div');
 		mainView.classList.add(CLASS_NAMES.GALLERY_MAIN_VIEW);
 		mainView.addEventListener('click', () => {
@@ -742,6 +764,10 @@
 
 		const expandedImageContainer = document.createElement('div');
 		expandedImageContainer.classList.add('ug-gallery-expanded-container');
+
+		// Create a new container for the expanded view
+		const expandedViewContainer = document.createElement('div');
+		expandedViewContainer.classList.add(CLASS_NAMES.EXPANDED_VIEW_CONTAINER);
 
 		const expandedMedia = document.createElement('div'); // Container for images
 		expandedMedia.classList.add('ug-gallery-expanded-media');
@@ -761,7 +787,8 @@
 		mainView.append(expandedImageContainer);
 		controlsContainer.append(closeButton, downloadButton, fullscreenButton, thumbnailStrip, pageNumber); // Added fullscreenButton
 		galleryModal.append(controlsContainer, mainView, thumbnailGrid); // Added controlsContainer
-		expandedImageContainer.append(expandedMedia);
+		expandedImageContainer.append(expandedViewContainer); // Add expandedViewContainer to expandedImageContainer
+		expandedViewContainer.append(expandedMedia); // Add expandedMedia to expandedViewContainer
 		galleryModal.append(prevButton, nextButton);
 		overlay.appendChild(galleryModal);
 
@@ -772,7 +799,6 @@
 	const toggleFullscreenGallery = () => {
 		state.isFullscreen = !state.isFullscreen;
 	};
-
 
 	const createNavigationButton = (direction) => {
 		const button = document.createElement('button');
@@ -873,48 +899,45 @@
 			return;
 		}
 
-		const isVideo = false; //mediaSrc.toLowerCase().endsWith('.mp4'); // Always false now
 		const galleryOverlay = document.getElementById('gallery-overlay');
 		if (!galleryOverlay) return;
-		const expandedMedia = galleryOverlay.querySelector('.ug-gallery-expanded-media');
-		// Removed User ID Element
-		// const userId = galleryOverlay.querySelector('.ug-gallery-user-id');
+
+		// Get the new expanded view container
+		const expandedViewContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.EXPANDED_VIEW_CONTAINER}`);
+		const expandedMedia = expandedViewContainer.querySelector('.ug-gallery-expanded-media');
+
 		let loadingOverlay = galleryOverlay.querySelector(`.${CLASS_NAMES.LOADING_OVERLAY}`);
 
 		if (!loadingOverlay) {
 			loadingOverlay = createLoadingOverlay();
-			expandedMedia.appendChild(loadingOverlay);
+			expandedMedia.appendChild(loadingOverlay); // Append loading overlay to expandedMedia
 		}
 
 		expandedMedia.innerHTML = '';
 
 		const mediaElement = new Image(); // Only handle images now
 
+
 		const onMediaLoad = () => {
 			if (expandedMedia.contains(loadingOverlay)) {
 				expandedMedia.removeChild(loadingOverlay);
 			}
 			galleryOverlay.classList.add('expanded');
-			mediaElement.classList.add('ug-gallery-expanded-media-item');
+			mediaElement.classList.add('ug-gallery-expanded-media-item', 'visible');
 			expandedMedia.appendChild(mediaElement);
 
 			currentIndex = index;
 			state.currentGalleryIndex = index;
 			const pageNumber = galleryOverlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
 			pageNumber.textContent = `${index + 1} / ${state.fullSizeImageSrcs.length}`;
-			// Removed User ID Element
-			// userId.textContent = images[index].dataset.userId || "User ID not found";
-			// userId.style.display = 'block';
 			state.loadingMessage = null;
 
-			// Update media element size after it has loaded
 			updateMediaElementSize(mediaElement, galleryOverlay);
 
-			// Add resize observer for dynamic resizing
 			const resizeObserver = new ResizeObserver(() => {
 				updateMediaElementSize(mediaElement, galleryOverlay);
 			});
-			resizeObserver.observe(galleryOverlay);
+			resizeObserver.observe(expandedViewContainer);
 		};
 
 		const onMediaError = () => {
@@ -980,8 +1003,6 @@
 			const fullscreenButton = galleryOverlay.querySelector(`.${CLASS_NAMES.FULLSCREEN_BUTTON}`); // Get fullscreen button
 			const thumbnailStrip = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_STRIP}`);
 			const pageNumber = galleryOverlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
-			// Removed User ID Element
-			// const userId = galleryOverlay.querySelector(`.ug-gallery-user-id`);
 			if (prevButton && nextButton && !state.hideNavArrows) {
 				prevButton.style.display = 'flex';
 				nextButton.style.display = 'flex';
@@ -990,8 +1011,6 @@
 				fullscreenButton.style.display = 'block'; // Show fullscreen button
 				thumbnailStrip.style.display = 'block';
 				pageNumber.style.display = 'block';
-				// Removed User ID Element
-				// userId.style.display = 'block';
 			}
 		}
 		state.controlsVisible = true;
@@ -1085,7 +1104,7 @@
 		if (!isPostPage()) return;
 		if (event.key === state.galleryKey && state.galleryReady) {
 			state.isGalleryMode = !state.isGalleryMode;
-			if (!state.isGalleryMode) state.isFullscreen = false; // Exit fullscreen if gallery is closed via key
+			if (!state.isGalleryMode) state.isFullscreen = false;
 		} else if (state.isGalleryMode) {
 			if (event.key === 'Escape') {
 				if (state.expandedViewActive) {
@@ -1095,9 +1114,9 @@
 				}
 			} else if (state.expandedViewActive) {
 				event.preventDefault();
-				if (event.key === 'k') {
+				if (event.key === 'ArrowLeft' || event.key === 'k') {
 					showExpandedImage((currentIndex - 1 + images.length) % images.length);
-				} else if (event.key === 'l') {
+				} else if (event.key === 'ArrowRight' || event.key === 'l') {
 					showExpandedImage((currentIndex + 1) % images.length);
 				}
 			}
@@ -1124,9 +1143,8 @@
 	}
 
 	// --- Downloading and Post Actions ---
-	const downloadAllImagesAndVideos = async () => {
+	const downloadAllImages = async () => {
 		const images = document.querySelectorAll(SELECTORS.IMAGE_LINK);
-		// Removed videoLinks from here
 		const attachmentLinks = document.querySelectorAll(SELECTORS.ATTACHMENT_LINK);
 		const title = document.querySelector(SELECTORS.POST_TITLE)?.textContent?.trim() || "Untitled";
 		const artistName = document.querySelector(SELECTORS.POST_USER_NAME)?.textContent?.trim() || "Unknown Artist";
@@ -1170,8 +1188,6 @@
 											ext = imageExt;
 											filename = originalFilename.replace(/\.[^/.]+$/, '') + '.' + ext; // Re-apply extension
 										}
-									} else if (contentType.startsWith('video/')) {
-										// Removed video handling logic here
 									} else if (contentType === 'application/octet-stream' && originalFilename.includes('.')) {
 										// If octet-stream and original filename has extension, use it
 										ext = getExtension(originalFilename);
@@ -1190,11 +1206,11 @@
 							const finalFilename = state.imageFileNameFormat
 								.replace("{title}", sanitizedTitle)
 								.replace("{artistName}", sanitizedArtistName)
-								.replace("{fileName}", sanitizeFileName(filename.replace(/\.[^/.]+$/, ""))) // Sanitize filename part
+								.replace("{fileName}", sanitizeFileName(filename.replace(/\.[^/.]+$/, "")))
 								.replace("{index}", index + 1)
 								.replace("{ext}", ext.toLowerCase());
 
-							zip.file(finalFilename + '.' + ext, response.response); // Add extension here to zip file
+							zip.file(finalFilename + '.' + ext, response.response);
 							downloaded++;
 							state.downloadedCount = downloaded;
 							resolve();
@@ -1217,8 +1233,6 @@
 			const originalFileName = imgLink.getAttribute("download") || `image-${i + 1}.jpg`;
 			downloadPromises.push(downloadAndAddToZip(imgSrc, originalFileName, i));
 		}
-
-		// Removed video link loop
 
 		for (let i = 0; i < attachmentLinks.length; i++) {
 			const link = attachmentLinks[i];
@@ -1265,10 +1279,8 @@
 
 	const downloadImageByIndex = (index) => {
 		console.log("downloadImageByIndex called with index:", index);
-		const downloadFunction = typeof GM.download === 'function' ? GM.download : downloadByAnchor; // Choose download method
 		const mediaSrc = state.fullSizeImageSrcs[index];
 		console.log("mediaSrc:", mediaSrc);
-		// const isVideo = mediaSrc.toLowerCase().endsWith('.mp4'); // Not needed anymore
 		const imgLink = document.querySelectorAll(SELECTORS.IMAGE_LINK)[index]; // Only image links now
 		console.log("imgLink:", imgLink);
 
@@ -1283,30 +1295,9 @@
 				console.warn("Download attribute missing, using fallback filename:", fileName);
 			}
 
-			if (typeof GM.download === 'function') {
-				// Use GM.download if available
-				const options = {
-					url: imgSrc,
-					name: fileName,
-					headers: {
-						referer: `https://${website}.su/`
-					},
-				};
-
-				GM.download(options)
-					.then(() => {
-						console.log("GM.download promise resolved (download initiated) - Filename:", fileName);
-					})
-					.catch(error => {
-						console.error("GM.download error:", error);
-						console.warn("GM.download failed, falling back to downloadByAnchor.");
-						downloadByAnchor(imgSrc, fileName); // Fallback to downloadByAnchor on GM.download error
-					});
-			} else {
-				// Fallback to downloadByAnchor if GM.download is not available
-				downloadByAnchor(imgSrc, fileName);
-				console.log("GM.download not available, using downloadByAnchor.");
-			}
+			// Use downloadByAnchor directly for Firefox compatibility
+			downloadByAnchor(imgSrc, fileName);
+			console.log("Using downloadByAnchor.");
 
 		} else {
 			console.error("imgLink not found for index:", index);
@@ -1350,7 +1341,7 @@
 			if (!elements.postActions.querySelector(`.${CLASS_NAMES.UG_BUTTON}`)) {
 				const downloadAllButton = createToggleButton(
 					BUTTONS.DOWNLOAD_ALL,
-					downloadAllImagesAndVideos
+					downloadAllImages
 				);
 				const galleryButton = createToggleButton(
 					'Loading Gallery...',
@@ -1403,7 +1394,6 @@
 				}
 			});
 
-			const currentButtonGroups = [];
 			state.displayedImages.forEach((img, index) => {
 				const downloadLink = img
 					.closest(SELECTORS.THUMBNAIL)
@@ -1703,7 +1693,6 @@
 		}
 		const mediaLinks = [
 			...document.querySelectorAll(SELECTORS.IMAGE_LINK),
-			// Removed video links selector
 		];
 		const currentTotalImages = mediaLinks.length;
 		const currentPageUrl = window.location.href;
@@ -1714,8 +1703,7 @@
 			state.galleryReady = false;
 			state.loadedImages = 0;
 			state.hasImages = false;
-			state.totalImages = currentTotalImages; // Update totalImages on
-			// check for the presence of images, create status container only if the page has them.
+			state.totalImages = currentTotalImages;
 			const hasMediaContent =
 				document.querySelectorAll(SELECTORS.IMAGE_LINK).length > 0; // Only check for images
 			if (hasMediaContent) {
@@ -1739,17 +1727,17 @@
 			previousPageUrl = currentPageUrl;
 		} else if (currentPageUrl !== state.currentPostUrl) {
 			cleanupPostActions();
-			state.totalImages = currentTotalImages; // Update totalImages on URL change
+			state.totalImages = currentTotalImages;
 			state.galleryReady = false;
 			state.loadedImages = 0;
 			state.hasImages = false;
-			state.notification = null; // Clear notifications on page change
+			state.notification = null;
 			state.notificationType = 'info';
 			state.loadingMessage = null;
 			state.isLoading = false;
 			// check for the presence of images, create status container only if the page has them.
 			const hasMediaContent =
-				document.querySelectorAll(SELECTORS.IMAGE_LINK).length > 0; // Only check for images
+				document.querySelectorAll(SELECTORS.IMAGE_LINK).length > 0;
 			if (hasMediaContent) {
 				if (!elements.statusContainer) {
 					const {
@@ -1806,7 +1794,7 @@
 				state.notification = 'Error loading some media.';
 			}
 		} else {
-			state.notification = null; // Clear notifications when not on a post page
+			state.notification = null;
 			state.notificationType = 'info';
 			state.loadingMessage = null;
 			state.isLoading = false;
