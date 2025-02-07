@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      2.4
+// @version      2.4.1
 // @description  Modern image gallery with enhanced browsing, fullscreen, and download features.
 // @author       ntf (original), Meri/TearTyr (maintained and improved)
 // @match        *://kemono.su/*
@@ -44,7 +44,7 @@
 	// --- CSS Injection ---
 	GM.xmlHttpRequest({
 		method: 'GET',
-		url: 'https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/TestingBranch/Ultra-Galleries.css',
+		url: 'https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/TestingBranch/Ultra-Galleries.css', // Or your CSS file URL
 		onload: function(response) {
 			if (response.status === 200) {
 				GM_addStyle(response.responseText);
@@ -123,11 +123,12 @@
 		CONTROLS_HIDDEN: 'ug-controls-hidden',
 		FULLSCREEN_GALLERY: 'fullscreen-gallery',
 		EXPANDED_VIEW_CONTAINER: 'ug-expanded-view-container',
-		THUMBNAIL_PREVIEW: 'ug-thumbnail-preview',
-		UG_GALLERY_THUMBNAIL: 'ug-gallery-thumbnail', // Class for thumbnail strip thumbnails
-		UG_GALLERY_THUMBNAIL_GRID_CONTAINER: 'ug-gallery-thumbnail-grid-container', // Updated class name
-		UG_GALLERY_THUMBNAIL_GRID: 'ug-gallery-thumbnail-grid', // Updated class name
-		UG_GALLERY_EXPANDED_MEDIA: 'ug-gallery-expanded-media' // Updated class name
+		THUMBNAIL_PREVIEW: 'ug-thumbnail-preview', // Keep for now, in case we re-add previews
+		UG_GALLERY_THUMBNAIL: 'ug-gallery-thumbnail',
+		UG_GALLERY_THUMBNAIL_GRID_CONTAINER: 'ug-gallery-thumbnail-grid-container',
+		UG_GALLERY_THUMBNAIL_GRID: 'ug-gallery-thumbnail-grid',
+		UG_GALLERY_EXPANDED_MEDIA: 'ug-gallery-expanded-media',
+		BOTTOM_STRIPE: 'ug-bottom-stripe',
 	};
 
 	const MAX_RETRIES = 3;
@@ -184,7 +185,9 @@
 		currentGalleryIndex: 0,
 		isFullscreen: false,
 		prevImageKey: GM_getValue('prevImageKey', 'k'),
-		nextImageKey: GM_getValue('nextImageKey', 'l')
+		nextImageKey: GM_getValue('nextImageKey', 'l'),
+		bottomStripeVisible: true,
+		dynamicResizing: GM_getValue('dynamicResizing', true), // Default to on
 	}, {
 		galleryReady: (value) => {
 			if (value) {
@@ -194,7 +197,6 @@
 			}
 		},
 		loadedImages: (value, oldValue) => {
-			// Update status when loadedImages changes
 			if (value === state.totalImages && state.totalImages > 0) {
 				state.notification = `Images Done Loading! Total: ${state.totalImages}`;
 				state.notificationType = 'success';
@@ -210,15 +212,12 @@
 			}
 		},
 		totalImages: (value, oldValue) => {
-			// Only update the status if totalImages changes from 0 to a positive number
 			if (oldValue === 0 && value > 0) {
 				state.notification = `Loading media (${state.loadedImages}/${value})...`;
 			} else if (value > 0) {
 				state.notification = `Loading media (${state.loadedImages}/${value})...`;
 			}
-			// Set hasImages flag based on totalImages
 			state.hasImages = value > 0;
-			console.log("totalImages changed:", value, "hasImages:", state.hasImages); // Debug log
 		},
 		isLoading: (value, oldValue) => {
 			if (value && !oldValue) {
@@ -235,10 +234,8 @@
 			}
 		},
 		hasImages: (value) => {
-			// Show/hide gallery button based on hasImages
 			if (elements.galleryButton) {
 				elements.galleryButton.style.display = value ? 'inline-block' : 'none';
-				console.log("galleryButton display updated:", elements.galleryButton.style.display); // Debug log
 			}
 		},
 		isGalleryMode: (value) => {
@@ -272,6 +269,12 @@
 			const galleryOverlay = document.getElementById('gallery-overlay');
 			if (galleryOverlay) {
 				galleryOverlay.classList.toggle(CLASS_NAMES.FULLSCREEN_GALLERY, value);
+			}
+		},
+		bottomStripeVisible: (value) => {
+			const bottomStripe = document.querySelector(`.${CLASS_NAMES.BOTTOM_STRIPE}`);
+			if (bottomStripe) {
+				bottomStripe.style.display = value ? 'flex' : 'none';
 			}
 		},
 	});
@@ -353,14 +356,16 @@
                                 <label for="notificationAreaVisible">Hide Notification Area:</label>
                                 <input type="checkbox" id="notificationAreaVisible" class="ug-settings-input" style="width: fit-content;" ${state.notificationAreaVisible ? 'checked' : ''}>
                             </div>
+                            <div class="ug-setting">
+                                <label for="dynamicResizing">Dynamic Image Resizing:</label>
+                                <input type="checkbox" id="dynamicResizing" class="ug-settings-input" style="width: fit-content;" ${state.dynamicResizing ? 'checked' : ''}>
+                            </div>
                         `;
 
-					// Attach change events to the checkboxes to update the state
 					optionsContent.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
 						checkbox.addEventListener('change', (e) => {
-							state[e.target.id] = e.target.checked; // Update state
-							GM_setValue(e.target.id, e.target.checked); // Persist setting
-							console.log(`Setting ${e.target.id} changed to ${e.target.checked}`);
+							state[e.target.id] = e.target.checked;
+							GM_setValue(e.target.id, e.target.checked);
 						});
 					});
 
@@ -394,20 +399,19 @@
 					const notificationsContent = document.createElement('div');
 					notificationsContent.classList.add('ug-settings-tab-content');
 					notificationsContent.innerHTML = `
-							 <div class="ug-setting">
-								<label for="notificationsEnabled">Enable Notifications:</label>
-								<input type="checkbox" id="notificationsEnabled" class="ug-settings-input" style="width: fit-content;" ${state.notificationsEnabled ? 'checked' : ''}>
-							</div>
-							<div class="ug-setting">
-								<label for="animationsEnabled">Enable Animations:</label>
-								<input type="checkbox" id="animationsEnabled" class="ug-settings-input" style="width: fit-content;" ${state.animationsEnabled ? 'checked' : ''}>
-							</div>
-					   `;
+                             <div class="ug-setting">
+                                <label for="notificationsEnabled">Enable Notifications:</label>
+                                <input type="checkbox" id="notificationsEnabled" class="ug-settings-input" style="width: fit-content;" ${state.notificationsEnabled ? 'checked' : ''}>
+                            </div>
+                            <div class="ug-setting">
+                                <label for="animationsEnabled">Enable Animations:</label>
+                                <input type="checkbox" id="animationsEnabled" class="ug-settings-input" style="width: fit-content;" ${state.animationsEnabled ? 'checked' : ''}>
+                            </div>
+                       `;
 
 					notificationsContent.querySelector('#animationsEnabled').addEventListener('change', (e) => {
 						state.animationsEnabled = e.target.checked;
 						GM_setValue('animationsEnabled', e.target.checked);
-						console.log(`Setting animationsEnabled changed to ${e.target.checked}`);
 					});
 
 					return notificationsContent;
@@ -430,13 +434,12 @@
 		};
 
 		let activeTab = 'general';
-		const ribbonButtons = {}; // Store buttons for active styling
+		const ribbonButtons = {};
 
 		const showTabContent = (tabId) => {
 			content.innerHTML = '';
 			content.appendChild(tabs[tabId].content());
-			activeTab = tabId; // Update activeTab
-			// Update styles based on activeTab
+			activeTab = tabId;
 			for (const tabKey in ribbonButtons) {
 				ribbonButtons[tabKey].classList.toggle('active', tabKey === activeTab);
 			}
@@ -448,44 +451,40 @@
 			button.classList.add('ug-settings-ribbon-button');
 			button.addEventListener('click', () => showTabContent(tabId));
 			ribbon.appendChild(button);
-			ribbonButtons[tabId] = button; // Store the button
+			ribbonButtons[tabId] = button;
 		}
 
-		// Function to save settings and close
 		const saveSettings = () => {
 			state.zipFileNameFormat = document.getElementById('zipFileNameFormat')?.value || state.zipFileNameFormat;
 			state.imageFileNameFormat = document.getElementById('imageFileNameFormat')?.value || state.imageFileNameFormat;
 			state.galleryKey = document.getElementById('galleryKey')?.value || state.galleryKey;
-			state.prevImageKey = document.getElementById('prevImageKey')?.value || state.prevImageKey; // Get prevImageKey value
-			state.nextImageKey = document.getElementById('nextImageKey')?.value || state.nextImageKey; // Get nextImageKey value
+			state.prevImageKey = document.getElementById('prevImageKey')?.value || state.prevImageKey;
+			state.nextImageKey = document.getElementById('nextImageKey')?.value || state.nextImageKey;
 
-			// Trim whitespace from input values before saving
 			state.zipFileNameFormat = state.zipFileNameFormat.trim();
 			state.imageFileNameFormat = state.imageFileNameFormat.trim();
 			state.galleryKey = state.galleryKey.trim();
-			state.prevImageKey = state.prevImageKey.trim(); // Trim prevImageKey
-			state.nextImageKey = state.nextImageKey.trim(); // Trim nextImageKey
-
+			state.prevImageKey = state.prevImageKey.trim();
+			state.nextImageKey = state.nextImageKey.trim();
 
 			GM_setValue('zipFileNameFormat', state.zipFileNameFormat);
 			GM_setValue('imageFileNameFormat', state.imageFileNameFormat);
 			GM_setValue('galleryKey', state.galleryKey);
-			GM_setValue('prevImageKey', state.prevImageKey); // Persist prevImageKey
-			GM_setValue('nextImageKey', state.nextImageKey); // Persist nextImageKey
+			GM_setValue('prevImageKey', state.prevImageKey);
+			GM_setValue('nextImageKey', state.nextImageKey);
 			state.notificationAreaVisible = document.getElementById('notificationAreaVisible')?.checked;
 			GM_setValue('notificationAreaVisible', state.notificationAreaVisible);
 
 			state.settingsOpen = false;
 		}
 
-		// Create the save button
 		const saveButton = document.createElement('button');
 		saveButton.textContent = 'Save';
 		saveButton.className = 'swal2-confirm';
-		saveButton.classList.add('ug-settings-save-button'); // Added class for styling
+		saveButton.classList.add('ug-settings-save-button');
 		saveButton.addEventListener('click', saveSettings);
 		content.appendChild(saveButton);
-		showTabContent(activeTab); // Default active tab
+		showTabContent(activeTab);
 
 		container.appendChild(ribbon);
 		container.appendChild(content);
@@ -495,19 +494,26 @@
 	};
 
 	const showSettings = () => {
-		createSettingsUI();
+		createSettingsUI(); // This creates the HTML if it doesn't exist
+		const overlay = document.getElementById('ug-settings-overlay');
+		if (overlay) {
+			// Remove closing class if present, add opening
+			overlay.classList.remove('closing');
+			overlay.classList.add('opening');
+			overlay.style.width = '100%'; // Add this line
+			overlay.style.height = '100%'; // Add this line
+		}
 	};
 
 	const closeSettings = () => {
 		const overlay = document.getElementById('ug-settings-overlay');
 		if (overlay) {
-			overlay.classList.add('closing'); // Add closing class for animation
+			overlay.classList.add('closing'); // Add closing class to start animation
 			setTimeout(() => {
 				overlay.remove();
-			}, 300);
+			}, 300); // Remove after animation (0.3s)
 		}
 	};
-
 
 	// --- UI Element Creation Functions ---
 	const createToggleButton = (name, action, disabled = false) => {
@@ -568,7 +574,7 @@
 	};
 
 	// --- Image Loading Functions ---
-	let elements = { // Group UI elements for easier access
+	let elements = {
 		loadingOverlay: null,
 		virtualGalleryContainer: null,
 		postActions: null,
@@ -578,6 +584,8 @@
 		settingsButton: null
 	};
 
+	//Variable to track if key listeners have been added
+	let galleryKeyListenerAttached = false;
 
 	const imageActions = {
 		height: (img) => setImageStyle(img, {
@@ -640,7 +648,7 @@
 								const blobUrl = URL.createObjectURL(response.response);
 								img.src = blobUrl;
 								img.dataset.originalSrc = blobUrl;
-								imageActions.height(img); // imageActions is now defined before this point
+								imageActions.height(img);
 								img.onload = () => {
 									state.loadedImages++;
 									state.mediaLoaded[index] = true;
@@ -664,7 +672,6 @@
 		}
 	};
 
-	// --- Modified loadImages for Batch Loading ---
 	const loadImages = async () => {
 		if (!isPostPage() || state.galleryReady || state.isLoading) return;
 
@@ -673,19 +680,17 @@
 
 		const mediaLinks = [
 			...document.querySelectorAll(SELECTORS.IMAGE_LINK),
-			// Removed video selectors
-			...document.querySelectorAll(SELECTORS.ATTACHMENT_LINK), // Include attachments
+			...document.querySelectorAll(SELECTORS.ATTACHMENT_LINK),
 		];
 
 		state.totalImages = mediaLinks.length;
 		state.virtualGallery = Array(state.totalImages).fill(null);
 		state.fullSizeImageSrcs = Array(state.totalImages).fill(null);
 		state.loadedImages = 0;
-		state.mediaLoaded = {}; // Reset media loaded status
+		state.mediaLoaded = {};
 
 		await simulateScrollDown();
 
-		// Load images in batches
 		const batchSize = IMAGE_BATCH_SIZE;
 		for (let i = 0; i < mediaLinks.length; i += batchSize) {
 			const batchPromises = [];
@@ -695,7 +700,6 @@
 			await Promise.all(batchPromises);
 		}
 
-		// Check if all images failed to load
 		if (state.loadedImages === state.totalImages && state.virtualGallery.every((item) => item === null)) {
 			state.notification = 'Error loading some media.';
 			state.notificationType = 'error';
@@ -709,35 +713,32 @@
 
 	const createVirtualGallery = () => {
 		cleanupVirtualGallery();
-
-		elements.virtualGalleryContainer = document.createElement('div');
+		elements.virtualGalleryContainer = document.createElement('div'); // Use document here
 		elements.virtualGalleryContainer.style.display = 'none';
 		state.virtualGallery.forEach((mediaSrc) => {
 			if (mediaSrc) {
-				// Only create image elements now
-				const mediaElement = document.createElement('img');
+				const mediaElement = document.createElement('img'); // And here
 				mediaElement.src = mediaSrc;
 				mediaElement.className = CLASS_NAMES.VIRTUAL_IMAGE;
 				elements.virtualGalleryContainer.appendChild(mediaElement);
 			}
 
 		});
-		document.body.appendChild(elements.virtualGalleryContainer);
+		document.body.appendChild(elements.virtualGalleryContainer); // And here
 	};
 
 	const cleanupVirtualGallery = () => {
 		if (elements.virtualGalleryContainer) {
 			elements.virtualGalleryContainer.remove();
-			elements.virtualGalleryContainer = null; // Reset the container
+			elements.virtualGalleryContainer = null;
 		}
 		state.galleryReady = false;
 	};
+	// --- Gallery Display and Navigation --- (Rewritten Section) ---
 
-	// --- Gallery Display and Navigation ---
-	let galleryKeyListenerAttached = false;
-	let images;
-	let currentIndex = 0; // Initialize currentIndex here
+	let galleryOverlay = null; // Store the gallery overlay globally
 
+	// Creates the gallery overlay (only called once)
 	const createGalleryOverlay = () => {
 		const overlay = document.createElement('div');
 		overlay.id = 'gallery-overlay';
@@ -746,53 +747,52 @@
 		const galleryModal = document.createElement('div');
 		galleryModal.classList.add('ug-gallery-modal');
 
-		// Container for controls (to manage visibility with CSS classes)
 		const controlsContainer = document.createElement('div');
 		controlsContainer.classList.add(CLASS_NAMES.GALLERY_CONTROLS_CONTAINER, CLASS_NAMES.CONTROLS_VISIBLE);
 
 		const closeButton = document.createElement('button');
 		closeButton.textContent = '×';
 		closeButton.className = CLASS_NAMES.GALLERY_CLOSE_BUTTON;
-		closeButton.addEventListener('click', () => {
-			state.isGalleryMode = false;
-			state.isFullscreen = false; // Exit fullscreen when closing gallery
-		});
-		const downloadButton = document.createElement('button');
-		downloadButton.textContent = '↓';
-		downloadButton.className = CLASS_NAMES.DOWNLOAD_BUTTON;
-		downloadButton.addEventListener('click', () => {
-			downloadImageByIndex(state.currentGalleryIndex);
-		});
-		const fullscreenButton = document.createElement('button'); // Create fullscreen button
+		closeButton.addEventListener('click', closeGallery); // Use the named function
+
+		const fullscreenButton = document.createElement('button');
 		fullscreenButton.textContent = '⛶';
 		fullscreenButton.className = CLASS_NAMES.FULLSCREEN_BUTTON;
-		fullscreenButton.addEventListener('click', () => {
-			toggleFullscreenGallery();
-		});
+		fullscreenButton.addEventListener('click', toggleFullscreenGallery);
+
+		//ADD BACK BUTTON
+		const backButton = document.createElement('button');
+		backButton.textContent = '← Back'; // Or an icon if you prefer
+		backButton.className = 'ug-gallery-back-button';
+		backButton.addEventListener('click', hideExpandedImage); // Reuse the existing function
+
+		controlsContainer.append(backButton, closeButton, fullscreenButton); // Add backButton first
+
 
 		const mainView = document.createElement('div');
 		mainView.classList.add(CLASS_NAMES.GALLERY_MAIN_VIEW);
-		mainView.addEventListener('click', () => {
-			state.controlsVisible = !state.controlsVisible;
-			updateControlVisibility();
-		})
+		mainView.addEventListener('click', toggleControls); // Toggle controls on click
 
 		const expandedImageContainer = document.createElement('div');
 		expandedImageContainer.classList.add(CLASS_NAMES.EXPANDED_VIEW_CONTAINER);
 
-		// Create a new container for the expanded view
-		const expandedViewContainer = document.createElement('div');
-		expandedViewContainer.classList.add(CLASS_NAMES.EXPANDED_VIEW_CONTAINER);
-
-		const expandedMedia = document.createElement('div'); // Container for images
-		expandedMedia.classList.add(CLASS_NAMES.UG_GALLERY_EXPANDED_MEDIA); // Updated class name
+		const expandedMedia = document.createElement('div');
+		expandedMedia.classList.add(CLASS_NAMES.UG_GALLERY_EXPANDED_MEDIA);
 
 		const prevButton = createNavigationButton('prev');
+		prevButton.addEventListener('click', (event) => {
+			event.stopPropagation(); // Prevent event bubbling
+			navigateGallery(-1);
+		});
+
 		const nextButton = createNavigationButton('next');
+		nextButton.addEventListener('click', (event) => {
+			event.stopPropagation(); // Prevent event bubbling
+			navigateGallery(1);
+		});
 
 		const pageNumber = document.createElement('div');
 		pageNumber.className = CLASS_NAMES.PAGE_NUMBER;
-		pageNumber.textContent = "0/0";
 
 		const thumbnailStrip = document.createElement('div');
 		thumbnailStrip.classList.add(CLASS_NAMES.THUMBNAIL_STRIP);
@@ -800,79 +800,241 @@
 		const thumbnailGrid = document.createElement('div');
 		thumbnailGrid.classList.add(CLASS_NAMES.THUMBNAIL_GRID);
 
+		const bottomStripe = document.createElement('div');
+		bottomStripe.classList.add(CLASS_NAMES.BOTTOM_STRIPE);
+
+		// Assemble the gallery elements
 		mainView.append(expandedImageContainer);
-		controlsContainer.append(closeButton, downloadButton, fullscreenButton); // Added fullscreenButton
-		galleryModal.append(controlsContainer, mainView, thumbnailStrip, thumbnailGrid, pageNumber, prevButton, nextButton); // Added controlsContainer, pageNumber, nav buttons
-		expandedImageContainer.append(expandedViewContainer); // Add expandedViewContainer to expandedImageContainer
-		expandedViewContainer.append(expandedMedia); // Add expandedMedia to expandedViewContainer
+		//controlsContainer.append(closeButton, fullscreenButton); //MOVED
+		galleryModal.append(controlsContainer, mainView, bottomStripe, pageNumber, prevButton, nextButton);
+		expandedImageContainer.append(expandedMedia);
 		overlay.appendChild(galleryModal);
+
+		bottomStripe.appendChild(thumbnailStrip);
+		bottomStripe.appendChild(thumbnailGrid);
 
 		return overlay;
 	};
 
-	// Function to toggle fullscreen mode
 	const toggleFullscreenGallery = () => {
 		state.isFullscreen = !state.isFullscreen;
 	};
 
-	// Updated to use CSS classes for control visibility
+	const toggleControls = () => {
+		state.controlsVisible = !state.controlsVisible;
+		updateControlVisibility();
+		state.bottomStripeVisible = state.controlsVisible; // Sync bottom stripe visibility
+	};
+
 	const updateControlVisibility = () => {
-		const galleryOverlay = document.getElementById('gallery-overlay');
+		if (!galleryOverlay) return;
+		const controlsContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_CONTROLS_CONTAINER}`);
+		if (controlsContainer) {
+			controlsContainer.classList.toggle(CLASS_NAMES.CONTROLS_VISIBLE, state.controlsVisible);
+			controlsContainer.classList.toggle(CLASS_NAMES.CONTROLS_HIDDEN, !state.controlsVisible);
+		}
+	};
+	// Add this helper function (outside of updateExpandedView, but in the same scope)
+	const toggleImageSize = (img) => {
+		if (img.classList.contains('ug-resized')) {
+			// Currently resized, revert to original
+			img.style.maxWidth = '100%';
+			img.style.maxHeight = '100%';
+			img.style.width = 'auto';
+			img.style.height = 'auto';
+			img.classList.remove('ug-resized');
+		} else {
+			// Currently at original size, resize to fit
+			updateMediaElementSize(img, galleryOverlay); // Use the existing function
+			img.classList.add('ug-resized');
+		}
+	};
+	// Updates the content of the expanded view with the image at the given index.
+	const updateExpandedView = (index) => {
 		if (!galleryOverlay) return;
 
-		const controlsContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_CONTROLS_CONTAINER}`);
-		if (!controlsContainer) return;
+		const expandedMedia = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_GALLERY_EXPANDED_MEDIA}`);
+		if (!expandedMedia) return;
+		expandedMedia.innerHTML = ''; // Clear previous content
 
-		if (state.controlsVisible) {
-			controlsContainer.classList.remove(CLASS_NAMES.CONTROLS_HIDDEN);
-			controlsContainer.classList.add(CLASS_NAMES.CONTROLS_VISIBLE);
-		} else {
-			controlsContainer.classList.remove(CLASS_NAMES.CONTROLS_VISIBLE);
-			controlsContainer.classList.add(CLASS_NAMES.CONTROLS_HIDDEN);
-		}
-	};
-
-	const hideExpandedImage = () => {
-		state.expandedViewActive = false;
-		const galleryOverlay = document.getElementById('gallery-overlay');
-		if (galleryOverlay) {
-			galleryOverlay.classList.remove('expanded');
-			const expandedMedia = galleryOverlay.querySelector('.ug-gallery-expanded-media');
-			expandedMedia.innerHTML = '';
-
-			const thumbnailStrip = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_STRIP}`);
-			if (thumbnailStrip) {
-				thumbnailStrip.style.display = 'flex';
-			}
-
-			// Hide navigation buttons
-			const mainView = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_MAIN_VIEW}`);
-			const prevButton = mainView.querySelector('.navigation-button.prev');
-			const nextButton = mainView.querySelector('.navigation-button.next');
-			if (prevButton && nextButton) {
-				prevButton.style.display = 'none';
-				nextButton.style.display = 'none';
-			}
-		}
-		state.loadingMessage = null;
-	};
-
-	const updateMediaElementSize = (mediaElement, galleryOverlay) => {
-		const expandedMedia = galleryOverlay.querySelector('.ug-gallery-expanded-media');
-		if (!expandedMedia || !mediaElement) {
+		const imageSrc = state.fullSizeImageSrcs[index];
+		if (!imageSrc) {
+			console.error("Image source is undefined for index:", index);
 			return;
 		}
 
-		// Set initial styles to make the container as big as possible
+		const img = new Image();
+		img.src = imageSrc;
+		img.classList.add('ug-gallery-expanded-media-item', 'visible'); // Add visibility class
+		img.onload = () => {
+			// Image loaded, update size and append
+			updateMediaElementSize(img, galleryOverlay);
+			expandedMedia.appendChild(img);
+		};
+		img.onerror = () => {
+			console.error("Error loading image:", imageSrc);
+			expandedMedia.textContent = "Error loading image."; // Display error message
+		};
+		// Inside updateExpandedView, AFTER creating the 'img' element:
+		if (state.dynamicResizing) {
+			img.addEventListener('click', (event) => {
+				event.stopPropagation(); // Prevent the mainView click (toggleControls)
+				toggleImageSize(img);
+			});
+		}
+		// Update page number
+		const pageNumber = galleryOverlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
+		if (pageNumber) {
+			pageNumber.textContent = `${index + 1} / ${state.fullSizeImageSrcs.length}`;
+		}
+	};
+
+
+	// Updates the thumbnail strip (for expanded view)
+	const updateThumbnailStrip = () => {
+		if (!galleryOverlay) return;
+		const thumbnailStrip = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_STRIP}`);
+		if (!thumbnailStrip) return;
+
+		thumbnailStrip.innerHTML = ''; // Clear existing thumbnails
+		state.fullSizeImageSrcs.forEach((src, index) => {
+			if (!src) return; // Skip if src is null
+
+			const thumbnailContainer = document.createElement('div');
+			thumbnailContainer.classList.add(CLASS_NAMES.UG_THUMBNAIL_CONTAINER);
+
+			const thumbnail = document.createElement('img');
+			thumbnail.src = src;
+			thumbnail.className = CLASS_NAMES.UG_GALLERY_THUMBNAIL;
+			thumbnail.classList.toggle('active', index === state.currentGalleryIndex);
+			thumbnail.addEventListener('click', () => showExpandedImage(index));
+
+			thumbnailContainer.appendChild(thumbnail);
+			thumbnailStrip.appendChild(thumbnailContainer);
+		});
+	};
+
+	// Updates the thumbnail grid (for initial view)
+	const updateThumbnailGrid = () => {
+		if (!galleryOverlay) return;
+		const thumbnailGrid = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_GRID}`);
+		if (!thumbnailGrid) return;
+
+		thumbnailGrid.innerHTML = ''; // Clear existing thumbnails
+
+		state.fullSizeImageSrcs.forEach((src, index) => {
+			if (!src) return; // Skip null sources
+
+			const thumbnailContainer = document.createElement('div');
+			thumbnailContainer.classList.add(CLASS_NAMES.UG_GALLERY_THUMBNAIL_GRID_CONTAINER);
+
+			const thumbnail = document.createElement('img');
+			thumbnail.src = src;
+			thumbnail.className = CLASS_NAMES.UG_GALLERY_THUMBNAIL_GRID;
+			thumbnail.addEventListener('click', () => showExpandedImage(index));
+
+			thumbnailContainer.appendChild(thumbnail);
+			thumbnailGrid.appendChild(thumbnailContainer);
+		});
+
+		// Adjust grid layout based on modal width
+		const galleryModal = galleryOverlay.querySelector('.ug-gallery-modal');
+		if (galleryModal) {
+			const modalWidth = galleryModal.offsetWidth;
+			const numColumns = Math.max(2, Math.floor((modalWidth - 20) / 150)); // At least 2 columns
+			thumbnailGrid.style.gridTemplateColumns = `repeat(${numColumns}, 1fr)`;
+		}
+	};
+
+	// Shows the expanded image view for a specific image.
+	const showExpandedImage = (index) => {
+		if (!galleryOverlay) return;
+
+		state.expandedViewActive = true;
+		state.currentGalleryIndex = index;
+
+		// Hide grid, show strip
+		const thumbnailGrid = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_GRID}`);
+		const thumbnailStrip = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_STRIP}`);
+		if (thumbnailGrid) thumbnailGrid.style.display = 'none';
+		if (thumbnailStrip) thumbnailStrip.style.display = 'flex';
+
+		// Show/hide navigation buttons
+		const prevButton = galleryOverlay.querySelector('.navigation-button.prev');
+		const nextButton = galleryOverlay.querySelector('.navigation-button.next');
+		if (prevButton && nextButton) {
+			prevButton.style.display = state.hideNavArrows ? 'none' : 'flex';
+			nextButton.style.display = state.hideNavArrows ? 'none' : 'flex';
+		}
+
+		// Add download button if it doesn't exist
+		const controlsContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_CONTROLS_CONTAINER}`);
+		if (controlsContainer && !controlsContainer.querySelector(`.${CLASS_NAMES.DOWNLOAD_BUTTON}`)) {
+			const downloadButton = document.createElement('button');
+			downloadButton.textContent = '↓';
+			downloadButton.className = CLASS_NAMES.DOWNLOAD_BUTTON;
+			downloadButton.addEventListener('click', () => downloadImageByIndex(state.currentGalleryIndex));
+			controlsContainer.appendChild(downloadButton);
+		}
+
+		updateExpandedView(index);
+		updateThumbnailStrip();
+		state.bottomStripeVisible = false; // Hide bottom stripe in expanded view
+	};
+
+	// Hides the expanded image view.
+	const hideExpandedImage = () => {
+		if (!galleryOverlay) return;
+
+		state.expandedViewActive = false;
+
+		// Clear expanded view
+		const expandedMedia = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_GALLERY_EXPANDED_MEDIA}`);
+		if (expandedMedia) expandedMedia.innerHTML = '';
+
+		// Show grid, hide strip
+		const thumbnailGrid = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_GRID}`);
+		const thumbnailStrip = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_STRIP}`);
+		if (thumbnailGrid) thumbnailGrid.style.display = 'grid';
+		if (thumbnailStrip) thumbnailStrip.style.display = 'none';
+
+		// Hide navigation buttons
+		const prevButton = galleryOverlay.querySelector('.navigation-button.prev');
+		const nextButton = galleryOverlay.querySelector('.navigation-button.next');
+		if (prevButton && nextButton) {
+			prevButton.style.display = 'none';
+			nextButton.style.display = 'none';
+		}
+
+		// Remove download button
+		const controlsContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_CONTROLS_CONTAINER}`);
+		const downloadButton = controlsContainer.querySelector(`.${CLASS_NAMES.DOWNLOAD_BUTTON}`);
+		if (downloadButton) {
+			downloadButton.remove();
+		}
+
+		state.bottomStripeVisible = true; // Show bottom stripe
+	};
+
+	// Navigates to the next or previous image in the gallery.
+	const navigateGallery = (direction) => {
+		if (!galleryOverlay) return;
+
+		const numImages = state.fullSizeImageSrcs.length;
+		let newIndex = (state.currentGalleryIndex + direction + numImages) % numImages;
+		showExpandedImage(newIndex);
+	};
+
+	// Function to update media element size
+	const updateMediaElementSize = (mediaElement, galleryOverlay) => {
+		const expandedMedia = galleryOverlay.querySelector('.ug-gallery-expanded-media');
+		if (!expandedMedia || !mediaElement) return;
+
 		mediaElement.style.maxWidth = '100%';
 		mediaElement.style.maxHeight = '100%';
 		mediaElement.style.width = 'auto';
 		mediaElement.style.height = 'auto';
 
-		// Determine if it is a video element (always false now as we only handle images)
-		const isVideo = false; //mediaElement.tagName === 'VIDEO';
-
-		// Use natural dimensions for images
 		const naturalWidth = mediaElement.naturalWidth;
 		const naturalHeight = mediaElement.naturalHeight;
 
@@ -882,13 +1044,12 @@
 			const aspectRatio = naturalWidth / naturalHeight;
 			let newWidth = availableWidth;
 			let newHeight = availableWidth / aspectRatio;
-			// Check if the height exceeds the available height
+
 			if (newHeight > availableHeight) {
 				newHeight = availableHeight;
 				newWidth = availableHeight * aspectRatio;
 			}
 
-			// Apply the new dimensions
 			mediaElement.style.width = `${newWidth}px`;
 			mediaElement.style.height = `${newHeight}px`;
 		} else {
@@ -896,313 +1057,91 @@
 		}
 	};
 
-	const loadAndDisplayMedia = (index) => {
-		if (
-			state.fullSizeImageSrcs.length === 0 ||
-			index < 0 ||
-			index >= state.fullSizeImageSrcs.length
-		) {
-			console.error('Invalid media index:', index);
-			return;
-		}
-
-		const mediaSrc = state.fullSizeImageSrcs[index];
-		if (!mediaSrc) {
-			console.error('Media source is undefined for index:', index);
-			return;
-		}
-
-		const galleryOverlay = document.getElementById('gallery-overlay');
-		if (!galleryOverlay) return;
-
-		// Get the new expanded view container
-		const expandedViewContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.EXPANDED_VIEW_CONTAINER}`);
-		const expandedMedia = expandedViewContainer.querySelector('.ug-gallery-expanded-media');
-
-		let loadingOverlay = galleryOverlay.querySelector(`.${CLASS_NAMES.LOADING_OVERLAY}`);
-
-		if (!loadingOverlay) {
-			loadingOverlay = createLoadingOverlay();
-			expandedMedia.appendChild(loadingOverlay); // Append loading overlay to expandedMedia
-		}
-
-		expandedMedia.innerHTML = '';
-
-		const mediaElement = new Image(); // Only handle images now
-
-
-		const onMediaLoad = () => {
-			if (expandedMedia.contains(loadingOverlay)) {
-				expandedMedia.removeChild(loadingOverlay);
-			}
-			galleryOverlay.classList.add('expanded');
-			mediaElement.classList.add('ug-gallery-expanded-media-item', 'visible');
-			expandedMedia.appendChild(mediaElement);
-
-			currentIndex = index;
-			state.currentGalleryIndex = index;
-			const pageNumber = galleryOverlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
-			pageNumber.textContent = `${index + 1} / ${state.fullSizeImageSrcs.length}`;
-			state.loadingMessage = null;
-
-			updateMediaElementSize(mediaElement, galleryOverlay);
-
-			const resizeObserver = new ResizeObserver(() => {
-				updateMediaElementSize(mediaElement, galleryOverlay);
-			});
-			resizeObserver.observe(expandedViewContainer);
-		};
-
-		const onMediaError = () => {
-			console.error('Failed to load media in expanded view:', mediaSrc);
-			if (expandedMedia.contains(loadingOverlay)) {
-				expandedMedia.removeChild(loadingOverlay);
-			}
-			state.loadingMessage = null;
-			const pageNumber = galleryOverlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
-			pageNumber.textContent = 'Error loading media';
-		};
-
-		mediaElement.onload = onMediaLoad;
-		mediaElement.onerror = onMediaError;
-		mediaElement.src = mediaSrc;
-	};
-
-
-	const updateThumbnailStrip = () => {
-		const galleryOverlay = document.getElementById('gallery-overlay');
-		if (!galleryOverlay) return;
-		const thumbnailStrip = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_STRIP}`);
-		if (!thumbnailStrip) return;
-
-		thumbnailStrip.innerHTML = '';
-		images.forEach((img, index) => {
-			const thumbnailContainer = document.createElement('div');
-			thumbnailContainer.classList.add(CLASS_NAMES.UG_THUMBNAIL_CONTAINER); // Correct classname
-
-			const thumbnail = document.createElement('img');
-			thumbnail.src = img.src;
-			thumbnail.className = CLASS_NAMES.UG_GALLERY_THUMBNAIL;
-			thumbnail.classList.toggle('active', index === currentIndex);
-			thumbnail.addEventListener('click', () => {
-				showExpandedImage(index);
-			});
-
-			const preview = document.createElement('div');
-			preview.classList.add(CLASS_NAMES.THUMBNAIL_PREVIEW);
-			const previewImg = document.createElement('img');
-			previewImg.src = img.src;
-			preview.appendChild(previewImg);
-
-			thumbnailContainer.appendChild(thumbnail);
-			thumbnailContainer.appendChild(preview);
-			thumbnailStrip.appendChild(thumbnailContainer);
-		});
-	};
-
-	const updateThumbnailGrid = () => {
-		const galleryModal = document.querySelector('.ug-gallery-modal');
-		const thumbnailGrid = galleryModal.querySelector(`.${CLASS_NAMES.THUMBNAIL_GRID}`);
-		const modalWidth = galleryModal.offsetWidth;
-		const numColumns = Math.max(2, Math.floor((modalWidth - 20) / 150)); // Adjust column calculation for larger thumbnails
-		thumbnailGrid.style.gridTemplateColumns = `repeat(${numColumns}, 1fr)`;
-	};
-
-
-	const showExpandedImage = (index) => {
-		state.expandedViewActive = true;
-		state.loadingMessage = 'Loading Media...';
-		const galleryOverlay = document.getElementById('gallery-overlay');
-		if (galleryOverlay) {
-			// Show navigation buttons
-			const mainView = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_MAIN_VIEW}`);
-			const prevButton = mainView.querySelector('.navigation-button.prev');
-			const nextButton = mainView.querySelector('.navigation-button.next');
-			const closeButton = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_CLOSE_BUTTON}`);
-			const downloadButton = galleryOverlay.querySelector(`.${CLASS_NAMES.DOWNLOAD_BUTTON}`);
-			const fullscreenButton = galleryOverlay.querySelector(`.${CLASS_NAMES.FULLSCREEN_BUTTON}`); // Get fullscreen button
-			const thumbnailStrip = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_STRIP}`);
-			const pageNumber = galleryOverlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
-			if (thumbnailStrip) {
-				thumbnailStrip.style.display = 'none';
-			}
-
-			if (prevButton && nextButton && !state.hideNavArrows) {
-				prevButton.style.display = 'flex';
-				nextButton.style.display = 'flex';
-				closeButton.style.display = 'block';
-				downloadButton.style.display = 'block';
-				fullscreenButton.style.display = 'block';
-				pageNumber.style.display = 'block';
-			}
-		}
-		state.controlsVisible = true;
-		updateControlVisibility();
-		loadAndDisplayMedia(index);
-		updateThumbnailStrip();
-		updatePageNumber(galleryOverlay, index + 1, state.fullSizeImageSrcs.length);
-	};
-
-	const updatePageNumber = (galleryOverlay, current, total) => {
-		const pageNumberElement = galleryOverlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
-		if (pageNumberElement) {
-			pageNumberElement.textContent = `${current} / ${total}`;
-		}
-	};
-
+	// Shows the gallery (initial view with the grid).
 	const showGallery = () => {
 		if (!isPostPage() || !state.galleryReady) return;
-		const overlay = createGalleryOverlay();
-		const galleryModal = overlay.querySelector('.ug-gallery-modal');
-		const mainView = overlay.querySelector(`.${CLASS_NAMES.GALLERY_MAIN_VIEW}`);
-		const thumbnailStrip = overlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_STRIP}`);
-		const thumbnailGrid = overlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_GRID}`);
-		const pageNumber = overlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
-		images = Array.from(elements.virtualGalleryContainer.querySelectorAll(`.${CLASS_NAMES.VIRTUAL_IMAGE}`));
-		currentIndex = state.currentGalleryIndex; // Initialize currentIndex from state
-		if (currentIndex >= images.length) {
-			currentIndex = 0; // Reset if index is out of bounds after image removal
-			state.currentGalleryIndex = 0;
+
+		// Reset to grid view
+		state.expandedViewActive = false;
+
+		if (!galleryOverlay) {
+			galleryOverlay = createGalleryOverlay(); // Create if it doesn't exist
+			document.body.appendChild(galleryOverlay);
 		}
 
-		thumbnailGrid.innerHTML = '';
-		images.forEach((img, index) => {
-			const thumbnailContainer = document.createElement('div');
-			thumbnailContainer.classList.add(CLASS_NAMES.UG_GALLERY_THUMBNAIL_GRID_CONTAINER); // Updated class name
+		updateThumbnailGrid(); // Populate the grid
 
-			const thumbnail = document.createElement('img');
-			thumbnail.src = img.src;
-			thumbnail.className = CLASS_NAMES.UG_GALLERY_THUMBNAIL_GRID; // Updated class name
-			thumbnail.addEventListener('click', () => {
-				showExpandedImage(index);
-			});
+		// Show grid, hide strip initially
+		const thumbnailGrid = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_GRID}`);
+		const thumbnailStrip = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_STRIP}`);
+		if (thumbnailGrid) thumbnailGrid.style.display = 'grid';
+		if (thumbnailStrip) thumbnailStrip.style.display = 'none';
 
-			// Create a preview element
-			const preview = document.createElement('div');
-			preview.classList.add(CLASS_NAMES.THUMBNAIL_PREVIEW);
-			const previewImg = document.createElement('img');
-			previewImg.src = img.src;
-			preview.appendChild(previewImg);
+		// Hide nav buttons and download button
+		const prevButton = galleryOverlay.querySelector('.navigation-button.prev');
+		const nextButton = galleryOverlay.querySelector('.navigation-button.next');
+		if (prevButton) prevButton.style.display = 'none';
+		if (nextButton) nextButton.style.display = 'none';
 
-			//Append the thumbnail before the preview
-			thumbnailContainer.appendChild(thumbnail);
-			thumbnailContainer.appendChild(preview);
-			thumbnailGrid.appendChild(thumbnailContainer);
-		});
+		const controlsContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_CONTROLS_CONTAINER}`);
+		const downloadButton = controlsContainer.querySelector(`.${CLASS_NAMES.DOWNLOAD_BUTTON}`);
+		if (downloadButton) downloadButton.style.display = 'none';
 
-		thumbnailStrip.innerHTML = ''; // clear strip before adding thumbnails
-		images.forEach((img, index) => {
-			const thumbnailContainer = document.createElement('div');
-			thumbnailContainer.classList.add(CLASS_NAMES.UG_THUMBNAIL_CONTAINER); // Correct classname
-
-			const thumbnail = document.createElement('img');
-			thumbnail.src = img.src;
-			thumbnail.className = CLASS_NAMES.UG_GALLERY_THUMBNAIL;
-			thumbnail.classList.toggle('active', index === currentIndex);
-			thumbnail.addEventListener('click', () => {
-				showExpandedImage(index);
-			});
-
-			const preview = document.createElement('div');
-			preview.classList.add(CLASS_NAMES.THUMBNAIL_PREVIEW);
-			const previewImg = document.createElement('img');
-			previewImg.src = img.src;
-			preview.appendChild(previewImg);
-
-			thumbnailContainer.appendChild(thumbnail);
-			thumbnailContainer.appendChild(preview);
-			thumbnailStrip.appendChild(thumbnailContainer);
-		});
-
-		document.body.appendChild(overlay);
-		// Show navigation buttons initially
-		const prevButton = mainView?.querySelector('.navigation-button.prev');
-		const nextButton = mainView?.querySelector('.navigation-button.next');
-		const closeButton = galleryModal?.querySelector(`.${CLASS_NAMES.GALLERY_CLOSE_BUTTON}`);
-		const downloadButton = galleryModal?.querySelector(`.${CLASS_NAMES.DOWNLOAD_BUTTON}`);
-		const fullscreenButton = galleryModal?.querySelector(`.${CLASS_NAMES.FULLSCREEN_BUTTON}`); // Get fullscreen button
-		if (prevButton && nextButton) {
-			console.log("prevButton found:", prevButton);
-			console.log("nextButton found:", nextButton);
-
-			prevButton.style.display = 'flex';
-			nextButton.style.display = 'flex';
-			if (closeButton) closeButton.style.display = 'block';
-			if (downloadButton) downloadButton.style.display = 'block';
-			if (fullscreenButton) fullscreenButton.style.display = 'block'; // Show fullscreen button
-			if (thumbnailStrip) thumbnailStrip.style.display = 'flex'; // Make sure this is flex
-			if (pageNumber) pageNumber.textContent = `${currentIndex + 1} / ${images.length}`;
-			pageNumber.style.display = 'block';
-		} else {
-			console.log("prevButton or nextButton NOT found.");
-			console.log("prevButton:", prevButton);
-			console.log("nextButton:", nextButton);
-		}
-
-		// Navigation button event listeners
-		if (prevButton && nextButton) {
-			prevButton.onclick = () => navigateGallery(-1);
-			nextButton.onclick = () => navigateGallery(1);
-		}
-
-		// Add resize observer for dynamic resizing
-		const resizeObserver = new ResizeObserver(() => {
-			updateThumbnailGrid();
-		});
-		resizeObserver.observe(galleryModal);
-
-		showExpandedImage(currentIndex); // Show the initial image
+		state.isGalleryMode = true;
+		state.bottomStripeVisible = true; // Show bottom stripe
 	};
 
-	const navigateGallery = (direction) => {
-		currentIndex = (currentIndex + direction + images.length) % images.length;
-		state.currentGalleryIndex = currentIndex;
-		showExpandedImage(currentIndex);
-	};
-
+	// Closes the gallery.
 	const closeGallery = () => {
-		const overlay = document.getElementById('gallery-overlay');
-		if (overlay) {
-			document.body.removeChild(overlay);
-			state.isGalleryMode = false;
-			state.expandedViewActive = false;
-			state.loadingMessage = null;
-			state.isFullscreen = false; // Exit fullscreen when closing gallery
+		if (galleryOverlay) {
+			document.body.removeChild(galleryOverlay);
+			galleryOverlay = null; // Remove reference
 		}
+		state.isGalleryMode = false;
+		state.expandedViewActive = false;
+		state.loadingMessage = null;
+		state.isFullscreen = false;
 	};
 
+	// --- Keyboard event handlers ---
 	const handleGalleryKey = (event) => {
 		if (!isPostPage()) return;
+
 		if (event.key === state.galleryKey && state.galleryReady) {
-			state.isGalleryMode = !state.isGalleryMode;
-			if (!state.isGalleryMode) state.isFullscreen = false;
-		} else if (state.isGalleryMode && state.expandedViewActive && ['Escape', state.prevImageKey, state.nextImageKey, 'ArrowLeft', 'ArrowRight', 'k', 'l'].includes(event.key)) {
-			event.preventDefault();
-			switch (event.key) {
-				case 'Escape':
-					hideExpandedImage();
-					break;
-				case state.prevImageKey:
-				case 'ArrowLeft':
-				case 'k':
-					navigateGallery(-1);
-					break;
-				case state.nextImageKey:
-				case 'ArrowRight':
-				case 'l':
-					navigateGallery(1);
-					break;
+			state.isGalleryMode = !state.isGalleryMode; // Toggle gallery mode
+			if (!state.isGalleryMode) state.isFullscreen = false; // Reset fullscreen on close
+		} else if (state.isGalleryMode && state.expandedViewActive) {
+			// Handle keys within expanded view
+			if (['Escape', state.prevImageKey, state.nextImageKey, 'ArrowLeft', 'ArrowRight', 'k', 'l'].includes(event.key)) {
+				event.preventDefault();
+				switch (event.key) {
+					case 'Escape':
+						hideExpandedImage();
+						break;
+					case state.prevImageKey:
+					case 'ArrowLeft':
+					case 'k':
+						navigateGallery(-1);
+						break;
+					case state.nextImageKey:
+					case 'ArrowRight':
+					case 'l':
+						navigateGallery(1);
+						break;
+				}
 			}
 		} else if (state.isGalleryMode && event.key === 'Escape') {
-			closeGallery();
+			closeGallery(); // Close gallery on Escape
 		}
 	};
+
 
 	const handleSettingsKey = (event) => {
 		if (state.settingsOpen && event.key === 'Escape') {
 			state.settingsOpen = false;
 		}
-	}
+	};
+	// Function to simulate button clicks for all images
 	const clickAllImageButtons = (action) => {
 		const fileDivs = document.querySelectorAll(SELECTORS.FILE_DIVS);
 		const parentDiv = fileDivs[0]?.parentNode;
@@ -1216,7 +1155,7 @@
 				}
 			}
 		});
-	}
+	};
 
 	// --- Downloading and Post Actions ---
 	const downloadAllImages = async () => {
@@ -1225,8 +1164,23 @@
 		const title = document.querySelector(SELECTORS.POST_TITLE)?.textContent?.trim() || "Untitled";
 		const artistName = document.querySelector(SELECTORS.POST_USER_NAME)?.textContent?.trim() || "Unknown Artist";
 
-		const total = images.length + attachmentLinks.length; // Only count images and attachments
+		const total = images.length + attachmentLinks.length;
 		if (total === 0) return;
+
+		if (state.isGalleryMode) {
+			const result = await Swal.fire({
+				title: 'Download All Images?',
+				text: `You are about to download ${total} images.  Proceed?`,
+				icon: 'question',
+				showCancelButton: true,
+				confirmButtonText: 'Download',
+				cancelButtonText: 'Cancel',
+			});
+
+			if (!result.isConfirmed) {
+				return;
+			}
+		}
 
 		state.isDownloading = true;
 		state.loadingMessage = "Downloading...";
@@ -1254,27 +1208,24 @@
 							let filename = originalFilename;
 							let ext = getExtension(filename);
 
-							// If extension is missing or not detected, try to determine from MIME type
-							if (!ext || ext === 'jpg') { // Default to jpg if not detected or if it's just 'jpg'
+							if (!ext || ext === 'jpg') {
 								const contentType = response.responseHeaders.match(/content-type:\s*([^;]*)/i)?.[1];
 								if (contentType) {
 									if (contentType.startsWith('image/')) {
-										const imageExt = contentType.split('/')[1].replace('jpeg', 'jpg'); // Normalize jpeg to jpg
-										if (imageExt && imageExt !== 'octet-stream' && imageExt !== 'x-icon') { // Basic filtering
+										const imageExt = contentType.split('/')[1].replace('jpeg', 'jpg');
+										if (imageExt && imageExt !== 'octet-stream' && imageExt !== 'x-icon') {
 											ext = imageExt;
-											filename = originalFilename.replace(/\.[^/.]+$/, '') + '.' + ext; // Re-apply extension
+											filename = originalFilename.replace(/\.[^/.]+$/, '') + '.' + ext;
 										}
 									} else if (contentType === 'application/octet-stream' && originalFilename.includes('.')) {
-										// If octet-stream and original filename has extension, use it
 										ext = getExtension(originalFilename);
 									}
-									// Default to jpg if still no valid extension
-									if (!ext || !['jpg', 'png', 'gif', 'webp'].includes(ext)) { // Removed video extensions
+									if (!ext || !['jpg', 'png', 'gif', 'webp'].includes(ext)) {
 										ext = 'jpg';
 										filename = originalFilename.replace(/\.[^/.]+$/, '') + '.jpg';
 									}
 								} else {
-									ext = 'jpg'; // Fallback to jpg if content-type is not available
+									ext = 'jpg';
 									filename = originalFilename.replace(/\.[^/.]+$/, '') + '.jpg';
 								}
 							}
@@ -1282,11 +1233,11 @@
 							const finalFilename = state.imageFileNameFormat
 								.replace("{title}", sanitizedTitle)
 								.replace("{artistName}", sanitizedArtistName)
-								.replace("{fileName}", sanitizeFileName(filename.replace(/\.[^/.]+$/, ""))) // Sanitize filename part
+								.replace("{fileName}", sanitizeFileName(filename.replace(/\.[^/.]+$/, "")))
 								.replace("{index}", index + 1)
 								.replace("{ext}", ext.toLowerCase());
 
-							zip.file(finalFilename + '.' + ext, response.response); // Add extension here to zip file
+							zip.file(finalFilename + '.' + ext, response.response);
 							downloaded++;
 							state.downloadedCount = downloaded;
 							resolve();
@@ -1341,25 +1292,18 @@
 		}
 	};
 
+	// Function to download a single image by its index
 	const downloadImageByIndex = (index) => {
-		console.log("downloadImageByIndex called with index:", index);
-		const mediaSrc = state.fullSizeImageSrcs[index];
-		console.log("mediaSrc:", mediaSrc);
 		const imgLink = document.querySelectorAll(SELECTORS.IMAGE_LINK)[index];
-		console.log("imgLink:", imgLink);
 
 		if (imgLink) {
 			const imgSrc = imgLink.href.split("?")[0];
-			console.log("imgSrc:", imgSrc);
 			let fileName = imgLink.getAttribute('download');
-			console.log("fileName (original):", fileName);
 
 			if (!fileName) {
 				fileName = `image_${index + 1}.jpg`;
-				console.warn("Download attribute missing, using fallback filename:", fileName);
 			}
 
-			// Always use GM.xmlHttpRequest to fetch the image as a blob
 			GM.xmlHttpRequest({
 				method: "GET",
 				url: imgSrc,
@@ -1371,7 +1315,7 @@
 					if (response.status === 200) {
 						const blob = response.response;
 						const url = URL.createObjectURL(blob);
-						saveAs(blob, fileName); // Use FileSaver's saveAs
+						saveAs(blob, fileName);
 						URL.revokeObjectURL(url);
 					} else {
 						console.error('Error downloading image:', response.status);
@@ -1391,26 +1335,21 @@
 	const initPostActions = () => {
 		state.postActionsInitialized = true;
 		if (!isPostPage() || state.currentPostUrl === window.location.href) return;
-		cleanupPostActions();
+		cleanupPostActions(); // Clean up before doing anything
 
 		const currentPageUrl = window.location.href;
 
-		document
-			.querySelectorAll(SELECTORS.IMAGE_LINK + ' img')
+		document.querySelectorAll(SELECTORS.IMAGE_LINK + ' img')
 			.forEach((img) => (img.className = CLASS_NAMES.POST_IMAGE));
-		document
-			.querySelectorAll(SELECTORS.ATTACHMENT_LINK)
+		document.querySelectorAll(SELECTORS.ATTACHMENT_LINK)
 			.forEach((link) => (link.dataset.fileName = link.getAttribute('download')));
 
 		elements.postActions = document.querySelector(SELECTORS.POST_ACTIONS);
 		if (!elements.postActions) return;
 
-		// Check for the presence of images
-		const hasMediaContent =
-			document.querySelectorAll(SELECTORS.IMAGE_LINK).length > 0; // Only check for images
+		const hasMediaContent = document.querySelectorAll(SELECTORS.IMAGE_LINK).length > 0;
 
 		if (hasMediaContent) {
-			// Add status container only if it doesn't exist
 			if (!elements.statusContainer) {
 				const {
 					container: statusContainer,
@@ -1421,67 +1360,50 @@
 				elements.postActions.appendChild(elements.statusContainer);
 			}
 
-			// Add buttons only if they don't exist
 			if (!elements.postActions.querySelector(`.${CLASS_NAMES.UG_BUTTON}`)) {
-				const downloadAllButton = createToggleButton(
-					BUTTONS.DOWNLOAD_ALL,
-					downloadAllImages
-				);
-				const galleryButton = createToggleButton(
-					'Loading Gallery...',
-					() => {
-						state.isGalleryMode = !state.isGalleryMode;
-					},
-					true
-				); // Initially disabled
+				const downloadAllButton = createToggleButton(BUTTONS.DOWNLOAD_ALL, downloadAllImages);
+				const galleryButton = createToggleButton('Loading Gallery...', () => {
+					state.isGalleryMode = !state.isGalleryMode;
+				}, true); // Initially disabled
 				elements.galleryButton = galleryButton;
 
 				const heightButton = createToggleButton(BUTTONS.HEIGHT, () => clickAllImageButtons('height'));
 				const widthButton = createToggleButton(BUTTONS.WIDTH, () => clickAllImageButtons('width'));
 				const fullButton = createToggleButton(BUTTONS.FULL, () => clickAllImageButtons('full'));
 
-				elements.postActions.append(
-					heightButton,
-					widthButton,
-					fullButton,
-					downloadAllButton,
-					galleryButton
-				);
-
-				// Always show the gallery button
-				elements.galleryButton.style.display = 'inline-block';
+				elements.postActions.append(heightButton, widthButton, fullButton, downloadAllButton, galleryButton);
+				elements.galleryButton.style.display = 'inline-block'; // Always show
 			}
 		}
 
+		// settings button
 		if (!elements.settingsButton) {
-			elements.settingsButton = createToggleButton(BUTTONS.SETTINGS, () => {
+			const settingsButton = document.createElement('button');
+			settingsButton.textContent = BUTTONS.SETTINGS;
+			settingsButton.className = CLASS_NAMES.SETTINGS_BUTTON;
+			settingsButton.addEventListener('click', () => {
 				state.settingsOpen = !state.settingsOpen;
 			});
-			elements.settingsButton.className = CLASS_NAMES.SETTINGS_BUTTON;
-			document.body.appendChild(elements.settingsButton);
+			document.body.appendChild(settingsButton); // Append to body
+			elements.settingsButton = settingsButton; // Keep track of it
 		}
+
 		const fileDivs = document.querySelectorAll(SELECTORS.FILE_DIVS);
 		const parentDiv = fileDivs[0]?.parentNode;
 
 		if (parentDiv) {
-			state.displayedImages = Array.from(
-				document.querySelectorAll(SELECTORS.IMAGE_LINK + ' img')
-			);
+			state.displayedImages = Array.from(document.querySelectorAll(SELECTORS.IMAGE_LINK + ' img'));
 
-			// Remove old button groups
 			const existingButtonGroups = Array.from(parentDiv.querySelectorAll(`.${CLASS_NAMES.UG_BUTTON_CONTAINER}`));
-
-			existingButtonGroups.forEach((buttonGroup) => {
+			existingButtonGroups.forEach(buttonGroup => {
 				const imageContainer = buttonGroup.nextElementSibling;
 				if (!imageContainer || !state.displayedImages.some(img => img.closest(SELECTORS.THUMBNAIL) === imageContainer)) {
-					buttonGroup.remove();
+					buttonGroup.remove(); // Remove only if not associated with a current image
 				}
 			});
 
 			state.displayedImages.forEach((img, index) => {
-				const downloadLink = img
-					.closest(SELECTORS.THUMBNAIL)
-					?.querySelector(SELECTORS.IMAGE_LINK);
+				const downloadLink = img.closest(SELECTORS.THUMBNAIL)?.querySelector(SELECTORS.IMAGE_LINK);
 				if (!downloadLink) return;
 
 				const removeImage = (evt) => {
@@ -1492,21 +1414,15 @@
 					imageContainer.parentNode.removeChild(imageContainer);
 					buttonContainer.parentNode.removeChild(buttonContainer);
 
-					state.virtualGallery.splice(index, 1);
-					state.originalImageSrcs.splice(index, 1);
+					state.virtualGallery.splice(index, 1); // Remove from virtual gallery
+					state.originalImageSrcs.splice(index, 1); // And original srcs
 					state.totalImages--;
-					state.displayedImages.splice(index, 1);
+					state.displayedImages.splice(index, 1); // and displayed images
 					state.notification = `Images Done Loading! Total: ${state.totalImages}`;
 					state.notificationType = 'success';
 				};
 
-				// Check if buttons already exist before adding them
-				if (
-					!img
-					.closest(SELECTORS.THUMBNAIL)
-					.previousElementSibling?.classList.contains(CLASS_NAMES.UG_BUTTON_CONTAINER)
-				) {
-					// Use the helper function to create button groups
+				if (!img.closest(SELECTORS.THUMBNAIL).previousElementSibling?.classList.contains(CLASS_NAMES.UG_BUTTON_CONTAINER)) {
 					const newDiv = createButtonGroup([{
 							text: BUTTONS.HEIGHT,
 							action: resizeImage
@@ -1518,24 +1434,21 @@
 						{
 							text: BUTTONS.FULL,
 							action: () => imageActions.full(img),
-							name: 'FULL' // Add name for conditional hiding
-						},
+							name: 'FULL'
+						}, // Add name for hiding
 						{
 							text: BUTTONS.DOWNLOAD,
 							action: () => downloadImageByIndex(index),
-							name: 'DOWNLOAD' // Add name for conditional hiding
-						},
+							name: 'DOWNLOAD'
+						}, // Add name for hiding
 						{
 							text: BUTTONS.REMOVE,
 							action: removeImage,
-							name: 'REMOVE' // Add name for conditional hiding
-						}
+							name: 'REMOVE'
+						} // Add name for hiding
 					]);
 
-					//parentDiv.insertBefore(newDiv, img.closest(SELECTORS.THUMBNAIL));
 					const thumbnail = img.closest(SELECTORS.THUMBNAIL);
-
-					// Insert the newDiv before the thumbnail
 					if (thumbnail && thumbnail.parentNode) {
 						thumbnail.parentNode.insertBefore(newDiv, thumbnail);
 					}
@@ -1543,12 +1456,10 @@
 				img.addEventListener('click', () => showExpandedImage(index));
 			});
 
-			// Use event delegation for dynamically added images
 			parentDiv.addEventListener('click', delegatedImageClickHandler);
 
 			const favoriteButton = document.querySelector(SELECTORS.FAVORITE_BUTTON);
 			if (favoriteButton) {
-				// Use the helper function to create button groups
 				const newDiv = createButtonGroup([{
 						text: BUTTONS.HEIGHT,
 						action: () => resizeAllImages('height')
@@ -1562,7 +1473,6 @@
 						action: () => resizeAllImages('full')
 					}
 				]);
-				// Check if buttons already exist before adding them
 				if (!favoriteButton.nextElementSibling?.classList.contains(CLASS_NAMES.UG_BUTTON_CONTAINER)) {
 					favoriteButton.parentNode.insertBefore(newDiv, favoriteButton.nextSibling);
 				}
@@ -1571,6 +1481,7 @@
 		state.currentPostUrl = currentPageUrl;
 	};
 
+	// Function to update the gallery button state
 	const updateGalleryButton = (enabled) => {
 		if (elements.galleryButton) {
 			elements.galleryButton.textContent = enabled ? BUTTONS.GALLERY : 'Loading Gallery...';
@@ -1579,22 +1490,22 @@
 		}
 	};
 
+	// Function to clean up post actions and UI elements
 	const cleanupPostActions = () => {
-		// Remove only elements with the 'ug-button' class
 		if (elements.postActions) {
 			elements.postActions.querySelectorAll(`.${CLASS_NAMES.UG_BUTTON}`).forEach(button => button.remove());
 		}
 
 		if (elements.settingsButton) {
 			elements.settingsButton.remove();
-			elements.settingsButton = null;
+			elements.settingsButton = null
 		}
 
-		// Clean up event delegation from parentDiv
 		const parentDiv = document.querySelector(website === 'nekohouse' ? '.scrape__thumbnails' : '.post__thumbnails');
 		if (parentDiv) {
 			parentDiv.removeEventListener('click', delegatedImageClickHandler);
 		}
+
 
 		if (elements.statusContainer) {
 			elements.statusContainer.remove();
@@ -1602,9 +1513,10 @@
 			elements.statusElement = null;
 		}
 
-		elements.postActions = null; // Reset postActions
+		elements.postActions = null;
 	};
 
+	// Function to resize all images
 	const resizeAllImages = (action) => {
 		document
 			.querySelectorAll(SELECTORS.FILES_IMG)
@@ -1615,19 +1527,21 @@
 			});
 	};
 
+	// Function to resize a single image
 	const resizeImage = (evt) => {
 		const action = Object.keys(BUTTONS)
 			.find((key) => BUTTONS[key] === evt.currentTarget.textContent)
 			?.toLowerCase();
 		const buttonContainer = evt.currentTarget.closest('div');
 		const imageContainer = buttonContainer?.nextElementSibling;
-		const displayedImage = imageContainer?.querySelector('img'); // Target the img tag directly
+		const displayedImage = imageContainer?.querySelector('img');
 
 		if (displayedImage && imageActions[action]) {
 			imageActions[action](displayedImage);
 		}
 	};
 
+	// Function to show the loading overlay
 	const showLoadingOverlay = (text) => {
 		if (!elements.loadingOverlay) {
 			elements.loadingOverlay = createLoadingOverlay(text);
@@ -1637,6 +1551,7 @@
 		}
 	};
 
+	// Function to update the loading overlay text
 	const updateLoadingOverlayText = (text) => {
 		if (elements.loadingOverlay) {
 			const loadingText = elements.loadingOverlay.querySelector('div');
@@ -1646,6 +1561,7 @@
 		}
 	};
 
+	// Function to hide the loading overlay
 	const hideLoadingOverlay = () => {
 		if (elements.loadingOverlay) {
 			elements.loadingOverlay.remove();
@@ -1654,6 +1570,7 @@
 	};
 
 	// --- Notification System ---
+	// Function to create the notification area
 	const createNotificationArea = () => {
 		const notificationArea = document.createElement('div');
 		notificationArea.id = CLASS_NAMES.NOTIFICATION_AREA;
@@ -1661,6 +1578,8 @@
 		document.body.appendChild(notificationArea);
 		return notificationArea;
 	};
+
+	// Function to create a notification
 	const createNotification = () => {
 		let notificationArea = document.getElementById(CLASS_NAMES.NOTIFICATION_AREA);
 		if (!notificationArea) {
@@ -1694,6 +1613,7 @@
 		return notificationContainer;
 	};
 
+	// Function to show a notification
 	const showNotification = (message, type = 'info') => {
 		if (!state.notificationsEnabled && type !== 'error') return;
 		let notificationArea = document.getElementById(CLASS_NAMES.NOTIFICATION_AREA);
@@ -1722,6 +1642,7 @@
 		notificationContainer.style.display = 'flex';
 	};
 
+	// Function to hide a notification
 	const hideNotification = () => {
 		const notificationContainer = document.getElementById(CLASS_NAMES.NOTIFICATION_CONTAINER);
 		if (!notificationContainer) return;
@@ -1756,7 +1677,7 @@
 
 	const handleGeneralImageLoadError = (mediaHref, error) => {
 		console.error(`Failed to load media: ${mediaHref}`, error);
-		state.virtualGallery = null;
+		state.virtualGallery = null; // Clear virtual gallery on error
 		state.loadedImages++;
 		state.notification = 'Error loading some media.';
 		state.notificationType = 'error';
@@ -1773,7 +1694,6 @@
 		return validPatterns.some((pattern) => pattern.test(url));
 	};
 
-	// Named function for the delegated event handler (for removal in cleanup)
 	const delegatedImageClickHandler = (event) => {
 		const clickedImage = event.target.closest(SELECTORS.IMAGE_LINK + ' img');
 		if (clickedImage) {
@@ -1786,40 +1706,43 @@
 		}
 	};
 
-	let uiCache = {}; // Object to store cached UI states
+	let uiCache = {};
 	let previousPageUrl = null;
 	const injectUI = debounce(() => {
+		// Very first thing: check if we're on a post page.  If not, return immediately.
 		if (!isPostPage()) {
-			// Reset the flag when not on a post page
+			// Reset state when leaving a post page
 			state.postActionsInitialized = false;
-			state.notification = null; // Clear notifications when not on a post page
+			state.notification = null;
 			state.notificationType = 'info';
 			state.loadingMessage = null;
 			state.isLoading = false;
-			state.galleryReady = false;
+			state.galleryReady = false; // Ensure gallery is marked as not ready
 			state.hasImages = false;
-			state.totalImages = 0; // Reset totalImages when not on a post page
-			cleanupPostActions();
-			uiCache = {}; //clear cache on page exit
-			previousPageUrl = null;
-			return;
+			state.totalImages = 0;
+			cleanupPostActions(); // Clean up any existing elements
+			uiCache = {}; // Clear UI cache
+			previousPageUrl = null; // Clear previous URL
+			return; // Exit early
 		}
-		const mediaLinks = [
-			...document.querySelectorAll(SELECTORS.IMAGE_LINK),
-		];
+
+		const mediaLinks = [...document.querySelectorAll(SELECTORS.IMAGE_LINK)];
 		const currentTotalImages = mediaLinks.length;
 		const currentPageUrl = window.location.href;
 
 		const postSection = document.querySelector('.site-section.site-section--post');
 
+		// If we're on a new post page, or re-visiting a post page and haven't initialized:
 		if (!state.postActionsInitialized && postSection) {
+			// Reset gallery state for the new post
 			state.galleryReady = false;
 			state.loadedImages = 0;
 			state.hasImages = false;
-			state.totalImages = currentTotalImages;
-			const hasMediaContent =
-				document.querySelectorAll(SELECTORS.IMAGE_LINK).length > 0; // Only check for images
+			state.totalImages = currentTotalImages; // Set total images for this post
+
+			const hasMediaContent = document.querySelectorAll(SELECTORS.IMAGE_LINK).length > 0;
 			if (hasMediaContent) {
+				// Create status container if it doesn't exist
 				if (!elements.statusContainer) {
 					const {
 						container: statusContainer,
@@ -1834,23 +1757,25 @@
 				}
 				state.notification = `Loading media (${state.loadedImages}/${state.totalImages})...`;
 			}
+			// Load images and initialize post actions
 			loadImages();
 			initPostActions();
-			state.currentPostUrl = currentPageUrl;
+			state.currentPostUrl = currentPageUrl; // Track the current post URL
 			previousPageUrl = currentPageUrl;
-		} else if (currentPageUrl !== state.currentPostUrl) {
-			cleanupPostActions();
+		}
+		// Handle URL changes within the same post (e.g., navigating to different pages of the same post)
+		else if (currentPageUrl !== state.currentPostUrl) {
+			cleanupPostActions(); // Clean up previous UI
 			state.totalImages = currentTotalImages;
-			state.galleryReady = false;
-			state.loadedImages = 0;
+			state.galleryReady = false; // Reset gallery readiness
+			state.loadedImages = 0; // Reset loaded images count
 			state.hasImages = false;
-			state.notification = null;
+			state.notification = null; // Clear any previous notifications
 			state.notificationType = 'info';
 			state.loadingMessage = null;
 			state.isLoading = false;
-			// check for the presence of images, create status container only if the page has them.
-			const hasMediaContent =
-				document.querySelectorAll(SELECTORS.IMAGE_LINK).length > 0;
+
+			const hasMediaContent = document.querySelectorAll(SELECTORS.IMAGE_LINK).length > 0;
 			if (hasMediaContent) {
 				if (!elements.statusContainer) {
 					const {
@@ -1866,16 +1791,16 @@
 				}
 				state.notification = `Loading media (${state.loadedImages}/${state.totalImages})...`;
 			} else {
+				// If no media content, remove the status container if it exists
 				if (elements.statusContainer) {
 					elements.statusContainer.remove();
 					elements.statusContainer = null;
 					elements.statusElement = null;
 				}
-
 			}
 			loadImages();
-			initPostActions();
-			state.currentPostUrl = currentPageUrl;
+			initPostActions(); // Re-initialize post actions
+			state.currentPostUrl = currentPageUrl; // Update current post URL
 			previousPageUrl = currentPageUrl;
 		}
 	}, DEBOUNCE_DELAY);

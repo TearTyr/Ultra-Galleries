@@ -20,38 +20,31 @@
   --ug-fullscreen-nav-size: 60px;
   --ug-fullscreen-icon-size: 40px;
   --ug-thumbnail-preview-scale: 2;
+  --ug-thumbnail-size: 60px;        /* Thumbnail size */
+  --ug-bottom-stripe-height: auto;
+  --ug-gallery-modal-max-width: 85%; /*  Maximum width of gallery */
 }
 
 /* Animation Utility Classes */
 .fade-in {
-  animation: fade-in var(--ug-transition-duration) var(--ug-transition-ease)
-    forwards;
+  animation: fade-in var(--ug-transition-duration) var(--ug-transition-ease) forwards;
 }
 
 .fade-out {
-  animation: fade-out var(--ug-transition-duration) var(--ug-transition-ease)
-    forwards;
+  animation: fade-out var(--ug-transition-duration) var(--ug-transition-ease) forwards;
 }
 
 @keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes fade-out {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
-/* Gallery Overlay Styles */
+/* --- Gallery Overlay Styles --- */
 .ug-gallery-overlay {
   position: fixed;
   top: 0;
@@ -66,10 +59,9 @@
   padding: 0;
   background-color: var(--ug-main-bg-color);
   backdrop-filter: blur(10px);
-  transition: background-color var(--ug-transition-duration)
-      var(--ug-transition-ease),
-    backdrop-filter var(--ug-transition-duration) var(--ug-transition-ease),
-    padding var(--ug-transition-duration) var(--ug-transition-ease);
+  transition: background-color var(--ug-transition-duration) var(--ug-transition-ease),
+              backdrop-filter var(--ug-transition-duration) var(--ug-transition-ease),
+              padding var(--ug-transition-duration) var(--ug-transition-ease);
 }
 
 .ug-gallery-overlay.fullscreen-gallery {
@@ -77,10 +69,10 @@
   backdrop-filter: none;
 }
 
-/* Gallery Modal Styles */
+/* --- Gallery Modal Styles --- */
 .ug-gallery-modal {
   width: 95vw;
-  max-width: 1200px;
+  max-width: var(--ug-gallery-modal-max-width); /* Use the variable */
   height: 90vh;
   display: flex;
   flex-direction: column;
@@ -91,11 +83,12 @@
   box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
   border: 1px solid var(--ug-border-color);
   transition: width var(--ug-transition-duration) var(--ug-transition-ease),
-    max-width var(--ug-transition-duration) var(--ug-transition-ease),
-    height var(--ug-transition-duration) var(--ug-transition-ease),
-    border-radius var(--ug-transition-duration) var(--ug-transition-ease);
+              max-width var(--ug-transition-duration) var(--ug-transition-ease),
+              height var(--ug-transition-duration) var(--ug-transition-ease),
+              border-radius var(--ug-transition-duration) var(--ug-transition-ease);
 }
 
+/* Fullscreen modal styles */
 .ug-gallery-overlay.fullscreen-gallery .ug-gallery-modal {
   width: 100vw;
   max-width: 100vw;
@@ -106,7 +99,7 @@
   background-color: black;
 }
 
-/* Gallery Top Controls Bar */
+/* --- Gallery Top Controls Bar --- */
 .ug-gallery-controls-container {
   display: flex;
   justify-content: space-between;
@@ -114,6 +107,11 @@
   padding: 10px 15px;
   position: relative;
   z-index: 12;
+  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
+}
+
+.ug-gallery-controls-container.ug-controls-hidden {
+  opacity: 0;
 }
 
 .ug-gallery-controls-container button {
@@ -129,7 +127,7 @@
   opacity: var(--ug-button-hover-opacity);
 }
 
-/* Modal Action Buttons (Close, Fullscreen, Download) */
+/* --- Modal Action Buttons (Close, Fullscreen, Download) --- */
 .ug-gallery-modal .gallery-close-button,
 .ug-gallery-modal .ug-fullscreen-button,
 .ug-gallery-modal .ug-download-button {
@@ -148,9 +146,11 @@
 .ug-gallery-modal .gallery-close-button {
   right: 15px;
 }
+
 .ug-gallery-modal .ug-fullscreen-button {
   right: 60px;
 }
+
 .ug-gallery-modal .ug-download-button {
   right: 105px;
 }
@@ -161,26 +161,56 @@
   font-size: var(--ug-fullscreen-icon-size);
   top: 25px;
 }
+
 .ug-gallery-overlay.fullscreen-gallery .ug-gallery-modal .gallery-close-button {
   right: 25px;
 }
+
 .ug-gallery-overlay.fullscreen-gallery .ug-gallery-modal .ug-fullscreen-button {
   right: 80px;
 }
+
 .ug-gallery-overlay.fullscreen-gallery .ug-gallery-modal .ug-download-button {
   right: 135px;
 }
+/* Back button*/
+.ug-gallery-back-button {
+      /* Position it absolutely within the controls container */
+      position: absolute;
+      left: 15px; /* Adjust as needed */
+      top: 50%;
+      transform: translateY(-50%);
+      /* Basic styling - match the other buttons */
+      font-size: 24px;
+      background: none;
+      border: none;
+      color: var(--ug-text-color);
+      cursor: pointer;
+      z-index: 12;
+      transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
+    }
 
-/* Main Image/Video View Area */
+    .ug-gallery-overlay.fullscreen-gallery .ug-gallery-back-button {
+        font-size: var(--ug-fullscreen-icon-size); /* Larger in fullscreen */
+        left: 25px; /* Adjust for fullscreen */
+    }
+
+    .ug-gallery-back-button:hover {
+      opacity: var(--ug-button-hover-opacity);
+    }
+
+/* --- Main Image/Video View Area --- */
 .ug-gallery-main-view {
   flex-grow: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  cursor: pointer;
 }
 
-.ug-gallery-expanded-container {
+/* Container for Expanded Image */
+.ug-expanded-image-container {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -195,11 +225,9 @@
   align-items: center;
   justify-content: center;
   max-width: 95vw;
-  max-height: calc(
-    100vh - 120px
-  );
+  max-height: calc(100vh - 120px);
   transition: max-width var(--ug-transition-duration) var(--ug-transition-ease),
-    max-height var(--ug-transition-duration) var(--ug-transition-ease);
+              max-height var(--ug-transition-duration) var(--ug-transition-ease);
   overflow: hidden;
 }
 
@@ -221,12 +249,12 @@
 }
 
 .ug-gallery-overlay.fullscreen-gallery .ug-gallery-expanded-media-item {
-  max-width: 100vw;
-  max-height: 100vh;
-  object-fit: contain;
+max-width: 100vw;
+max-height: 100vh;
+object-fit: contain;
 }
 
-/* Image Navigation Buttons (Prev/Next Arrows) */
+/* --- Image Navigation Buttons (Prev/Next Arrows) --- */
 .navigation-button {
   position: absolute;
   top: 50%;
@@ -246,10 +274,10 @@
   opacity: 0.7;
   transform: translateY(-50%);
   transition: opacity var(--ug-transition-duration) var(--ug-transition-ease),
-    top var(--ug-transition-duration) var(--ug-transition-ease),
-    width var(--ug-transition-duration) var(--ug-transition-ease),
-    height var(--ug-transition-duration) var(--ug-transition-ease),
-    font-size var(--ug-transition-duration) var(--ug-transition-ease);
+              top var(--ug-transition-duration) var(--ug-transition-ease),
+              width var(--ug-transition-duration) var(--ug-transition-ease),
+              height var(--ug-transition-duration) var(--ug-transition-ease),
+              font-size var(--ug-transition-duration) var(--ug-transition-ease);
 }
 
 .navigation-button:hover {
@@ -259,6 +287,7 @@
 .navigation-button.prev {
   left: 15px;
 }
+
 .navigation-button.next {
   right: 15px;
 }
@@ -269,14 +298,16 @@
   height: var(--ug-fullscreen-nav-size);
   top: 50%;
 }
+
 .ug-gallery-overlay.fullscreen-gallery .navigation-button.prev {
   left: 25px;
 }
+
 .ug-gallery-overlay.fullscreen-gallery .navigation-button.next {
   right: 25px;
 }
 
-/* Current Page Number Indicator */
+/* --- Current Page Number Indicator --- */
 .page-number {
   position: absolute;
   bottom: 10px;
@@ -285,6 +316,7 @@
   color: var(--ug-text-color);
   font-size: 18px;
   transform: translateX(-50%);
+  transition: bottom var(--ug-transition-duration) var(--ug-transition-ease);
 }
 
 .ug-gallery-overlay.fullscreen-gallery .page-number {
@@ -292,29 +324,45 @@
   font-size: 20px;
 }
 
-/* Thumbnail Strip (Bottom) */
-.thumbnail-strip {
+/* --- Bottom Stripe (Container for Thumbnails) --- */
+.ug-bottom-stripe {
+  position: relative;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: var(--ug-bottom-stripe-height);
   display: flex;
+  flex-direction: column;
   justify-content: flex-start;
   align-items: center;
-  padding: 10px 15px;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 10;
+  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
+}
+
+/* --- Thumbnail Strip (Bottom) --- */
+.thumbnail-strip {
+  display: none; /* Initially hidden */
+  justify-content: flex-start;
+  align-items: center;
+  padding: 5px 10px;
   position: relative;
   z-index: 10;
   overflow-x: auto;
   overflow-y: hidden;
   white-space: nowrap;
-  background-color: rgba(0, 0, 0, 0.5);
-  border-top: 1px solid var(--ug-border-color);
+  width: 100%;
+
 }
 
 .thumbnail-strip::-webkit-scrollbar {
-  height: 8px;
+  height: 6px;
   background-color: transparent;
 }
 
 .thumbnail-strip::-webkit-scrollbar-thumb {
   background-color: rgba(255, 255, 255, 0.3);
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 .thumbnail-strip::-webkit-scrollbar-track {
@@ -323,11 +371,11 @@
 
 .ug-thumbnail-container {
   display: inline-block;
-  margin-right: 5px;
-  width: 60px;
-  height: 60px;
+  margin-right: 3px;
+  width: var(--ug-thumbnail-size); /* Use variable */
+  height: var(--ug-thumbnail-size); /* Use variable */
   position: relative;
-  border-radius: 5px;
+  border-radius: 3px;
   overflow: hidden;
   cursor: pointer;
   transition: transform var(--ug-transition-duration) var(--ug-transition-ease);
@@ -353,63 +401,52 @@
   border: 2px solid var(--ug-text-color);
 }
 
-/* Thumbnail Preview on Hover */
+/* --- Thumbnail Preview on Hover --- */
+/* hide the preview */
 .ug-thumbnail-preview {
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  z-index: 1;
-  transform: translateX(-50%) translateY(5px) scale(0);
-  border-radius: 5px;
-  overflow: hidden;
-  padding: 5px;
-  width: calc(100% * var(--ug-thumbnail-preview-scale));
-  height: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  background-color: var(--ug-overlay-bg-color);
-  border: 1px solid var(--ug-border-color);
-  box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.5);
-  aspect-ratio: 1 / 1;
-  transition: transform var(--ug-transition-duration) var(--ug-transition-ease);
+display:none;
 }
 
-.ug-thumbnail-container:hover .ug-thumbnail-preview {
-  transform: translateX(-50%) translateY(5px) scale(1);
-}
 
-.ug-thumbnail-preview img {
-  max-width: calc(100% * var(--ug-thumbnail-preview-scale));
-  max-height: calc(100% * var(--ug-thumbnail-preview-scale));
-  display: block;
-  object-fit: contain;
-}
 
-/* Thumbnail Grid View (Alternative Layout) */
+/* --- Thumbnail Grid View (Alternative Layout) --- */
 .thumbnail-grid {
-  display: none;
-  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-  grid-gap: 5px;
+  display: none; /* Initially hidden */
+  grid-template-columns: repeat(auto-fit, minmax(60px, 1fr)); /* Smaller thumbnails */
+  grid-gap: 3px;
   max-height: calc(100vh - 120px);
-  margin-top: 10px;
-  padding: 10px;
+  margin-top: 5px;
+  padding: 5px;
   overflow-y: auto;
+  width: 100%;
+
+}
+
+/* Hide Grid, Show Strip when Gallery Overlay is Active (Expanded View) */
+.ug-gallery-overlay .thumbnail-grid {
+  display: none;
+}
+
+.ug-gallery-overlay .thumbnail-strip {
+  display: flex;
 }
 
 .ug-gallery-modal.grid-view .thumbnail-grid {
   display: grid;
 }
+
 .ug-gallery-modal.grid-view .ug-gallery-main-view {
   display: none;
 }
+
 .ug-gallery-modal.grid-view .thumbnail-strip {
   display: none;
 }
+
 .ug-gallery-modal.grid-view .page-number {
   display: none;
 }
+
 .ug-gallery-modal.grid-view .navigation-button {
   display: none;
 }
@@ -419,86 +456,109 @@
   justify-content: center;
   position: relative;
   overflow: hidden;
-  border-radius: 5px;
-  aspect-ratio: 1 / 1;
+  border-radius: 3px;
+  /* aspect-ratio: 1 / 1; REMOVED */
 }
 
 .ug-gallery-thumbnail-grid {
-  width: 100%;
-  height: 100%;
-  cursor: pointer;
-  object-fit: cover;
-  object-position: center;
-  transition: transform var(--ug-transition-duration) var(--ug-transition-ease);
+    height: var(--ug-thumbnail-size); /* ADDED: Control height */
+    width: auto; /* ADDED: Let width adjust automatically */
+    max-width: var(--ug-thumbnail-size);
+    max-height: var(--ug-thumbnail-size);
+    cursor: pointer;
+    object-fit: cover;
+    object-position: center;
+    transition: transform var(--ug-transition-duration) var(--ug-transition-ease);
 }
 
+/* REMOVED hover scaling
 .ug-gallery-thumbnail-grid:hover {
   transform: scale(1.05);
 }
+*/
 
-/* Responsive Media Queries */
+/* --- Responsive Media Queries --- */
 @media (max-width: 768px) {
   .ug-gallery-modal {
-    width: 98vw;
-    height: 95vh;
+      width: 98vw;
+      height: 95vh;
   }
+
   .ug-gallery-expanded-media {
-    max-height: calc(100vh - 100px);
+      max-height: calc(100vh - 100px);
   }
+
   .thumbnail-strip {
-    padding: 8px 10px;
+      padding: 5px 8px;
   }
+
   .ug-thumbnail-container {
-    width: 50px;
-    height: 50px;
-    margin-right: 3px;
+      width: var(--ug-thumbnail-size);
+      height: var(--ug-thumbnail-size);
+      margin-right: 2px;
   }
+
   .page-number {
-    font-size: 16px;
-    bottom: 5px;
+      font-size: 16px;
+      bottom: 5px;
   }
+
   .ug-gallery-controls-container button {
-    font-size: 20px;
+      font-size: 20px;
   }
+
   .navigation-button {
-    font-size: 20px;
-    width: 40px;
-    height: 40px;
+      font-size: 20px;
+      width: 40px;
+      height: 40px;
+  }
+  .ug-bottom-stripe {
+      height: var(--ug-bottom-stripe-height);
   }
 }
 
 @media (max-width: 576px) {
   .ug-gallery-modal {
-    width: 100vw;
-    height: 100vh;
-    border-radius: 0;
+      width: 100vw;
+      height: 100vh;
+      border-radius: 0;
   }
-  .ug-gallery-overlay.fullscreen-gallery .ug-gallery-modal {
-    border-radius: 0;
+  .ug-gallery-overlay.fullscreen-gallery .ug-gallery-modal{
+      border-radius: 0;
   }
+
   .ug-gallery-expanded-media {
-    max-height: calc(100vh - 80px);
+      max-height: calc(100vh - 80px);
   }
+
   .thumbnail-strip {
-    padding: 5px 8px;
+      padding: 3px 5px;
   }
+
   .ug-thumbnail-container {
-    width: 40px;
-    height: 40px;
-    margin-right: 2px;
+      width: var(--ug-thumbnail-size);
+      height: var(--ug-thumbnail-size);
+      margin-right: 1px;
   }
+
   .page-number {
-    display: none;
+      display: none;
   }
+
   .navigation-button {
-    display: none;
+      display: none;
   }
+
   .ug-gallery-controls-container button {
-    font-size: 18px;
+      font-size: 18px;
+  }
+
+  .ug-bottom-stripe {
+      height: var(--ug-bottom-stripe-height);
   }
 }
 
-/* Settings Button (Fixed on Page) */
+/* --- Settings Button (Fixed on Page) --- */
 .settings-button {
   position: fixed;
   bottom: 25px;
@@ -518,7 +578,7 @@
   opacity: var(--ug-button-hover-opacity);
 }
 
-/* SweetAlert Dialog Overrides */
+/* --- SweetAlert Dialog Overrides --- */
 .swal2-popup {
   background: var(--ug-settings-bg-color) !important;
   color: var(--ug-settings-text-color) !important;
@@ -538,48 +598,46 @@
   font-size: 18px;
 }
 
-/* Settings Panel Overlay & Container */
+/* --- Settings Panel Overlay & Container --- */
+/* Styles for the settings overlay */
 .ug-settings-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 10001;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background-color: rgba(0, 0, 0, 0);
-  backdrop-filter: blur(0px);
-  transition: background-color var(--ug-transition-duration)
-      var(--ug-transition-ease),
-    backdrop-filter var(--ug-transition-duration) var(--ug-transition-ease);
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%; /* Ensure full width */
+    height: 100%; /* Ensure full height */
+    z-index: 10001;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent background */
+    backdrop-filter: blur(5px); /* Add a blur effect */
+    /* Initially hidden, and no transition here */
 }
 
-.ug-settings-overlay.closing {
-  background-color: rgba(0, 0, 0, 0);
-  backdrop-filter: blur(0px);
-  transition: background-color 0.3s ease, backdrop-filter 0.3s ease;
-}
 
+/* Styles for the settings container */
 .ug-settings-container {
-  display: flex;
-  max-width: 800px;
-  max-height: 80vh;
-  width: 95vw;
-  background-color: var(--ug-settings-bg-color);
-  border-radius: 8px;
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
-  transform: scale(0.9);
-  transition: transform var(--ug-transition-duration) var(--ug-transition-ease);
+    display: flex;
+    max-width: 800px;
+    max-height: 80vh;
+    width: 95vw;
+    background-color: var(--ug-settings-bg-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+    /* Initial state for the animation */
+    transform: scale(0.9);
+    opacity: 0;
+    transition: transform 0.3s ease, opacity 0.3s ease;
 }
 
-.ug-settings-overlay:not(.closing) .ug-settings-container {
-  transform: scale(1);
-}
-.ug-settings-overlay.closing .ug-settings-container {
-  transform: scale(0.9);
+/* Apply the scale and fade-in effect when opening */
+.ug-settings-overlay.opening .ug-settings-container {
+    transform: scale(1);
+    opacity: 1;
 }
 
-/* Settings Panel Ribbon Navigation */
+/* --- Settings Panel Ribbon Navigation --- */
 .ug-settings-ribbon {
   display: flex;
   flex-direction: column;
@@ -607,7 +665,7 @@
   border-bottom-color: var(--ug-settings-ribbon-active-color);
 }
 
-/* Settings Panel Content Area */
+/* --- Settings Panel Content Area --- */
 .ug-settings-content {
   flex-grow: 1;
   padding: 20px;
@@ -677,7 +735,7 @@
   background-color: #0056b3 !important;
 }
 
-/* Notification Area (Bottom Fixed) */
+/* --- Notification Area (Bottom Fixed) --- */
 .ug-notification-area {
   position: fixed;
   bottom: 0;
@@ -747,7 +805,7 @@
   cursor: default;
 }
 
-/* Slide In/Out Animations */
+/* --- Slide In/Out Animations --- */
 .ug-slide-in {
   animation: ug-slide-in 0.5s ease-in-out forwards;
 }
@@ -758,22 +816,31 @@
 
 @keyframes ug-slide-in {
   from {
-    opacity: 0;
-    transform: translateY(100%);
+      opacity: 0;
+      transform: translateY(100%);
   }
+
   to {
-    opacity: 1;
-    transform: translateY(0);
+      opacity: 1;
+      transform: translateY(0);
   }
 }
 
 @keyframes ug-slide-out {
   from {
-    opacity: 1;
-    transform: translateY(0);
+      opacity: 1;
+      transform: translateY(0);
   }
+
   to {
-    opacity: 0;
-    transform: translateY(100%);
+      opacity: 0;
+      transform: translateY(100%);
   }
+}
+.ug-resized {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
 }
