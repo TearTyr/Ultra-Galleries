@@ -1,8 +1,9 @@
+// Ultra-Galleries.js
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      2.4.1
-// @description  Modern image gallery with enhanced browsing, fullscreen, and download features.
+// @version      2.3.5
+// @description  Modern image gallery with enhanced browsing, fullscreen, and download features, now with thumbnail grid UI and zoom.
 // @author       ntf (original), Meri/TearTyr (maintained and improved)
 // @match        *://kemono.su/*
 // @match        *://coomer.su/*
@@ -44,7 +45,7 @@
 	// --- CSS Injection ---
 	GM.xmlHttpRequest({
 		method: 'GET',
-		url: 'https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/TestingBranch/Ultra-Galleries.css', // Or your CSS file URL
+		url: 'https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/TestingBranch/Ultra-Galleries.css',
 		onload: function(response) {
 			if (response.status === 200) {
 				GM_addStyle(response.responseText);
@@ -69,7 +70,13 @@
 		WIDTH: '【FILL WIDTH】',
 		GALLERY: '【GALLERY】',
 		SETTINGS: '⚙️',
-		FULLSCREEN: '【FULLSCREEN】',
+		FULLSCREEN: '⛶',
+		GRID_VIEW: '🖼️',
+		EXPANDED_VIEW: '🔍',
+		ZOOM_IN: '+',
+		ZOOM_OUT: '-',
+		ZOOM_RESET: 'Reset',
+		CLOSE: '✕'
 	};
 
 	const SELECTORS = {
@@ -129,12 +136,41 @@
 		UG_GALLERY_THUMBNAIL_GRID: 'ug-gallery-thumbnail-grid',
 		UG_GALLERY_EXPANDED_MEDIA: 'ug-gallery-expanded-media',
 		BOTTOM_STRIPE: 'ug-bottom-stripe',
+		UG_MAIN_IMAGE_CONTAINER: 'ug-main-image-container',
+		UG_MAIN_IMAGE: 'ug-main-image',
+		UG_GALLERY_NAV: 'ug-gallery-nav',
+		UG_GALLERY_PREV: 'ug-gallery-prev',
+		UG_GALLERY_NEXT: 'ug-gallery-next',
+		UG_THUMBNAIL_STRIP: 'ug-thumbnail-strip',
+		UG_THUMBNAIL: 'ug-thumbnail',
+		UG_GALLERY_CLOSE: 'ug-gallery-close',
+		UG_GALLERY_FULLSCREEN: 'ug-gallery-fullscreen',
+		UG_FULLSCREEN_OVERLAY: 'ug-fullscreen-overlay',
+		UG_GALLERY_GRID_VIEW: 'ug-gallery-grid-view',
+		UG_GALLERY_EXPANDED_VIEW: 'ug-gallery-expanded-view',
+		UG_GALLERY_HIDE: 'ug-gallery-hide',
+		UG_GALLERY_COUNTER: 'ug-gallery-counter',
+		UG_GALLERY_GRID_CLOSE: 'ug-gallery-grid-close',
+		UG_GALLERY_THUMBNAIL_STRIP_CONTAINER: 'ug-gallery-thumbnail-strip-container',
+		/* New container for thumbnail strip */
+		UG_GALLERY_ZOOM_CONTAINER: 'ug-gallery-zoom-container',
+		/* Container for zoom functionality */
+		UG_GALLERY_ZOOM_IMAGE: 'ug-gallery-zoom-image',
+		/* Image within zoom container */
+		/* Class for the new grid close button */
+		UG_GALLERY_TOOLBAR: 'ug-gallery-toolbar',
+		UG_TOOLBAR_BUTTON: 'ug-toolbar-button',
+		UG_ZOOM_CONTROLS: 'ug-zoom-controls',
+		UG_ZOOM_BUTTON: 'ug-zoom-button',
+		UG_CONTROLS_HIDDEN_CLASS: 'ug-controls-hidden', // Class to hide controls
+		UG_GRABBING_CURSOR: 'ug-grabbing', // Class for grabbing cursor
+		UG_BOTTOM_STRIPE_CONTAINER: 'ug-bottom-stripe-container', //New container for bottom stripe
 	};
 
 	const MAX_RETRIES = 3;
 	const RETRY_DELAY = 1500;
 	const IMAGE_BATCH_SIZE = 5;
-	const DEBOUNCE_DELAY = 300;
+	const DEBOUNCE_DELAY = 10; // Reduced debounce for smoother drag
 
 	// --- State Management ---
 	const createReactiveState = (initialState, updateCallbacks = {}) => {
@@ -156,8 +192,8 @@
 		galleryKey: GM_getValue('galleryKey', 'g'),
 		galleryReady: false,
 		galleryActive: false,
-		expandedViewActive: false,
-		controlsVisible: true,
+		currentGalleryIndex: 0,
+		isFullscreen: GM_getValue('isFullscreen', false),
 		virtualGallery: [],
 		originalImageSrcs: [],
 		currentPostUrl: null,
@@ -182,13 +218,30 @@
 		hideFullButton: GM_getValue('hideFullButton', false),
 		hideDownloadButton: GM_getValue('hideDownloadButton', false),
 		settingsOpen: false,
-		currentGalleryIndex: 0,
-		isFullscreen: false,
 		prevImageKey: GM_getValue('prevImageKey', 'k'),
 		nextImageKey: GM_getValue('nextImageKey', 'l'),
 		bottomStripeVisible: true,
 		dynamicResizing: GM_getValue('dynamicResizing', true), // Default to on
+		zoomEnabled: GM_getValue('zoomEnabled', true), // Default zoom enabled
+		isZoomed: false, // Track zoom state
+		zoomScale: 1, // Current zoom scale
+		controlsVisible: true, // Initially controls are visible,
+		isDragging: false, // Track if image is being dragged
+		dragStartPosition: {
+			x: 0,
+			y: 0
+		}, // Track drag start position
+		imageOffset: {
+			x: 0,
+			y: 0
+		}, // Track current image offset
 	}, {
+		controlsVisible: (value) => {
+			const toolbar = galleryOverlay?.querySelector(`.${CLASS_NAMES.UG_GALLERY_TOOLBAR}`);
+			const zoomControls = galleryOverlay?.querySelector(`.${CLASS_NAMES.UG_ZOOM_CONTROLS}`);
+			if (toolbar) toolbar.classList.toggle(CLASS_NAMES.UG_CONTROLS_HIDDEN_CLASS, !value);
+			if (zoomControls) zoomControls.classList.toggle(CLASS_NAMES.UG_CONTROLS_HIDDEN_CLASS, !value);
+		},
 		galleryReady: (value) => {
 			if (value) {
 				updateGalleryButton(true);
@@ -239,11 +292,7 @@
 			}
 		},
 		isGalleryMode: (value) => {
-			if (value) {
-				showGallery();
-			} else {
-				closeGallery();
-			}
+			// Now toggleGallery handles gallery creation and destruction
 		},
 		notification: (value) => {
 			if (value) {
@@ -259,259 +308,233 @@
 				closeSettings();
 			}
 		},
-		notificationAreaVisible: (value) => {
-			const notificationArea = document.getElementById(CLASS_NAMES.NOTIFICATION_AREA);
-			if (notificationArea) {
-				notificationArea.style.display = value ? 'flex' : 'none';
-			}
-		},
-		isFullscreen: (value, oldValue) => {
-			const galleryOverlay = document.getElementById('gallery-overlay');
+		isFullscreen: (value) => {
+			GM_setValue('isFullscreen', value);
 			if (galleryOverlay) {
-				galleryOverlay.classList.toggle(CLASS_NAMES.FULLSCREEN_GALLERY, value);
+				if (value) {
+					document.body.classList.add('ug-fullscreen');
+					galleryOverlay.classList.add('ug-fullscreen-overlay');
+				} else {
+					document.body.classList.remove('ug-fullscreen');
+					galleryOverlay.classList.remove('ug-fullscreen-overlay');
+				}
 			}
 		},
-		bottomStripeVisible: (value) => {
-			const bottomStripe = document.querySelector(`.${CLASS_NAMES.BOTTOM_STRIPE}`);
-			if (bottomStripe) {
-				bottomStripe.style.display = value ? 'flex' : 'none';
-			}
-		},
+		zoomEnabled: (value) => {
+			GM_setValue('zoomEnabled', value);
+		}
 	});
 
 	// --- Settings ---
 	const createSettingsUI = () => {
-		const overlay = document.createElement('div');
-		overlay.id = 'ug-settings-overlay';
-		overlay.classList.add('ug-settings-overlay');
+		// Settings Overlay Container
+		const settingsOverlay = document.createElement('div');
+		settingsOverlay.id = 'ug-settings-overlay';
+		settingsOverlay.classList.add('ug-settings-overlay');
 
-		const container = document.createElement('div');
-		container.id = 'ug-settings-container';
-		container.classList.add('ug-settings-container');
+		// Settings Container - inner panel
+		const settingsContainer = document.createElement('div');
+		settingsContainer.classList.add('ug-settings-container');
+		settingsOverlay.appendChild(settingsContainer);
 
-		const ribbon = document.createElement('div');
-		ribbon.id = 'ug-settings-ribbon';
-		ribbon.classList.add('ug-settings-ribbon');
+		// Settings Header
+		const settingsHeader = document.createElement('div');
+		settingsHeader.classList.add('ug-settings-header');
+		settingsContainer.appendChild(settingsHeader);
 
-		const content = document.createElement('div');
-		content.classList.add('ug-settings-content');
+		const headerText = document.createElement('h2');
+		headerText.textContent = 'Ultra Galleries Settings';
+		settingsHeader.appendChild(headerText);
 
+		// Close Button (X) - Top Right
 		const closeButton = document.createElement('button');
-		closeButton.id = 'ug-settings-close-btn';
 		closeButton.classList.add('ug-settings-close-btn');
-		closeButton.innerHTML = '×';
-		closeButton.addEventListener('click', () => {
-			state.settingsOpen = false;
+		closeButton.textContent = BUTTONS.CLOSE;
+		closeButton.addEventListener('click', () => state.settingsOpen = false);
+		settingsHeader.appendChild(closeButton);
+
+		// Settings Body - for options
+		const settingsBody = document.createElement('div');
+		settingsBody.classList.add('ug-settings-body');
+		settingsContainer.appendChild(settingsBody);
+
+		// Settings Sections - layout as needed, e.g., using fieldsets or divs
+		const sectionGeneral = document.createElement('fieldset');
+		sectionGeneral.innerHTML = `<legend>General Settings</legend>`;
+		settingsBody.appendChild(sectionGeneral);
+
+		const sectionKeys = document.createElement('fieldset');
+		sectionKeys.innerHTML = `<legend>Keyboard Shortcuts</legend>`;
+		settingsBody.appendChild(sectionKeys);
+
+		const sectionNotifications = document.createElement('fieldset');
+		sectionNotifications.innerHTML = `<legend>Notifications</legend>`;
+		settingsBody.appendChild(sectionNotifications);
+
+		const sectionFormatting = document.createElement('fieldset');
+		sectionFormatting.innerHTML = `<legend>File Formatting</legend>`;
+		settingsBody.appendChild(sectionFormatting);
+
+		const sectionZoom = document.createElement('fieldset'); // New section for zoom
+		sectionZoom.innerHTML = `<legend>Zoom Settings</legend>`;
+		settingsBody.appendChild(sectionZoom);
+
+		// --- General Settings ---
+		// Dynamic Resizing Toggle
+		const dynamicResizingLabel = document.createElement('label');
+		dynamicResizingLabel.innerHTML = `Dynamic Resizing: <input type="checkbox" id="dynamicResizingToggle" ${state.dynamicResizing ? 'checked' : ''}>`;
+		const dynamicResizingInput = dynamicResizingLabel.querySelector('input');
+		dynamicResizingInput.addEventListener('change', (e) => {
+			state.dynamicResizing = e.target.checked;
+			GM_setValue('dynamicResizing', state.dynamicResizing);
 		});
+		sectionGeneral.appendChild(dynamicResizingLabel);
 
-		const tabs = {
-			general: {
-				label: 'General',
-				content: () => {
-					const generalContent = document.createElement('div');
-					generalContent.classList.add('ug-settings-tab-content');
-					generalContent.innerHTML = `
-                             <div class="ug-setting">
-                                <label for="galleryKey">Gallery Key:</label>
-                                <input type="text" id="galleryKey" class="ug-settings-input" value="${state.galleryKey}" maxlength="1">
-                                <p class="ug-placeholder-info">Press this key to open the gallery when it's loaded.</p>
-                            </div>
-                            <div class="ug-setting">
-                                <label for="prevImageKey">Previous Image Key:</label>
-                                <input type="text" id="prevImageKey" class="ug-settings-input" value="${state.prevImageKey}" maxlength="1">
-                                <p class="ug-placeholder-info">Key to navigate to the previous image in expanded view.</p>
-                            </div>
-                            <div class="ug-setting">
-                                <label for="nextImageKey">Next Image Key:</label>
-                                <input type="text" id="nextImageKey" class="ug-settings-input" value="${state.nextImageKey}" maxlength="1">
-                                <p class="ug-placeholder-info">Key to navigate to the next image in expanded view.</p>
-                            </div>
-                    `;
-					return generalContent;
-				},
-			},
-			options: {
-				label: 'Options',
-				content: () => {
-					const optionsContent = document.createElement('div');
-					optionsContent.classList.add('ug-settings-tab-content');
-					optionsContent.innerHTML = `
-                          <div class="ug-setting">
-                                <label for="hideNavArrows">Hide Gallery Navigation Arrows:</label>
-                                <input type="checkbox" id="hideNavArrows" class="ug-settings-input" style="width: fit-content;" ${state.hideNavArrows ? 'checked' : ''}>
-                            </div>
-                            <div class="ug-setting">
-                                <label for="hideRemoveButton">Hide Remove Button:</label>
-                                <input type="checkbox" id="hideRemoveButton" class="ug-settings-input" style="width: fit-content;" ${state.hideRemoveButton ? 'checked' : ''}>
-                            </div>
-                             <div class="ug-setting">
-                                <label for="hideFullButton">Hide Full Button:</label>
-                                <input type="checkbox" id="hideFullButton" class="ug-settings-input" style="width: fit-content;" ${state.hideFullButton ? 'checked' : ''}>
-                            </div>
-                             <div class="ug-setting">
-                                <label for="hideDownloadButton">Hide Download Button:</label>
-                                <input type="checkbox" id="hideDownloadButton" class="ug-settings-input" style="width: fit-content;" ${state.hideDownloadButton ? 'checked' : ''}>
-                            </div>
-                            <div class="ug-setting">
-                                <label for="notificationAreaVisible">Hide Notification Area:</label>
-                                <input type="checkbox" id="notificationAreaVisible" class="ug-settings-input" style="width: fit-content;" ${state.notificationAreaVisible ? 'checked' : ''}>
-                            </div>
-                            <div class="ug-setting">
-                                <label for="dynamicResizing">Dynamic Image Resizing:</label>
-                                <input type="checkbox" id="dynamicResizing" class="ug-settings-input" style="width: fit-content;" ${state.dynamicResizing ? 'checked' : ''}>
-                            </div>
-                        `;
+		// Animations Toggle
+		const animationsLabel = document.createElement('label');
+		animationsLabel.innerHTML = `Enable Animations: <input type="checkbox" id="animationsToggle" ${state.animationsEnabled ? 'checked' : ''}>`;
+		const animationsInput = animationsLabel.querySelector('input');
+		animationsInput.addEventListener('change', (e) => {
+			state.animationsEnabled = e.target.checked;
+			GM_setValue('animationsEnabled', state.animationsEnabled);
+		});
+		sectionGeneral.appendChild(animationsLabel);
 
-					optionsContent.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-						checkbox.addEventListener('change', (e) => {
-							state[e.target.id] = e.target.checked;
-							GM_setValue(e.target.id, e.target.checked);
-						});
-					});
-
-					return optionsContent;
-				},
-
-			},
-			filenames: {
-				label: 'Filenames',
-				content: () => {
-					const filenamesContent = document.createElement('div');
-					filenamesContent.classList.add('ug-settings-tab-content');
-					filenamesContent.innerHTML = `
-                             <div class="ug-setting">
-                                <label for="zipFileNameFormat">Zip Filename Format:</label>
-                                <input type="text" id="zipFileNameFormat" class="ug-settings-input" value="${state.zipFileNameFormat}" placeholder="{title}-{artistName}.zip">
-                                <p class="ug-placeholder-info">Available placeholders: {artistName}, {title}</p>
-                            </div>
-                            <div class="ug-setting">
-                                <label for="imageFileNameFormat">Image Filename Format:</label>
-                                <input type="text" id="imageFileNameFormat" class="ug-settings-input" value="${state.imageFileNameFormat}" placeholder="{title}-{artistName}-{fileName}-{index}">
-                                <p class="ug-placeholder-info">Available placeholders: {artistName}, {title}, {fileName}, {index}, {ext}</p>
-                            </div>
-                        `;
-					return filenamesContent;
-				},
-			},
-			notifications: {
-				label: 'Notifications',
-				content: () => {
-					const notificationsContent = document.createElement('div');
-					notificationsContent.classList.add('ug-settings-tab-content');
-					notificationsContent.innerHTML = `
-                             <div class="ug-setting">
-                                <label for="notificationsEnabled">Enable Notifications:</label>
-                                <input type="checkbox" id="notificationsEnabled" class="ug-settings-input" style="width: fit-content;" ${state.notificationsEnabled ? 'checked' : ''}>
-                            </div>
-                            <div class="ug-setting">
-                                <label for="animationsEnabled">Enable Animations:</label>
-                                <input type="checkbox" id="animationsEnabled" class="ug-settings-input" style="width: fit-content;" ${state.animationsEnabled ? 'checked' : ''}>
-                            </div>
-                       `;
-
-					notificationsContent.querySelector('#animationsEnabled').addEventListener('change', (e) => {
-						state.animationsEnabled = e.target.checked;
-						GM_setValue('animationsEnabled', e.target.checked);
-					});
-
-					return notificationsContent;
-				},
-			},
-			credits: {
-				label: 'Credits',
-				content: () => {
-					const creditsContent = document.createElement('div');
-					creditsContent.classList.add('ug-settings-tab-content');
-					creditsContent.innerHTML = `
-                        <div class="ug-credits">
-                             <p>Original author: ntf</p>
-                             <p>Forked by: Meri/TearTyr</p>
-                         </div>
-                        `;
-					return creditsContent;
+		// Bottom Stripe Visibility Toggle
+		const bottomStripeLabel = document.createElement('label');
+		bottomStripeLabel.innerHTML = `Show Thumbnail Stripe: <input type="checkbox" id="bottomStripeToggle" ${state.bottomStripeVisible ? 'checked' : ''}>`;
+		const bottomStripeInput = bottomStripeLabel.querySelector('input');
+		bottomStripeInput.addEventListener('change', (e) => {
+			state.bottomStripeVisible = e.target.checked;
+			GM_setValue('bottomStripeVisible', state.bottomStripeVisible);
+			if (galleryOverlay) {
+				const bottomStripeContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_BOTTOM_STRIPE_CONTAINER}`);
+				if (bottomStripeContainer) {
+					bottomStripeContainer.style.display = state.bottomStripeVisible ? 'flex' : 'none';
 				}
 			}
-		};
+		});
+		sectionGeneral.appendChild(bottomStripeLabel);
 
-		let activeTab = 'general';
-		const ribbonButtons = {};
 
-		const showTabContent = (tabId) => {
-			content.innerHTML = '';
-			content.appendChild(tabs[tabId].content());
-			activeTab = tabId;
-			for (const tabKey in ribbonButtons) {
-				ribbonButtons[tabKey].classList.toggle('active', tabKey === activeTab);
+		// --- Zoom Settings ---
+		// Zoom Enable Toggle
+		const zoomEnableLabel = document.createElement('label');
+		zoomEnableLabel.innerHTML = `Enable Zoom Functionality: <input type="checkbox" id="zoomEnableToggle" ${state.zoomEnabled ? 'checked' : ''}>`;
+		const zoomEnableInput = zoomEnableLabel.querySelector('input');
+		zoomEnableInput.addEventListener('change', (e) => {
+			state.zoomEnabled = e.target.checked;
+			GM_setValue('zoomEnabled', state.zoomEnabled);
+			if (!state.zoomEnabled) {
+				state.isZoomed = false; // Reset zoom state if disabled
+				updateZoomToggleButton(); // Update zoom toggle button
+				resetZoom(); // Reset zoom
+				const zoomControls = galleryOverlay?.querySelector(`.${CLASS_NAMES.UG_ZOOM_CONTROLS}`);
+				if (zoomControls) zoomControls.classList.add(CLASS_NAMES.UG_GALLERY_HIDE); // Hide zoom controls
 			}
-		};
+		});
+		sectionZoom.appendChild(zoomEnableLabel);
 
-		for (const tabId in tabs) {
-			const button = document.createElement('button');
-			button.textContent = tabs[tabId].label;
-			button.classList.add('ug-settings-ribbon-button');
-			button.addEventListener('click', () => showTabContent(tabId));
-			ribbon.appendChild(button);
-			ribbonButtons[tabId] = button;
-		}
 
-		const saveSettings = () => {
-			state.zipFileNameFormat = document.getElementById('zipFileNameFormat')?.value || state.zipFileNameFormat;
-			state.imageFileNameFormat = document.getElementById('imageFileNameFormat')?.value || state.imageFileNameFormat;
-			state.galleryKey = document.getElementById('galleryKey')?.value || state.galleryKey;
-			state.prevImageKey = document.getElementById('prevImageKey')?.value || state.prevImageKey;
-			state.nextImageKey = document.getElementById('nextImageKey')?.value || state.nextImageKey;
-
-			state.zipFileNameFormat = state.zipFileNameFormat.trim();
-			state.imageFileNameFormat = state.imageFileNameFormat.trim();
-			state.galleryKey = state.galleryKey.trim();
-			state.prevImageKey = state.prevImageKey.trim();
-			state.nextImageKey = state.nextImageKey.trim();
-
-			GM_setValue('zipFileNameFormat', state.zipFileNameFormat);
-			GM_setValue('imageFileNameFormat', state.imageFileNameFormat);
+		// --- Keyboard Shortcuts ---
+		// Gallery Key Input
+		const galleryKeyLabel = document.createElement('label');
+		galleryKeyLabel.innerHTML = `Gallery Key: <input type="text" id="galleryKeyInput" value="${state.galleryKey}" maxlength="1" style="width: 2em;">`;
+		const galleryKeyInput = galleryKeyLabel.querySelector('input');
+		galleryKeyInput.addEventListener('change', (e) => {
+			state.galleryKey = e.target.value;
 			GM_setValue('galleryKey', state.galleryKey);
+		});
+		sectionKeys.appendChild(galleryKeyLabel);
+
+		// Prev Image Key Input
+		const prevImageKeyLabel = document.createElement('label');
+		prevImageKeyLabel.innerHTML = `Previous Image Key: <input type="text" id="prevImageKeyInput" value="${state.prevImageKey}" maxlength="1" style="width: 2em;">`;
+		const prevImageKeyInput = prevImageKeyLabel.querySelector('input');
+		prevImageKeyInput.addEventListener('change', (e) => {
+			state.prevImageKey = e.target.value;
 			GM_setValue('prevImageKey', state.prevImageKey);
+		});
+		sectionKeys.appendChild(prevImageKeyLabel);
+
+		// Next Image Key Input
+		const nextImageKeyLabel = document.createElement('label');
+		nextImageKeyLabel.innerHTML = `Next Image Key: <input type="text" id="nextImageKeyInput" value="${state.nextImageKey}" maxlength="1" style="width: 2em;">`;
+		const nextImageKeyInput = nextImageKeyLabel.querySelector('input');
+		nextImageKeyInput.addEventListener('change', (e) => {
+			state.nextImageKey = e.target.value;
 			GM_setValue('nextImageKey', state.nextImageKey);
-			state.notificationAreaVisible = document.getElementById('notificationAreaVisible')?.checked;
+		});
+		sectionKeys.appendChild(nextImageKeyLabel);
+
+		// --- Notifications Settings ---
+		// Notifications Enabled Toggle
+		const notificationsEnabledLabel = document.createElement('label');
+		notificationsEnabledLabel.innerHTML = `Enable Notifications: <input type="checkbox" id="notificationsEnabledToggle" ${state.notificationsEnabled ? 'checked' : ''}>`;
+		const notificationsEnabledInput = notificationsEnabledLabel.querySelector('input');
+		notificationsEnabledInput.addEventListener('change', (e) => {
+			state.notificationsEnabled = e.target.checked;
+			GM_setValue('notificationsEnabled', state.notificationsEnabled);
+		});
+		sectionNotifications.appendChild(notificationsEnabledLabel);
+
+		// Notification Area Visibility Toggle
+		const notificationAreaVisibleLabel = document.createElement('label');
+		notificationAreaVisibleLabel.innerHTML = `Show Notification Area: <input type="checkbox" id="notificationAreaVisibleToggle" ${state.notificationAreaVisible ? 'checked' : ''}>`;
+		const notificationAreaVisibleInput = notificationAreaVisibleLabel.querySelector('input');
+		notificationAreaVisibleInput.addEventListener('change', (e) => {
+			state.notificationAreaVisible = e.target.checked;
 			GM_setValue('notificationAreaVisible', state.notificationAreaVisible);
+			const notificationArea = document.getElementById(CLASS_NAMES.NOTIFICATION_AREA);
+			if (notificationArea) {
+				notificationArea.style.display = state.notificationAreaVisible ? 'flex' : 'none';
+			}
+		});
+		sectionNotifications.appendChild(notificationAreaVisibleLabel);
 
-			state.settingsOpen = false;
-		}
 
-		const saveButton = document.createElement('button');
-		saveButton.textContent = 'Save';
-		saveButton.className = 'swal2-confirm';
-		saveButton.classList.add('ug-settings-save-button');
-		saveButton.addEventListener('click', saveSettings);
-		content.appendChild(saveButton);
-		showTabContent(activeTab);
+		// --- File Formatting Settings ---
+		// Zip File Name Format Input
+		const zipFileNameFormatLabel = document.createElement('label');
+		zipFileNameFormatLabel.innerHTML = `Zip File Name Format: <input type="text" id="zipFileNameFormatInput" value="${state.zipFileNameFormat}" style="width: 100%;">`;
+		const zipFileNameFormatInput = zipFileNameFormatLabel.querySelector('input');
+		zipFileNameFormatInput.addEventListener('change', (e) => {
+			state.zipFileNameFormat = e.target.value;
+			GM_setValue('zipFileNameFormat', state.zipFileNameFormat);
+		});
+		sectionFormatting.appendChild(zipFileNameFormatLabel);
 
-		container.appendChild(ribbon);
-		container.appendChild(content);
-		overlay.appendChild(container);
-		container.appendChild(closeButton);
-		document.body.appendChild(overlay);
+		// Image File Name Format Input
+		const imageFileNameFormatLabel = document.createElement('label');
+		imageFileNameFormatLabel.innerHTML = `Image File Name Format: <input type="text" id="imageFileNameFormatInput" value="${state.imageFileNameFormat}" style="width: 100%;">`;
+		const imageFileNameFormatInput = imageFileNameFormatLabel.querySelector('input');
+		imageFileNameFormatInput.addEventListener('change', (e) => {
+			state.imageFileNameFormat = e.target.value;
+			GM_setValue('imageFileNameFormat', state.imageFileNameFormat);
+		});
+		sectionFormatting.appendChild(imageFileNameFormatLabel);
+
+		document.body.appendChild(settingsOverlay);
 	};
 
 	const showSettings = () => {
-		createSettingsUI(); // This creates the HTML if it doesn't exist
+		createSettingsUI();
 		const overlay = document.getElementById('ug-settings-overlay');
 		if (overlay) {
-			// Remove closing class if present, add opening
 			overlay.classList.remove('closing');
 			overlay.classList.add('opening');
-			overlay.style.width = '100%'; // Add this line
-			overlay.style.height = '100%'; // Add this line
+			overlay.style.width = '100%';
+			overlay.style.height = '100%';
 		}
 	};
 
 	const closeSettings = () => {
 		const overlay = document.getElementById('ug-settings-overlay');
 		if (overlay) {
-			overlay.classList.add('closing'); // Add closing class to start animation
+			overlay.classList.add('closing');
 			setTimeout(() => {
 				overlay.remove();
-			}, 300); // Remove after animation (0.3s)
+			}, 300);
 		}
 	};
 
@@ -581,10 +604,10 @@
 		statusContainer: null,
 		statusElement: null,
 		galleryButton: null,
-		settingsButton: null
+		settingsButton: null,
+		zoomToggleButton: null
 	};
 
-	//Variable to track if key listeners have been added
 	let galleryKeyListenerAttached = false;
 
 	const imageActions = {
@@ -621,7 +644,7 @@
 		for (let scrollPos = originalScrollPosition; scrollPos < maxScrollHeight; scrollPos += scrollStep) {
 			window.scrollTo(0, scrollPos);
 			await new Promise(resolve => setTimeout(resolve, 100));
-		}
+		};
 		window.scrollTo(0, originalScrollPosition);
 	};
 
@@ -713,18 +736,18 @@
 
 	const createVirtualGallery = () => {
 		cleanupVirtualGallery();
-		elements.virtualGalleryContainer = document.createElement('div'); // Use document here
+		elements.virtualGalleryContainer = document.createElement('div');
 		elements.virtualGalleryContainer.style.display = 'none';
 		state.virtualGallery.forEach((mediaSrc) => {
 			if (mediaSrc) {
-				const mediaElement = document.createElement('img'); // And here
+				const mediaElement = document.createElement('img');
 				mediaElement.src = mediaSrc;
 				mediaElement.className = CLASS_NAMES.VIRTUAL_IMAGE;
 				elements.virtualGalleryContainer.appendChild(mediaElement);
 			}
 
 		});
-		document.body.appendChild(elements.virtualGalleryContainer); // And here
+		document.body.appendChild(elements.virtualGalleryContainer);
 	};
 
 	const cleanupVirtualGallery = () => {
@@ -734,408 +757,441 @@
 		}
 		state.galleryReady = false;
 	};
-	// --- Gallery Display and Navigation --- (Rewritten Section) ---
 
-	let galleryOverlay = null; // Store the gallery overlay globally
+	let galleryOverlay = null;
 
-	// Creates the gallery overlay (only called once)
-	const createGalleryOverlay = () => {
-		const overlay = document.createElement('div');
-		overlay.id = 'gallery-overlay';
-		overlay.classList.add('ug-gallery-overlay');
+	const createGallery = () => {
+		if (galleryOverlay) return;
 
-		const galleryModal = document.createElement('div');
-		galleryModal.classList.add('ug-gallery-modal');
+		galleryOverlay = document.createElement('div');
+		galleryOverlay.id = 'gallery-overlay';
+		galleryOverlay.classList.add('ug-gallery-overlay');
 
-		const controlsContainer = document.createElement('div');
-		controlsContainer.classList.add(CLASS_NAMES.GALLERY_CONTROLS_CONTAINER, CLASS_NAMES.CONTROLS_VISIBLE);
+		const galleryContainer = document.createElement('div');
+		galleryContainer.classList.add('ug-gallery-container');
+		galleryOverlay.appendChild(galleryContainer);
 
-		const closeButton = document.createElement('button');
-		closeButton.textContent = '×';
-		closeButton.className = CLASS_NAMES.GALLERY_CLOSE_BUTTON;
-		closeButton.addEventListener('click', closeGallery); // Use the named function
+		const gridView = document.createElement('div');
+		gridView.classList.add(CLASS_NAMES.UG_GALLERY_GRID_VIEW);
+		galleryContainer.appendChild(gridView);
 
-		const fullscreenButton = document.createElement('button');
-		fullscreenButton.textContent = '⛶';
-		fullscreenButton.className = CLASS_NAMES.FULLSCREEN_BUTTON;
-		fullscreenButton.addEventListener('click', toggleFullscreenGallery);
+		const expandedView = document.createElement('div');
+		expandedView.classList.add(CLASS_NAMES.UG_GALLERY_EXPANDED_VIEW, CLASS_NAMES.UG_GALLERY_HIDE);
+		galleryContainer.appendChild(expandedView);
+		//expandedView.addEventListener('click', toggleControlsVisibility); // Click to hide controls - Removed for now, click on image instead
 
-		//ADD BACK BUTTON
-		const backButton = document.createElement('button');
-		backButton.textContent = '← Back'; // Or an icon if you prefer
-		backButton.className = 'ug-gallery-back-button';
-		backButton.addEventListener('click', hideExpandedImage); // Reuse the existing function
+		// Toolbar for expanded view
+		const toolbar = document.createElement('div');
+		toolbar.classList.add(CLASS_NAMES.UG_GALLERY_TOOLBAR);
+		expandedView.appendChild(toolbar);
+		toolbar.addEventListener('mousedown', (e) => e.stopPropagation()); // Prevent toolbar interactions from triggering image drag
 
-		controlsContainer.append(backButton, closeButton, fullscreenButton); // Add backButton first
+		// Zoom Controls - moved to toolbar
+		const zoomControls = document.createElement('div');
+		zoomControls.classList.add(CLASS_NAMES.UG_ZOOM_CONTROLS);
+		toolbar.appendChild(zoomControls);
+		zoomControls.addEventListener('mousedown', (e) => e.stopPropagation()); // Prevent zoom controls interaction from triggering image drag
+
+		const zoomInButton = document.createElement('button');
+		zoomInButton.textContent = BUTTONS.ZOOM_IN;
+		zoomInButton.classList.add(CLASS_NAMES.UG_ZOOM_BUTTON);
+		zoomInButton.addEventListener('click', zoomIn);
+		zoomInButton.setAttribute('aria-label', 'Zoom In'); // Accessibility
+		zoomControls.appendChild(zoomInButton);
+
+		const zoomOutButton = document.createElement('button');
+		zoomOutButton.textContent = BUTTONS.ZOOM_OUT;
+		zoomOutButton.classList.add(CLASS_NAMES.UG_ZOOM_BUTTON);
+		zoomOutButton.addEventListener('click', zoomOut);
+		zoomOutButton.setAttribute('aria-label', 'Zoom Out'); // Accessibility
+		zoomControls.appendChild(zoomOutButton);
+
+		const zoomResetButton = document.createElement('button');
+		zoomResetButton.textContent = BUTTONS.ZOOM_RESET;
+		zoomResetButton.classList.add(CLASS_NAMES.UG_ZOOM_BUTTON);
+		zoomResetButton.addEventListener('click', resetZoom);
+		zoomResetButton.setAttribute('aria-label', 'Reset Zoom'); // Accessibility
+		zoomControls.appendChild(zoomResetButton);
+		zoomControls.classList.add(CLASS_NAMES.UG_GALLERY_HIDE); // Initially hidden
 
 
-		const mainView = document.createElement('div');
-		mainView.classList.add(CLASS_NAMES.GALLERY_MAIN_VIEW);
-		mainView.addEventListener('click', toggleControls); // Toggle controls on click
+		const zoomToggleButton = document.createElement('button');
+		zoomToggleButton.classList.add(CLASS_NAMES.UG_TOOLBAR_BUTTON);
+		zoomToggleButton.textContent = BUTTONS.EXPANDED_VIEW;
+		zoomToggleButton.addEventListener('click', toggleZoom);
+		zoomToggleButton.setAttribute('aria-label', 'Toggle Zoom'); // Accessibility
+		toolbar.appendChild(zoomToggleButton);
+		elements.zoomToggleButton = zoomToggleButton; // Store for state update
 
-		const expandedImageContainer = document.createElement('div');
-		expandedImageContainer.classList.add(CLASS_NAMES.EXPANDED_VIEW_CONTAINER);
+		const expandedCloseButton = document.createElement('button');
+		expandedCloseButton.classList.add(CLASS_NAMES.UG_TOOLBAR_BUTTON);
+		expandedCloseButton.textContent = BUTTONS.CLOSE;
+		expandedCloseButton.addEventListener('click', showGridView); // Go back to grid view
+		expandedCloseButton.setAttribute('aria-label', 'Close Expanded View'); // Accessibility
+		toolbar.appendChild(expandedCloseButton);
 
-		const expandedMedia = document.createElement('div');
-		expandedMedia.classList.add(CLASS_NAMES.UG_GALLERY_EXPANDED_MEDIA);
-
-		const prevButton = createNavigationButton('prev');
-		prevButton.addEventListener('click', (event) => {
-			event.stopPropagation(); // Prevent event bubbling
-			navigateGallery(-1);
-		});
-
-		const nextButton = createNavigationButton('next');
-		nextButton.addEventListener('click', (event) => {
-			event.stopPropagation(); // Prevent event bubbling
-			navigateGallery(1);
-		});
-
-		const pageNumber = document.createElement('div');
-		pageNumber.className = CLASS_NAMES.PAGE_NUMBER;
-
-		const thumbnailStrip = document.createElement('div');
-		thumbnailStrip.classList.add(CLASS_NAMES.THUMBNAIL_STRIP);
 
 		const thumbnailGrid = document.createElement('div');
-		thumbnailGrid.classList.add(CLASS_NAMES.THUMBNAIL_GRID);
+		thumbnailGrid.classList.add(CLASS_NAMES.UG_GALLERY_THUMBNAIL_GRID);
+		gridView.appendChild(thumbnailGrid);
 
-		const bottomStripe = document.createElement('div');
-		bottomStripe.classList.add(CLASS_NAMES.BOTTOM_STRIPE);
+		const expandedZoomContainer = document.createElement('div'); // Zoom Container
+		expandedZoomContainer.classList.add(CLASS_NAMES.UG_GALLERY_ZOOM_CONTAINER);
+		expandedView.appendChild(expandedZoomContainer);
 
-		// Assemble the gallery elements
-		mainView.append(expandedImageContainer);
-		//controlsContainer.append(closeButton, fullscreenButton); //MOVED
-		galleryModal.append(controlsContainer, mainView, bottomStripe, pageNumber, prevButton, nextButton);
-		expandedImageContainer.append(expandedMedia);
-		overlay.appendChild(galleryModal);
+		const mainImageContainer = document.createElement('div');
+		mainImageContainer.classList.add(CLASS_NAMES.UG_MAIN_IMAGE_CONTAINER);
+		expandedZoomContainer.appendChild(mainImageContainer); // Append to zoom container
+		mainImageContainer.addEventListener('click', handleImageClickForZoom); // Click to zoom
+		mainImageContainer.addEventListener('wheel', handleWheelZoom, {
+			passive: false
+		}); // Add wheel zoom listener
+		mainImageContainer.addEventListener('mousedown', startDrag);
+		mainImageContainer.addEventListener('mousemove', debouncedDragImage); // Use debounced drag function
+		mainImageContainer.addEventListener('mouseup', endDrag);
+		mainImageContainer.addEventListener('mouseleave', endDrag);
 
-		bottomStripe.appendChild(thumbnailStrip);
-		bottomStripe.appendChild(thumbnailGrid);
 
-		return overlay;
+		const mainImage = document.createElement('img');
+		mainImage.classList.add(CLASS_NAMES.UG_MAIN_IMAGE, CLASS_NAMES.UG_GALLERY_ZOOM_IMAGE); // Add zoom image class
+		mainImageContainer.appendChild(mainImage);
+
+		const navContainer = document.createElement('div'); // Container for nav buttons
+		navContainer.classList.add(CLASS_NAMES.UG_GALLERY_NAV_CONTAINER); // Add class for styling if needed
+		expandedView.appendChild(navContainer);
+		navContainer.addEventListener('mousedown', (e) => e.stopPropagation()); // Prevent nav buttons interaction from triggering image drag
+
+		const prevButton = document.createElement('button');
+		prevButton.textContent = '←';
+		prevButton.classList.add(CLASS_NAMES.UG_GALLERY_NAV, CLASS_NAMES.UG_GALLERY_PREV, CLASS_NAMES.UG_GALLERY_HIDE);
+		navContainer.appendChild(prevButton); // Append to nav container
+		prevButton.addEventListener('click', prevImage);
+		prevButton.setAttribute('aria-label', 'Previous Image'); // Accessibility
+
+		const nextButton = document.createElement('button');
+		nextButton.textContent = '→';
+		nextButton.classList.add(CLASS_NAMES.UG_GALLERY_NAV, CLASS_NAMES.UG_GALLERY_NEXT, CLASS_NAMES.UG_GALLERY_HIDE);
+		navContainer.appendChild(nextButton); // Append to nav container
+		nextButton.addEventListener('click', nextImage);
+		nextButton.setAttribute('aria-label', 'Next Image'); // Accessibility
+
+
+		const fullscreenButton = document.createElement('button');
+		fullscreenButton.textContent = BUTTONS.FULLSCREEN;
+		fullscreenButton.classList.add(CLASS_NAMES.UG_GALLERY_FULLSCREEN, CLASS_NAMES.UG_TOOLBAR_BUTTON); // Added toolbar button class
+		toolbar.appendChild(fullscreenButton);
+		fullscreenButton.addEventListener('click', toggleFullscreen);
+		fullscreenButton.setAttribute('aria-label', 'Toggle Fullscreen'); // Accessibility
+
+		const counter = document.createElement('div');
+		counter.classList.add(CLASS_NAMES.UG_GALLERY_COUNTER, CLASS_NAMES.UG_GALLERY_HIDE);
+		expandedView.appendChild(counter);
+
+		// Bottom Stripe Container - NEW CONTAINER
+		const bottomStripeContainer = document.createElement('div');
+		bottomStripeContainer.classList.add(CLASS_NAMES.UG_BOTTOM_STRIPE_CONTAINER);
+		expandedView.appendChild(bottomStripeContainer);
+
+
+		// Thumbnail Strip Container - MOVED TO BOTTOM STRIPE CONTAINER
+		const thumbnailStripContainer = document.createElement('div');
+		thumbnailStripContainer.classList.add(CLASS_NAMES.UG_GALLERY_THUMBNAIL_STRIP_CONTAINER);
+		bottomStripeContainer.appendChild(thumbnailStripContainer);
+		thumbnailStripContainer.addEventListener('mousedown', (e) => e.stopPropagation()); // Prevent thumbnail strip interaction from triggering image drag
+
+
+		const thumbnailStrip = document.createElement('div');
+		thumbnailStrip.classList.add(CLASS_NAMES.UG_THUMBNAIL_STRIP);
+		thumbnailStripContainer.appendChild(thumbnailStrip);
+
+		const gridCloseButton = document.createElement('button');
+		gridCloseButton.textContent = BUTTONS.CLOSE;
+		gridCloseButton.classList.add(CLASS_NAMES.UG_GALLERY_GRID_CLOSE);
+		gridView.appendChild(gridCloseButton);
+		gridCloseButton.addEventListener('click', closeGallery);
+		gridCloseButton.setAttribute('aria-label', 'Close Gallery'); // Accessibility
+
+		document.body.appendChild(galleryOverlay);
+
+		state.fullSizeImageSrcs.forEach((src, index) => {
+			const thumbnailContainer = document.createElement('div');
+			thumbnailContainer.classList.add(CLASS_NAMES.UG_GALLERY_THUMBNAIL_GRID_CONTAINER);
+			const thumbnail = document.createElement('img');
+			thumbnail.src = src;
+			thumbnail.classList.add(CLASS_NAMES.UG_GALLERY_THUMBNAIL);
+			thumbnail.dataset.index = index;
+			thumbnail.addEventListener('click', () => showExpandedView(index));
+			thumbnailContainer.appendChild(thumbnail);
+			thumbnailGrid.appendChild(thumbnailContainer);
+
+			// Thumbnails for expanded view strip
+			const stripThumbnail = document.createElement('img');
+			stripThumbnail.src = src;
+			stripThumbnail.classList.add(CLASS_NAMES.UG_THUMBNAIL);
+			stripThumbnail.dataset.index = index;
+			stripThumbnail.setAttribute('aria-label', `Thumbnail ${index + 1}`); // Accessibility
+			stripThumbnail.addEventListener('click', () => showExpandedView(index));
+			thumbnailStrip.appendChild(stripThumbnail);
+		});
+
+		showGridView();
 	};
 
-	const toggleFullscreenGallery = () => {
-		state.isFullscreen = !state.isFullscreen;
-	};
-
-	const toggleControls = () => {
-		state.controlsVisible = !state.controlsVisible;
-		updateControlVisibility();
-		state.bottomStripeVisible = state.controlsVisible; // Sync bottom stripe visibility
-	};
-
-	const updateControlVisibility = () => {
+	const showGridView = () => {
 		if (!galleryOverlay) return;
-		const controlsContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_CONTROLS_CONTAINER}`);
-		if (controlsContainer) {
-			controlsContainer.classList.toggle(CLASS_NAMES.CONTROLS_VISIBLE, state.controlsVisible);
-			controlsContainer.classList.toggle(CLASS_NAMES.CONTROLS_HIDDEN, !state.controlsVisible);
-		}
+		galleryOverlay.querySelector(`.${CLASS_NAMES.UG_GALLERY_GRID_VIEW}`).classList.remove(CLASS_NAMES.UG_GALLERY_HIDE);
+		galleryOverlay.querySelector(`.${CLASS_NAMES.UG_GALLERY_EXPANDED_VIEW}`).classList.add(CLASS_NAMES.UG_GALLERY_HIDE);
+		resetZoom(); // Reset zoom when going back to grid
+		state.isZoomed = false;
+		updateZoomToggleButton(); // Update zoom toggle button state
+		state.controlsVisible = true; // Show controls when returning to grid
 	};
-	// Add this helper function (outside of updateExpandedView, but in the same scope)
-	const toggleImageSize = (img) => {
-		if (img.classList.contains('ug-resized')) {
-			// Currently resized, revert to original
-			img.style.maxWidth = '100%';
-			img.style.maxHeight = '100%';
-			img.style.width = 'auto';
-			img.style.height = 'auto';
-			img.classList.remove('ug-resized');
-		} else {
-			// Currently at original size, resize to fit
-			updateMediaElementSize(img, galleryOverlay); // Use the existing function
-			img.classList.add('ug-resized');
-		}
-	};
-	// Updates the content of the expanded view with the image at the given index.
-	const updateExpandedView = (index) => {
+
+	const showExpandedView = (index) => {
 		if (!galleryOverlay) return;
 
-		const expandedMedia = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_GALLERY_EXPANDED_MEDIA}`);
-		if (!expandedMedia) return;
-		expandedMedia.innerHTML = ''; // Clear previous content
+		const mainImage = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_MAIN_IMAGE}`);
+		const counter = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_GALLERY_COUNTER}`);
+		const prevButton = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_GALLERY_PREV}`);
+		const nextButton = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_GALLERY_NEXT}`);
+		const thumbnailStrip = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_THUMBNAIL_STRIP}`);
+		const zoomControls = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_ZOOM_CONTROLS}`);
 
-		const imageSrc = state.fullSizeImageSrcs[index];
-		if (!imageSrc) {
-			console.error("Image source is undefined for index:", index);
+		if (index < 0 || index >= state.fullSizeImageSrcs.length) {
+			console.error("Invalid image index:", index);
 			return;
 		}
 
-		const img = new Image();
-		img.src = imageSrc;
-		img.classList.add('ug-gallery-expanded-media-item', 'visible'); // Add visibility class
-		img.onload = () => {
-			// Image loaded, update size and append
-			updateMediaElementSize(img, galleryOverlay);
-			expandedMedia.appendChild(img);
+		const imageUrl = state.fullSizeImageSrcs[index];
+
+		mainImage.onload = () => {
+			// Image loaded successfully
 		};
-		img.onerror = () => {
-			console.error("Error loading image:", imageSrc);
-			expandedMedia.textContent = "Error loading image."; // Display error message
+
+		mainImage.onerror = () => {
+			console.error("Error loading image:", imageUrl);
+			mainImage.src = ''; // Clear src to prevent retries
+			mainImage.alt = "Error loading image";
 		};
-		// Inside updateExpandedView, AFTER creating the 'img' element:
-		if (state.dynamicResizing) {
-			img.addEventListener('click', (event) => {
-				event.stopPropagation(); // Prevent the mainView click (toggleControls)
-				toggleImageSize(img);
-			});
-		}
-		// Update page number
-		const pageNumber = galleryOverlay.querySelector(`.${CLASS_NAMES.PAGE_NUMBER}`);
-		if (pageNumber) {
-			pageNumber.textContent = `${index + 1} / ${state.fullSizeImageSrcs.length}`;
-		}
-	};
 
+		mainImage.src = imageUrl;
+		mainImage.alt = `Image ${index + 1} of ${state.fullSizeImageSrcs.length}`;
+		resetZoom(); // Reset zoom when loading a new image
+		state.isZoomed = false;
+		updateZoomToggleButton(); // Update zoom toggle button state
+		state.controlsVisible = true; // Ensure controls are visible when image changes
 
-	// Updates the thumbnail strip (for expanded view)
-	const updateThumbnailStrip = () => {
-		if (!galleryOverlay) return;
-		const thumbnailStrip = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_STRIP}`);
-		if (!thumbnailStrip) return;
+		counter.textContent = `${index + 1} / ${state.fullSizeImageSrcs.length}`;
 
-		thumbnailStrip.innerHTML = ''; // Clear existing thumbnails
-		state.fullSizeImageSrcs.forEach((src, index) => {
-			if (!src) return; // Skip if src is null
-
-			const thumbnailContainer = document.createElement('div');
-			thumbnailContainer.classList.add(CLASS_NAMES.UG_THUMBNAIL_CONTAINER);
-
-			const thumbnail = document.createElement('img');
-			thumbnail.src = src;
-			thumbnail.className = CLASS_NAMES.UG_GALLERY_THUMBNAIL;
-			thumbnail.classList.toggle('active', index === state.currentGalleryIndex);
-			thumbnail.addEventListener('click', () => showExpandedImage(index));
-
-			thumbnailContainer.appendChild(thumbnail);
-			thumbnailStrip.appendChild(thumbnailContainer);
-		});
-	};
-
-	// Updates the thumbnail grid (for initial view)
-	const updateThumbnailGrid = () => {
-		if (!galleryOverlay) return;
-		const thumbnailGrid = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_GRID}`);
-		if (!thumbnailGrid) return;
-
-		thumbnailGrid.innerHTML = ''; // Clear existing thumbnails
-
-		state.fullSizeImageSrcs.forEach((src, index) => {
-			if (!src) return; // Skip null sources
-
-			const thumbnailContainer = document.createElement('div');
-			thumbnailContainer.classList.add(CLASS_NAMES.UG_GALLERY_THUMBNAIL_GRID_CONTAINER);
-
-			const thumbnail = document.createElement('img');
-			thumbnail.src = src;
-			thumbnail.className = CLASS_NAMES.UG_GALLERY_THUMBNAIL_GRID;
-			thumbnail.addEventListener('click', () => showExpandedImage(index));
-
-			thumbnailContainer.appendChild(thumbnail);
-			thumbnailGrid.appendChild(thumbnailContainer);
-		});
-
-		// Adjust grid layout based on modal width
-		const galleryModal = galleryOverlay.querySelector('.ug-gallery-modal');
-		if (galleryModal) {
-			const modalWidth = galleryModal.offsetWidth;
-			const numColumns = Math.max(2, Math.floor((modalWidth - 20) / 150)); // At least 2 columns
-			thumbnailGrid.style.gridTemplateColumns = `repeat(${numColumns}, 1fr)`;
-		}
-	};
-
-	// Shows the expanded image view for a specific image.
-	const showExpandedImage = (index) => {
-		if (!galleryOverlay) return;
-
-		state.expandedViewActive = true;
 		state.currentGalleryIndex = index;
 
-		// Hide grid, show strip
-		const thumbnailGrid = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_GRID}`);
-		const thumbnailStrip = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_STRIP}`);
-		if (thumbnailGrid) thumbnailGrid.style.display = 'none';
-		if (thumbnailStrip) thumbnailStrip.style.display = 'flex';
+		galleryOverlay.querySelector(`.${CLASS_NAMES.UG_GALLERY_GRID_VIEW}`).classList.add(CLASS_NAMES.UG_GALLERY_HIDE); // Hide grid view
+		galleryOverlay.querySelector(`.${CLASS_NAMES.UG_GALLERY_EXPANDED_VIEW}`).classList.remove(CLASS_NAMES.UG_GALLERY_HIDE); // Show expanded view
+		counter.classList.remove(CLASS_NAMES.UG_GALLERY_HIDE); // Show counter
+		prevButton.classList.remove(CLASS_NAMES.UG_GALLERY_HIDE); // Show nav buttons
+		nextButton.classList.remove(CLASS_NAMES.UG_GALLERY_HIDE);
+		zoomControls.classList.remove(CLASS_NAMES.UG_GALLERY_HIDE); // Show zoom controls if zoom is enabled
+		thumbnailStrip.scrollLeft = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_THUMBNAIL}[data-index="${index}"]`).offsetLeft - thumbnailStrip.offsetWidth / 2 + 50; // Scroll to selected thumbnail
 
-		// Show/hide navigation buttons
-		const prevButton = galleryOverlay.querySelector('.navigation-button.prev');
-		const nextButton = galleryOverlay.querySelector('.navigation-button.next');
-		if (prevButton && nextButton) {
-			prevButton.style.display = state.hideNavArrows ? 'none' : 'flex';
-			nextButton.style.display = state.hideNavArrows ? 'none' : 'flex';
-		}
+		// Update thumbnail strip selection
+		galleryOverlay.querySelectorAll(`.${CLASS_NAMES.UG_THUMBNAIL}`).forEach(thumb => {
+			thumb.classList.remove('selected');
+		});
+		galleryOverlay.querySelector(`.${CLASS_NAMES.UG_THUMBNAIL}[data-index="${index}"]`).classList.add('selected');
 
-		// Add download button if it doesn't exist
-		const controlsContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_CONTROLS_CONTAINER}`);
-		if (controlsContainer && !controlsContainer.querySelector(`.${CLASS_NAMES.DOWNLOAD_BUTTON}`)) {
-			const downloadButton = document.createElement('button');
-			downloadButton.textContent = '↓';
-			downloadButton.className = CLASS_NAMES.DOWNLOAD_BUTTON;
-			downloadButton.addEventListener('click', () => downloadImageByIndex(state.currentGalleryIndex));
-			controlsContainer.appendChild(downloadButton);
-		}
-
-		updateExpandedView(index);
-		updateThumbnailStrip();
-		state.bottomStripeVisible = false; // Hide bottom stripe in expanded view
+		// Update nav button visibility based on index
+		prevButton.classList[index === 0 ? 'add' : 'remove'](CLASS_NAMES.UG_GALLERY_HIDE);
+		nextButton.classList[index === state.fullSizeImageSrcs.length - 1 ? 'add' : 'remove'](CLASS_NAMES.UG_GALLERY_HIDE);
 	};
 
-	// Hides the expanded image view.
-	const hideExpandedImage = () => {
-		if (!galleryOverlay) return;
-
-		state.expandedViewActive = false;
-
-		// Clear expanded view
-		const expandedMedia = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_GALLERY_EXPANDED_MEDIA}`);
-		if (expandedMedia) expandedMedia.innerHTML = '';
-
-		// Show grid, hide strip
-		const thumbnailGrid = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_GRID}`);
-		const thumbnailStrip = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_STRIP}`);
-		if (thumbnailGrid) thumbnailGrid.style.display = 'grid';
-		if (thumbnailStrip) thumbnailStrip.style.display = 'none';
-
-		// Hide navigation buttons
-		const prevButton = galleryOverlay.querySelector('.navigation-button.prev');
-		const nextButton = galleryOverlay.querySelector('.navigation-button.next');
-		if (prevButton && nextButton) {
-			prevButton.style.display = 'none';
-			nextButton.style.display = 'none';
-		}
-
-		// Remove download button
-		const controlsContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_CONTROLS_CONTAINER}`);
-		const downloadButton = controlsContainer.querySelector(`.${CLASS_NAMES.DOWNLOAD_BUTTON}`);
-		if (downloadButton) {
-			downloadButton.remove();
-		}
-
-		state.bottomStripeVisible = true; // Show bottom stripe
+	const updateGallery = (index) => {
+		showExpandedView(index);
 	};
 
-	// Navigates to the next or previous image in the gallery.
-	const navigateGallery = (direction) => {
-		if (!galleryOverlay) return;
-
-		const numImages = state.fullSizeImageSrcs.length;
-		let newIndex = (state.currentGalleryIndex + direction + numImages) % numImages;
-		showExpandedImage(newIndex);
+	const nextImage = () => {
+		let newIndex = (state.currentGalleryIndex + 1) % state.fullSizeImageSrcs.length;
+		updateGallery(newIndex);
 	};
 
-	// Function to update media element size
-	const updateMediaElementSize = (mediaElement, galleryOverlay) => {
-		const expandedMedia = galleryOverlay.querySelector('.ug-gallery-expanded-media');
-		if (!expandedMedia || !mediaElement) return;
-
-		mediaElement.style.maxWidth = '100%';
-		mediaElement.style.maxHeight = '100%';
-		mediaElement.style.width = 'auto';
-		mediaElement.style.height = 'auto';
-
-		const naturalWidth = mediaElement.naturalWidth;
-		const naturalHeight = mediaElement.naturalHeight;
-
-		if (naturalWidth && naturalHeight) {
-			const availableWidth = expandedMedia.offsetWidth;
-			const availableHeight = expandedMedia.offsetHeight;
-			const aspectRatio = naturalWidth / naturalHeight;
-			let newWidth = availableWidth;
-			let newHeight = availableWidth / aspectRatio;
-
-			if (newHeight > availableHeight) {
-				newHeight = availableHeight;
-				newWidth = availableHeight * aspectRatio;
-			}
-
-			mediaElement.style.width = `${newWidth}px`;
-			mediaElement.style.height = `${newHeight}px`;
-		} else {
-			console.warn('Could not determine natural dimensions for', mediaElement);
-		}
+	const prevImage = () => {
+		let newIndex = (state.currentGalleryIndex - 1 + state.fullSizeImageSrcs.length) % state.fullSizeImageSrcs.length;
+		updateGallery(newIndex);
 	};
 
-	// Shows the gallery (initial view with the grid).
-	const showGallery = () => {
-		if (!isPostPage() || !state.galleryReady) return;
-
-		// Reset to grid view
-		state.expandedViewActive = false;
-
-		if (!galleryOverlay) {
-			galleryOverlay = createGalleryOverlay(); // Create if it doesn't exist
-			document.body.appendChild(galleryOverlay);
-		}
-
-		updateThumbnailGrid(); // Populate the grid
-
-		// Show grid, hide strip initially
-		const thumbnailGrid = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_GRID}`);
-		const thumbnailStrip = galleryOverlay.querySelector(`.${CLASS_NAMES.THUMBNAIL_STRIP}`);
-		if (thumbnailGrid) thumbnailGrid.style.display = 'grid';
-		if (thumbnailStrip) thumbnailStrip.style.display = 'none';
-
-		// Hide nav buttons and download button
-		const prevButton = galleryOverlay.querySelector('.navigation-button.prev');
-		const nextButton = galleryOverlay.querySelector('.navigation-button.next');
-		if (prevButton) prevButton.style.display = 'none';
-		if (nextButton) nextButton.style.display = 'none';
-
-		const controlsContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.GALLERY_CONTROLS_CONTAINER}`);
-		const downloadButton = controlsContainer.querySelector(`.${CLASS_NAMES.DOWNLOAD_BUTTON}`);
-		if (downloadButton) downloadButton.style.display = 'none';
-
-		state.isGalleryMode = true;
-		state.bottomStripeVisible = true; // Show bottom stripe
-	};
-
-	// Closes the gallery.
 	const closeGallery = () => {
-		if (galleryOverlay) {
-			document.body.removeChild(galleryOverlay);
-			galleryOverlay = null; // Remove reference
-		}
+		if (!galleryOverlay) return;
+		document.body.removeChild(galleryOverlay);
+		galleryOverlay = null;
+		document.body.classList.remove('ug-fullscreen');
 		state.isGalleryMode = false;
-		state.expandedViewActive = false;
-		state.loadingMessage = null;
 		state.isFullscreen = false;
 	};
 
-	// --- Keyboard event handlers ---
+	const toggleGallery = () => {
+		if (state.isGalleryMode) {
+			closeGallery();
+		} else {
+			createGallery();
+		}
+		state.isGalleryMode = !state.isGalleryMode;
+	};
+
+	const toggleFullscreen = () => {
+		state.isFullscreen = !state.isFullscreen;
+		if (state.isFullscreen) {
+			document.body.classList.add('ug-fullscreen');
+			galleryOverlay.classList.add('ug-fullscreen-overlay');
+		} else {
+			document.body.classList.remove('ug-fullscreen');
+			galleryOverlay.classList.remove('ug-fullscreen-overlay');
+		}
+	};
+
+	// Zoom functions
+	const toggleZoom = () => {
+		if (!state.zoomEnabled) return;
+
+		state.isZoomed = !state.isZoomed;
+		updateZoomToggleButton();
+		const zoomControls = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_ZOOM_CONTROLS}`);
+
+		if (state.isZoomed) {
+			zoomControls.classList.remove(CLASS_NAMES.UG_GALLERY_HIDE);
+		} else {
+			zoomControls.classList.add(CLASS_NAMES.UG_GALLERY_HIDE);
+			resetZoom();
+		}
+	};
+
+	const updateZoomToggleButton = () => {
+		if (elements.zoomToggleButton) {
+			elements.zoomToggleButton.textContent = state.isZoomed ? BUTTONS.GRID_VIEW : BUTTONS.EXPANDED_VIEW;
+			elements.zoomToggleButton.setAttribute('aria-label', state.isZoomed ? 'Grid View' : 'Expanded View');
+		}
+	};
+
+	const zoomIn = () => {
+		if (!state.zoomEnabled || !state.isZoomed) return;
+		state.zoomScale = Math.min(state.zoomScale + 0.25, 2);
+		applyZoom();
+	};
+
+	const zoomOut = () => {
+		if (!state.zoomEnabled || !state.isZoomed) return;
+		state.zoomScale = Math.max(state.zoomScale - 0.25, 0.25);
+		applyZoom();
+	};
+
+	const resetZoom = () => {
+		state.zoomScale = 1;
+		state.imageOffset = {
+			x: 0,
+			y: 0
+		};
+		applyZoom();
+	};
+
+	const applyZoom = () => {
+		const mainImageContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_MAIN_IMAGE_CONTAINER}`);
+		mainImageContainer.style.transform = `scale(${state.zoomScale}) translate(${state.imageOffset.x}px, ${state.imageOffset.y}px)`;
+		if (state.isZoomed && state.zoomScale > 1) {
+			mainImageContainer.classList.add(CLASS_NAMES.UG_GRABBING_CURSOR);
+		} else {
+			mainImageContainer.classList.remove(CLASS_NAMES.UG_GRABBING_CURSOR);
+		}
+	};
+
+	const handleImageClickForZoom = () => {
+		if (state.zoomEnabled) {
+			toggleZoom();
+		}
+	};
+
+	const handleWheelZoom = (event) => {
+		if (!state.zoomEnabled || !state.isZoomed) return;
+		event.preventDefault();
+		const delta = event.deltaY > 0 ? -0.25 : 0.25;
+		state.zoomScale = Math.max(0.25, Math.min(state.zoomScale + delta, 2));
+		applyZoom();
+	};
+
+	const toggleControlsVisibility = () => {
+		state.controlsVisible = !state.controlsVisible;
+	};
+
+	// Dragging functions
+	const startDrag = (event) => {
+		if (!state.isZoomed || state.zoomScale <= 1) return;
+		state.isDragging = true;
+		state.dragStartPosition = {
+			x: event.clientX,
+			y: event.clientY
+		};
+		galleryOverlay.querySelector(`.${CLASS_NAMES.UG_MAIN_IMAGE_CONTAINER}`).style.cursor = 'grabbing';
+	};
+
+	const dragImage = (event) => {
+		if (!state.isDragging) return;
+
+		const deltaX = event.clientX - state.dragStartPosition.x;
+		const deltaY = event.clientY - state.dragStartPosition.y;
+
+		state.imageOffset = {
+			x: state.imageOffset.x + deltaX,
+			y: state.imageOffset.y + deltaY
+		};
+		applyZoom();
+		state.dragStartPosition = {
+			x: event.clientX,
+			y: event.clientY
+		};
+	};
+
+	// Debounced drag function
+	const debouncedDragImage = debounce(dragImage, DEBOUNCE_DELAY);
+
+	const endDrag = () => {
+		state.isDragging = false;
+		galleryOverlay.querySelector(`.${CLASS_NAMES.UG_MAIN_IMAGE_CONTAINER}`).style.cursor = 'grab';
+	};
+
+
 	const handleGalleryKey = (event) => {
 		if (!isPostPage()) return;
 
 		if (event.key === state.galleryKey && state.galleryReady) {
-			state.isGalleryMode = !state.isGalleryMode; // Toggle gallery mode
-			if (!state.isGalleryMode) state.isFullscreen = false; // Reset fullscreen on close
-		} else if (state.isGalleryMode && state.expandedViewActive) {
-			// Handle keys within expanded view
-			if (['Escape', state.prevImageKey, state.nextImageKey, 'ArrowLeft', 'ArrowRight', 'k', 'l'].includes(event.key)) {
+			toggleGallery();
+		} else if (state.isGalleryMode && !galleryOverlay.querySelector(`.${CLASS_NAMES.UG_GALLERY_GRID_VIEW}`).classList.contains(CLASS_NAMES.UG_GALLERY_HIDE)) {
+			return;
+		} else if (state.isGalleryMode) {
+			if (['Escape', state.prevImageKey, state.nextImageKey, 'ArrowLeft', 'ArrowRight', '+', '-', 'k', 'l'].includes(event.key)) {
 				event.preventDefault();
 				switch (event.key) {
 					case 'Escape':
-						hideExpandedImage();
+						showGridView();
 						break;
 					case state.prevImageKey:
-					case 'ArrowLeft':
 					case 'k':
-						navigateGallery(-1);
+					case 'ArrowLeft':
+						prevImage();
 						break;
 					case state.nextImageKey:
-					case 'ArrowRight':
 					case 'l':
-						navigateGallery(1);
+					case 'ArrowRight':
+						nextImage();
+						break;
+					case '+':
+						zoomIn();
+						break;
+					case '-':
+						zoomOut();
 						break;
 				}
 			}
-		} else if (state.isGalleryMode && event.key === 'Escape') {
-			closeGallery(); // Close gallery on Escape
 		}
 	};
 
-
+	// --- Keyboard event handlers ---
 	const handleSettingsKey = (event) => {
 		if (state.settingsOpen && event.key === 'Escape') {
 			state.settingsOpen = false;
@@ -1362,9 +1418,7 @@
 
 			if (!elements.postActions.querySelector(`.${CLASS_NAMES.UG_BUTTON}`)) {
 				const downloadAllButton = createToggleButton(BUTTONS.DOWNLOAD_ALL, downloadAllImages);
-				const galleryButton = createToggleButton('Loading Gallery...', () => {
-					state.isGalleryMode = !state.isGalleryMode;
-				}, true); // Initially disabled
+				const galleryButton = createToggleButton('Loading Gallery...', toggleGallery, true); // Initially disabled, toggleGallery function
 				elements.galleryButton = galleryButton;
 
 				const heightButton = createToggleButton(BUTTONS.HEIGHT, () => clickAllImageButtons('height'));
@@ -1453,7 +1507,7 @@
 						thumbnail.parentNode.insertBefore(newDiv, thumbnail);
 					}
 				}
-				img.addEventListener('click', () => showExpandedImage(index));
+				img.addEventListener('click', () => toggleGallery()); // Open gallery on thumbnail click
 			});
 
 			parentDiv.addEventListener('click', delegatedImageClickHandler);
@@ -1635,9 +1689,10 @@
 		notificationContainer.classList.add(type);
 
 		if (state.animationsEnabled) {
-			notificationContainer.style.animation = 'ug-slide-in 0.5s ease-in-out forwards';
+			notificationContainer.classList.add('ug-slide-in');
+			notificationContainer.classList.remove('ug-slide-out');
 		} else {
-			notificationContainer.style.animation = 'none';
+			notificationContainer.classList.remove('ug-slide-in', 'ug-slide-out');
 		}
 		notificationContainer.style.display = 'flex';
 	};
@@ -1648,12 +1703,13 @@
 		if (!notificationContainer) return;
 
 		if (state.animationsEnabled) {
-			notificationContainer.style.animation = 'ug-slide-out 0.5s ease-in-out forwards';
+			notificationContainer.classList.add('ug-slide-out');
+			notificationContainer.classList.remove('ug-slide-in');
 			setTimeout(() => {
 				notificationContainer.style.display = 'none';
 			}, 500);
 		} else {
-			notificationContainer.style.animation = 'none';
+			notificationContainer.classList.remove('ug-slide-in', 'ug-slide-out');
 			notificationContainer.style.display = 'none';
 		}
 	};
@@ -1701,7 +1757,7 @@
 				document.querySelectorAll(SELECTORS.IMAGE_LINK + ' img')
 			).indexOf(clickedImage);
 			if (index !== -1) {
-				showExpandedImage(index);
+				toggleGallery();
 			}
 		}
 	};
@@ -1709,21 +1765,19 @@
 	let uiCache = {};
 	let previousPageUrl = null;
 	const injectUI = debounce(() => {
-		// Very first thing: check if we're on a post page.  If not, return immediately.
 		if (!isPostPage()) {
-			// Reset state when leaving a post page
 			state.postActionsInitialized = false;
 			state.notification = null;
 			state.notificationType = 'info';
 			state.loadingMessage = null;
 			state.isLoading = false;
-			state.galleryReady = false; // Ensure gallery is marked as not ready
+			state.galleryReady = false;
 			state.hasImages = false;
 			state.totalImages = 0;
-			cleanupPostActions(); // Clean up any existing elements
-			uiCache = {}; // Clear UI cache
-			previousPageUrl = null; // Clear previous URL
-			return; // Exit early
+			cleanupPostActions();
+			uiCache = {};
+			previousPageUrl = null;
+			return;
 		}
 
 		const mediaLinks = [...document.querySelectorAll(SELECTORS.IMAGE_LINK)];
@@ -1732,17 +1786,14 @@
 
 		const postSection = document.querySelector('.site-section.site-section--post');
 
-		// If we're on a new post page, or re-visiting a post page and haven't initialized:
 		if (!state.postActionsInitialized && postSection) {
-			// Reset gallery state for the new post
 			state.galleryReady = false;
 			state.loadedImages = 0;
 			state.hasImages = false;
-			state.totalImages = currentTotalImages; // Set total images for this post
+			state.totalImages = currentTotalImages;
 
 			const hasMediaContent = document.querySelectorAll(SELECTORS.IMAGE_LINK).length > 0;
 			if (hasMediaContent) {
-				// Create status container if it doesn't exist
 				if (!elements.statusContainer) {
 					const {
 						container: statusContainer,
@@ -1757,20 +1808,17 @@
 				}
 				state.notification = `Loading media (${state.loadedImages}/${state.totalImages})...`;
 			}
-			// Load images and initialize post actions
 			loadImages();
 			initPostActions();
-			state.currentPostUrl = currentPageUrl; // Track the current post URL
+			state.currentPostUrl = currentPageUrl;
 			previousPageUrl = currentPageUrl;
-		}
-		// Handle URL changes within the same post (e.g., navigating to different pages of the same post)
-		else if (currentPageUrl !== state.currentPostUrl) {
-			cleanupPostActions(); // Clean up previous UI
+		} else if (currentPageUrl !== state.currentPostUrl) {
+			cleanupPostActions();
 			state.totalImages = currentTotalImages;
-			state.galleryReady = false; // Reset gallery readiness
-			state.loadedImages = 0; // Reset loaded images count
+			state.galleryReady = false;
+			state.loadedImages = 0;
 			state.hasImages = false;
-			state.notification = null; // Clear any previous notifications
+			state.notification = null;
 			state.notificationType = 'info';
 			state.loadingMessage = null;
 			state.isLoading = false;
@@ -1791,7 +1839,6 @@
 				}
 				state.notification = `Loading media (${state.loadedImages}/${state.totalImages})...`;
 			} else {
-				// If no media content, remove the status container if it exists
 				if (elements.statusContainer) {
 					elements.statusContainer.remove();
 					elements.statusContainer = null;
@@ -1799,8 +1846,8 @@
 				}
 			}
 			loadImages();
-			initPostActions(); // Re-initialize post actions
-			state.currentPostUrl = currentPageUrl; // Update current post URL
+			initPostActions();
+			state.currentPostUrl = currentPageUrl;
 			previousPageUrl = currentPageUrl;
 		}
 	}, DEBOUNCE_DELAY);

@@ -1,50 +1,87 @@
-/* Ultra-Galleries.css - Main Stylesheet */
+/* Ultra Galleries - Main Stylesheet */
 
 :root {
-  --ug-main-bg-color: rgba(0, 0, 0, 0.8);
-  --ug-overlay-bg-color: rgba(255, 255, 255, 0.1);
-  --ug-border-color: rgba(255, 255, 255, 0.3);
-  --ug-text-color: white;
-  --ug-button-bg-color: #333;
-  --ug-button-hover-opacity: 1;
-  --ug-transition-duration: 0.3s;
-  --ug-transition-ease: ease;
-  --ug-notification-info: rgba(0, 0, 0, 0.8);
-  --ug-notification-success: rgba(40, 167, 69, 0.8);
-  --ug-notification-error: rgba(220, 53, 69, 0.8);
-  --ug-settings-bg-color: #222;
-  --ug-settings-input-bg-color: #333;
-  --ug-settings-input-border-color: #555;
-  --ug-settings-text-color: #eee;
-  --ug-settings-ribbon-active-color: #007bff;
-  --ug-fullscreen-nav-size: 60px;
-  --ug-fullscreen-icon-size: 40px;
+  --ug-main-bg-color: rgba(0, 0, 0, 0.85);
+  --ug-overlay-bg-color: rgba(255, 255, 255, 0.05);
+  --ug-border-color: rgba(255, 255, 255, 0.2);
+  --ug-text-color: #eee;
+  --ug-button-bg-color: #444;
+  --ug-button-hover-opacity: 0.9;
+  --ug-transition-duration: 0.2s;
+  --ug-transition-ease: ease-out;
+  --ug-notification-info: rgba(0, 0, 0, 0.75);
+  --ug-notification-success: rgba(50, 150, 80, 0.9);
+  --ug-notification-error: rgba(180, 70, 70, 0.9);
+  --ug-settings-bg-color: #333;
+  --ug-settings-input-bg-color: #555;
+  --ug-settings-input-border-color: #777;
+  --ug-settings-text-color: #ddd;
+  --ug-settings-ribbon-active-color: #58a6f0;
+  --ug-fullscreen-nav-size: 50px;
+  --ug-fullscreen-icon-size: 35px;
   --ug-thumbnail-preview-scale: 2;
-  --ug-thumbnail-size: 60px;        /* Thumbnail size */
+  --ug-thumbnail-size: 120px;
+  /* Increased thumbnail size */
   --ug-bottom-stripe-height: auto;
-  --ug-gallery-modal-max-width: 85%; /*  Maximum width of gallery */
+  --ug-gallery-modal-max-width: 95%;
+  /* Slightly wider modal in non-fullscreen */
+  --ug-icon-size: 24px;
+  --ug-expanded-thumbnail-size: 70px;
+  /* Size for thumbnails in expanded view */
+  --ug-zoom-scale: 2;
+  /* Default zoom scale factor */
 }
 
-/* Animation Utility Classes */
-.fade-in {
-  animation: fade-in var(--ug-transition-duration) var(--ug-transition-ease) forwards;
+/* --- General Icon Styling --- */
+
+.ug-gallery-close::before,
+.ug-gallery-fullscreen::before,
+.ug-gallery-nav::before,
+.ug-settings-close-btn::before,
+.ug-notification-container #ug-notification-close::before,
+.settings-button::before,
+.ug-gallery-grid-close::before,
+.ug-toolbar-button::before,
+.ug-zoom-button::before {
+  display: inline-block;
+  width: var(--ug-icon-size);
+  height: var(--ug-icon-size);
+  line-height: var(--ug-icon-size);
+  text-align: center;
+  font-size: var(--ug-icon-size);
+  font-family: sans-serif;
+  vertical-align: middle;
 }
 
+/* --- Animation Utility Classes --- */
+
+.fade-in,
 .fade-out {
-  animation: fade-out var(--ug-transition-duration) var(--ug-transition-ease) forwards;
+  animation: var(--ug-animation-fade-in);
 }
 
 @keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+      opacity: 0;
+  }
+
+  to {
+      opacity: 1;
+  }
 }
 
 @keyframes fade-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
+  from {
+      opacity: 1;
+  }
+
+  to {
+      opacity: 0;
+  }
 }
 
 /* --- Gallery Overlay Styles --- */
+
 .ug-gallery-overlay {
   position: fixed;
   top: 0;
@@ -58,507 +95,378 @@
   overflow: hidden;
   padding: 0;
   background-color: var(--ug-main-bg-color);
-  backdrop-filter: blur(10px);
-  transition: background-color var(--ug-transition-duration) var(--ug-transition-ease),
-              backdrop-filter var(--ug-transition-duration) var(--ug-transition-ease),
-              padding var(--ug-transition-duration) var(--ug-transition-ease);
+  backdrop-filter: blur(15px);
 }
 
-.ug-gallery-overlay.fullscreen-gallery {
+.ug-gallery-overlay.ug-fullscreen-overlay {
   background-color: black;
   backdrop-filter: none;
 }
 
-/* --- Gallery Modal Styles --- */
-.ug-gallery-modal {
+.ug-fullscreen {
+  overflow: hidden !important;
+}
+
+/* --- Gallery Container Styles --- */
+
+.ug-gallery-container {
+  position: relative;
   width: 95vw;
-  max-width: var(--ug-gallery-modal-max-width); /* Use the variable */
-  height: 90vh;
+  max-width: var(--ug-gallery-modal-max-width);
+  height: 95vh;
+  max-height: 900px;
+  background-color: var(--ug-overlay-bg-color);
+  border-radius: 12px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--ug-border-color);
   display: flex;
   flex-direction: column;
-  position: relative;
   overflow: hidden;
-  background-color: var(--ug-overlay-bg-color);
-  border-radius: 10px;
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
-  border: 1px solid var(--ug-border-color);
-  transition: width var(--ug-transition-duration) var(--ug-transition-ease),
-              max-width var(--ug-transition-duration) var(--ug-transition-ease),
-              height var(--ug-transition-duration) var(--ug-transition-ease),
-              border-radius var(--ug-transition-duration) var(--ug-transition-ease);
+  transition: max-width 0.3s ease, max-height 0.3s ease, width 0.3s ease, height 0.3s ease;
+  /* Smooth transition for fullscreen */
 }
 
-/* Fullscreen modal styles */
-.ug-gallery-overlay.fullscreen-gallery .ug-gallery-modal {
-  width: 100vw;
+/* Fullscreen Gallery Container Style */
+
+.ug-gallery-overlay.ug-fullscreen-overlay .ug-gallery-container {
   max-width: 100vw;
+  /* Take full viewport width in fullscreen */
+  max-height: 100vh;
+  /* Take full viewport height in fullscreen */
+  width: 100vw;
+  /* Ensure width is 100vw */
   height: 100vh;
+  /* Ensure height is 100vh */
   border-radius: 0;
+  /* Remove border-radius in fullscreen */
   box-shadow: none;
-  border: none;
-  background-color: black;
+  /* Remove shadow in fullscreen */
 }
 
-/* --- Gallery Top Controls Bar --- */
-.ug-gallery-controls-container {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 15px;
-  position: relative;
-  z-index: 12;
-  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
-}
+/* --- Gallery Grid View Styles --- */
 
-.ug-gallery-controls-container.ug-controls-hidden {
-  opacity: 0;
-}
-
-.ug-gallery-controls-container button {
-  font-size: 24px;
-  background: none;
-  border: none;
-  color: var(--ug-text-color);
-  cursor: pointer;
-  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
-}
-
-.ug-gallery-controls-container button:hover {
-  opacity: var(--ug-button-hover-opacity);
-}
-
-/* --- Modal Action Buttons (Close, Fullscreen, Download) --- */
-.ug-gallery-modal .gallery-close-button,
-.ug-gallery-modal .ug-fullscreen-button,
-.ug-gallery-modal .ug-download-button {
-  position: absolute;
-  top: 15px;
-  right: auto;
-  font-size: 30px;
-  background: none;
-  border: none;
-  color: var(--ug-text-color);
-  cursor: pointer;
-  z-index: 12;
-  transition: all var(--ug-transition-duration) var(--ug-transition-ease);
-}
-
-.ug-gallery-modal .gallery-close-button {
-  right: 15px;
-}
-
-.ug-gallery-modal .ug-fullscreen-button {
-  right: 60px;
-}
-
-.ug-gallery-modal .ug-download-button {
-  right: 105px;
-}
-
-.ug-gallery-overlay.fullscreen-gallery .ug-gallery-modal .gallery-close-button,
-.ug-gallery-overlay.fullscreen-gallery .ug-gallery-modal .ug-fullscreen-button,
-.ug-gallery-overlay.fullscreen-gallery .ug-gallery-modal .ug-download-button {
-  font-size: var(--ug-fullscreen-icon-size);
-  top: 25px;
-}
-
-.ug-gallery-overlay.fullscreen-gallery .ug-gallery-modal .gallery-close-button {
-  right: 25px;
-}
-
-.ug-gallery-overlay.fullscreen-gallery .ug-gallery-modal .ug-fullscreen-button {
-  right: 80px;
-}
-
-.ug-gallery-overlay.fullscreen-gallery .ug-gallery-modal .ug-download-button {
-  right: 135px;
-}
-/* Back button*/
-.ug-gallery-back-button {
-      /* Position it absolutely within the controls container */
-      position: absolute;
-      left: 15px; /* Adjust as needed */
-      top: 50%;
-      transform: translateY(-50%);
-      /* Basic styling - match the other buttons */
-      font-size: 24px;
-      background: none;
-      border: none;
-      color: var(--ug-text-color);
-      cursor: pointer;
-      z-index: 12;
-      transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
-    }
-
-    .ug-gallery-overlay.fullscreen-gallery .ug-gallery-back-button {
-        font-size: var(--ug-fullscreen-icon-size); /* Larger in fullscreen */
-        left: 25px; /* Adjust for fullscreen */
-    }
-
-    .ug-gallery-back-button:hover {
-      opacity: var(--ug-button-hover-opacity);
-    }
-
-/* --- Main Image/Video View Area --- */
-.ug-gallery-main-view {
+.ug-gallery-grid-view {
   flex-grow: 1;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  cursor: pointer;
-}
-
-/* Container for Expanded Image */
-.ug-expanded-image-container {
-  display: flex;
-  flex: 1;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  overflow: hidden;
-}
-
-.ug-gallery-expanded-media {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  max-width: 95vw;
-  max-height: calc(100vh - 120px);
-  transition: max-width var(--ug-transition-duration) var(--ug-transition-ease),
-              max-height var(--ug-transition-duration) var(--ug-transition-ease);
-  overflow: hidden;
-}
-
-.ug-gallery-overlay.fullscreen-gallery .ug-gallery-expanded-media {
-  max-width: 100vw;
-  max-height: 100vh;
-}
-
-.ug-gallery-expanded-media-item {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
-  opacity: 0;
-}
-
-.ug-gallery-expanded-media-item.visible {
-  opacity: 1;
-}
-
-.ug-gallery-overlay.fullscreen-gallery .ug-gallery-expanded-media-item {
-max-width: 100vw;
-max-height: 100vh;
-object-fit: contain;
-}
-
-/* --- Image Navigation Buttons (Prev/Next Arrows) --- */
-.navigation-button {
-  position: absolute;
-  top: 50%;
-  z-index: 11;
-  display: block;
-  font-size: 25px;
-  background: none;
-  color: var(--ug-text-color);
-  border: none;
-  border-radius: 50%;
-  width: 50px;
-  height: 50px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  opacity: 0.7;
-  transform: translateY(-50%);
-  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease),
-              top var(--ug-transition-duration) var(--ug-transition-ease),
-              width var(--ug-transition-duration) var(--ug-transition-ease),
-              height var(--ug-transition-duration) var(--ug-transition-ease),
-              font-size var(--ug-transition-duration) var(--ug-transition-ease);
-}
-
-.navigation-button:hover {
-  opacity: var(--ug-button-hover-opacity);
-}
-
-.navigation-button.prev {
-  left: 15px;
-}
-
-.navigation-button.next {
-  right: 15px;
-}
-
-.ug-gallery-overlay.fullscreen-gallery .navigation-button {
-  font-size: var(--ug-fullscreen-icon-size);
-  width: var(--ug-fullscreen-nav-size);
-  height: var(--ug-fullscreen-nav-size);
-  top: 50%;
-}
-
-.ug-gallery-overlay.fullscreen-gallery .navigation-button.prev {
-  left: 25px;
-}
-
-.ug-gallery-overlay.fullscreen-gallery .navigation-button.next {
-  right: 25px;
-}
-
-/* --- Current Page Number Indicator --- */
-.page-number {
-  position: absolute;
-  bottom: 10px;
-  left: 50%;
-  z-index: 11;
-  color: var(--ug-text-color);
-  font-size: 18px;
-  transform: translateX(-50%);
-  transition: bottom var(--ug-transition-duration) var(--ug-transition-ease);
-}
-
-.ug-gallery-overlay.fullscreen-gallery .page-number {
-  bottom: 20px;
-  font-size: 20px;
-}
-
-/* --- Bottom Stripe (Container for Thumbnails) --- */
-.ug-bottom-stripe {
-  position: relative;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: var(--ug-bottom-stripe-height);
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  align-items: center;
-  background-color: rgba(0, 0, 0, 0.5);
-  z-index: 10;
-  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
-}
-
-/* --- Thumbnail Strip (Bottom) --- */
-.thumbnail-strip {
-  display: none; /* Initially hidden */
-  justify-content: flex-start;
-  align-items: center;
-  padding: 5px 10px;
-  position: relative;
-  z-index: 10;
-  overflow-x: auto;
-  overflow-y: hidden;
-  white-space: nowrap;
-  width: 100%;
-
-}
-
-.thumbnail-strip::-webkit-scrollbar {
-  height: 6px;
-  background-color: transparent;
-}
-
-.thumbnail-strip::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.3);
-  border-radius: 3px;
-}
-
-.thumbnail-strip::-webkit-scrollbar-track {
-  background-color: transparent;
-}
-
-.ug-thumbnail-container {
-  display: inline-block;
-  margin-right: 3px;
-  width: var(--ug-thumbnail-size); /* Use variable */
-  height: var(--ug-thumbnail-size); /* Use variable */
-  position: relative;
-  border-radius: 3px;
-  overflow: hidden;
-  cursor: pointer;
-  transition: transform var(--ug-transition-duration) var(--ug-transition-ease);
-}
-
-.ug-thumbnail-container:hover {
-  transform: scale(1.1);
-}
-
-.ug-thumbnail-container:last-child {
-  margin-right: 0;
-}
-
-.ug-gallery-thumbnail {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-  object-position: center;
-}
-
-.ug-gallery-thumbnail.active {
-  border: 2px solid var(--ug-text-color);
-}
-
-/* --- Thumbnail Preview on Hover --- */
-/* hide the preview */
-.ug-thumbnail-preview {
-display:none;
-}
-
-
-
-/* --- Thumbnail Grid View (Alternative Layout) --- */
-.thumbnail-grid {
-  display: none; /* Initially hidden */
-  grid-template-columns: repeat(auto-fit, minmax(60px, 1fr)); /* Smaller thumbnails */
-  grid-gap: 3px;
-  max-height: calc(100vh - 120px);
-  margin-top: 5px;
-  padding: 5px;
   overflow-y: auto;
-  width: 100%;
-
 }
 
-/* Hide Grid, Show Strip when Gallery Overlay is Active (Expanded View) */
-.ug-gallery-overlay .thumbnail-grid {
-  display: none;
-}
-
-.ug-gallery-overlay .thumbnail-strip {
-  display: flex;
-}
-
-.ug-gallery-modal.grid-view .thumbnail-grid {
+.ug-gallery-thumbnail-grid {
   display: grid;
-}
-
-.ug-gallery-modal.grid-view .ug-gallery-main-view {
-  display: none;
-}
-
-.ug-gallery-modal.grid-view .thumbnail-strip {
-  display: none;
-}
-
-.ug-gallery-modal.grid-view .page-number {
-  display: none;
-}
-
-.ug-gallery-modal.grid-view .navigation-button {
-  display: none;
+  grid-template-columns: repeat(auto-fill, minmax(var(--ug-thumbnail-size), 1fr));
+  grid-gap: 8px;
+  padding: 20px;
+  overflow-y: auto;
 }
 
 .ug-gallery-thumbnail-grid-container {
   display: flex;
   justify-content: center;
-  position: relative;
+  align-items: center;
+  aspect-ratio: 1 / 1;
   overflow: hidden;
-  border-radius: 3px;
-  /* aspect-ratio: 1 / 1; REMOVED */
+  border-radius: 8px;
+  background-color: #222;
+  transition: transform 0.2s ease-out;
 }
 
-.ug-gallery-thumbnail-grid {
-    height: var(--ug-thumbnail-size); /* ADDED: Control height */
-    width: auto; /* ADDED: Let width adjust automatically */
-    max-width: var(--ug-thumbnail-size);
-    max-height: var(--ug-thumbnail-size);
-    cursor: pointer;
-    object-fit: cover;
-    object-position: center;
-    transition: transform var(--ug-transition-duration) var(--ug-transition-ease);
-}
-
-/* REMOVED hover scaling
-.ug-gallery-thumbnail-grid:hover {
+.ug-gallery-thumbnail-grid-container:hover {
   transform: scale(1.05);
 }
-*/
 
-/* --- Responsive Media Queries --- */
-@media (max-width: 768px) {
-  .ug-gallery-modal {
-      width: 98vw;
-      height: 95vh;
-  }
-
-  .ug-gallery-expanded-media {
-      max-height: calc(100vh - 100px);
-  }
-
-  .thumbnail-strip {
-      padding: 5px 8px;
-  }
-
-  .ug-thumbnail-container {
-      width: var(--ug-thumbnail-size);
-      height: var(--ug-thumbnail-size);
-      margin-right: 2px;
-  }
-
-  .page-number {
-      font-size: 16px;
-      bottom: 5px;
-  }
-
-  .ug-gallery-controls-container button {
-      font-size: 20px;
-  }
-
-  .navigation-button {
-      font-size: 20px;
-      width: 40px;
-      height: 40px;
-  }
-  .ug-bottom-stripe {
-      height: var(--ug-bottom-stripe-height);
-  }
+.ug-gallery-thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  will-change: transform; /* Hardware acceleration for thumbnails */
 }
 
-@media (max-width: 576px) {
-  .ug-gallery-modal {
-      width: 100vw;
-      height: 100vh;
-      border-radius: 0;
-  }
-  .ug-gallery-overlay.fullscreen-gallery .ug-gallery-modal{
-      border-radius: 0;
-  }
+/* --- Expanded View Styles --- */
 
-  .ug-gallery-expanded-media {
-      max-height: calc(100vh - 80px);
-  }
-
-  .thumbnail-strip {
-      padding: 3px 5px;
-  }
-
-  .ug-thumbnail-container {
-      width: var(--ug-thumbnail-size);
-      height: var(--ug-thumbnail-size);
-      margin-right: 1px;
-  }
-
-  .page-number {
-      display: none;
-  }
-
-  .navigation-button {
-      display: none;
-  }
-
-  .ug-gallery-controls-container button {
-      font-size: 18px;
-  }
-
-  .ug-bottom-stripe {
-      height: var(--ug-bottom-stripe-height);
-  }
+.ug-gallery-expanded-view {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-grow: 1;
+  overflow: hidden;
+  /* Clip zoom if it goes outside */
 }
 
-/* --- Settings Button (Fixed on Page) --- */
+/* --- Toolbar Styles --- */
+.ug-gallery-toolbar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex; /* Use flexbox for horizontal alignment */
+  gap: 10px; /* Space between buttons */
+  z-index: 11; /* Ensure toolbar is above other elements */
+  transition: opacity 0.3s ease; /* Transition for control visibility */
+  align-items: center; /* Vertically align items in the toolbar */
+}
+
+.ug-toolbar-button {
+  background: none;
+  border: none;
+  color: var(--ug-text-color);
+  font-size: 1.5em; /* Adjust as needed */
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
+  padding: 8px;
+  border-radius: 5px;
+}
+
+.ug-toolbar-button:hover {
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+/* --- Zoom Controls Styles --- */
+.ug-zoom-controls {
+  display: flex;
+  gap: 5px;
+  margin-right: 10px; /* Add some right margin to separate from other toolbar buttons if needed */
+}
+
+.ug-zoom-controls.ug-controls-hidden {
+  opacity: 0;
+  pointer-events: none; /* Make zoom controls non-interactive when hidden */
+}
+
+.ug-gallery-toolbar.ug-controls-hidden {
+  opacity: 0;
+  pointer-events: none; /* Make toolbar non-interactive when hidden */
+}
+
+
+.ug-zoom-button {
+  background-color: var(--ug-button-bg-color);
+  color: var(--ug-text-color);
+  border: none;
+  padding: 8px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
+  font-size: 1em; /* Adjust font size for zoom buttons */
+  line-height: 1em; /* Adjust line height to vertically center text */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px; /* Fixed height for zoom buttons */
+  width: 28px;  /* Fixed width for zoom buttons (for + and -) */
+}
+
+.ug-zoom-button:hover {
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+
+/* --- Main Image Container Styles --- */
+
+.ug-main-image-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto; /* Changed to auto to enable scrolling */
+  width: 100%;
+  height: 85%;
+  transition: transform 0.1s linear; /* Smoother panning transition */
+  transform-origin: center center; /* Zoom from center */
+  cursor: grab; /* Cursor for grabbable zoom */
+  transform: translateZ(0); /* Hardware acceleration */
+}
+
+.ug-main-image-container.ug-grabbing {
+  cursor: grabbing; /* Cursor when dragging */
+}
+
+
+/* --- Main Image Styles --- */
+
+.ug-main-image {
+  max-width: none; /* Override max-width to allow zoom to exceed container */
+  max-height: none; /* Override max-height to allow zoom to exceed container */
+  object-fit: contain;
+  border-radius: 8px;
+  background-color: #111;
+  display: block;
+  width: auto;
+  height: auto;
+  transition: transform 0.2s ease-out; /* Smoother zoom transition */
+  will-change: transform; /* Hardware acceleration for image transforms */
+}
+
+/* --- Navigation Container Styles --- */
+.ug-gallery-nav-container {
+  position: absolute; /* Important for positioning nav buttons */
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 85%; /* Take full height of expanded view, adjusted for stripe */
+  display: flex;       /* Enable Flexbox */
+  justify-content: space-between; /* Space out buttons */
+  align-items: center;   /* Vertically center buttons */
+  pointer-events: none;   /* Prevent blocking clicks on image */
+}
+
+
+/* --- Navigation Buttons (Expanded View) --- */
+
+.ug-gallery-nav {
+  background: rgba(0, 0, 0, 0.5);
+  border: none;
+  color: var(--ug-text-color);
+  font-size: 2.5em;
+  cursor: pointer;
+  padding: 0.4em 0.6em;
+  border-radius: 8px;
+  opacity: 0.6;
+  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
+  z-index: 10;
+  /* Ensure buttons are above the image */
+  pointer-events: auto; /* Make buttons interactive */
+}
+
+.ug-gallery-nav:hover {
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.7);
+}
+
+.ug-gallery-prev {
+  left: 15px;
+}
+
+.ug-gallery-next {
+  right: 15px;
+}
+
+/* --- Close and Fullscreen Buttons (Expanded View) --- */
+
+.ug-gallery-close,
+.ug-gallery-fullscreen {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: none;
+  border: none;
+  color: var(--ug-text-color);
+  font-size: 2em;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
+  padding: 8px;
+  border-radius: 5px;
+  z-index: 10;
+  /* Ensure buttons are above the image */
+}
+
+.ug-gallery-fullscreen {
+  left: 10px;
+  right: auto;
+}
+
+.ug-gallery-close:hover,
+.ug-gallery-fullscreen:hover {
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+/* --- New Close Button for Grid View --- */
+
+.ug-gallery-grid-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: none;
+  border: none;
+  color: var(--ug-text-color);
+  font-size: 2em;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
+  padding: 8px;
+  border-radius: 5px;
+}
+
+.ug-gallery-grid-close:hover {
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+/* --- Image Counter (Expanded View) --- */
+
+.ug-gallery-counter {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--ug-text-color);
+  font-size: 1em;
+  opacity: 0.7;
+  z-index: 10;
+  /* Ensure counter is above the image */
+}
+
+/* --- Thumbnail Strip Styles (Expanded View) --- */
+
+.ug-gallery-thumbnail-strip-container {
+  position: absolute; /* Overlay positioning */
+  bottom: 0; /* Anchored to the bottom */
+  left: 0;
+  width: 100%;
+  height: var(--ug-bottom-stripe-height); /* Or adjust as needed */
+  background-color: rgba(0, 0, 0, 0.5); /* Example background */
+  border-top: 1px solid var(--ug-border-color);
+  box-sizing: border-box; /* Ensure padding/border doesn't increase size */
+  overflow: hidden; /* Prevent overflow from thumbnails */
+  display: flex;
+  flex-direction: column; /* Stack thumbnail strip and counter if needed */
+  transform: translateZ(0); /* Hardware acceleration */
+}
+
+.ug-thumbnail-strip {
+  display: flex;
+  overflow-x: auto;
+  /* Enable horizontal scrolling if thumbnails overflow */
+  align-items: center;
+  height: 100%;
+  /* Make sure strip takes full height of its container */
+  padding: 10px;
+}
+
+.ug-thumbnail {
+  width: var(--ug-expanded-thumbnail-size);
+  height: var(--ug-expanded-thumbnail-size);
+  object-fit: cover;
+  border-radius: 6px;
+  margin: 0 5px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  /* For selection indication */
+  transition: border-color 0.3s ease, transform 0.1s linear; /* Smoother thumbnail animation */
+  will-change: transform; /* Hardware acceleration for thumbnails */
+}
+
+.ug-thumbnail:hover,
+.ug-thumbnail.selected {
+  border-color: var(--ug-settings-ribbon-active-color);
+  /* Highlight on hover or selection */
+  transform: scale(1.1);
+}
+
+/* --- Hide Class Utility --- */
+
+.ug-gallery-hide {
+  display: none !important;
+}
+
+/* --- Settings Button, SweetAlert, Settings Panel, Notification Area --- */
+
 .settings-button {
   position: fixed;
   bottom: 25px;
@@ -578,7 +486,6 @@ display:none;
   opacity: var(--ug-button-hover-opacity);
 }
 
-/* --- SweetAlert Dialog Overrides --- */
 .swal2-popup {
   background: var(--ug-settings-bg-color) !important;
   color: var(--ug-settings-text-color) !important;
@@ -598,144 +505,44 @@ display:none;
   font-size: 18px;
 }
 
-/* --- Settings Panel Overlay & Container --- */
-/* Styles for the settings overlay */
 .ug-settings-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%; /* Ensure full width */
-    height: 100%; /* Ensure full height */
-    z-index: 10001;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent background */
-    backdrop-filter: blur(5px); /* Add a blur effect */
-    /* Initially hidden, and no transition here */
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10001;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(5px);
 }
 
-
 /* Styles for the settings container */
+
 .ug-settings-container {
-    display: flex;
-    max-width: 800px;
-    max-height: 80vh;
-    width: 95vw;
-    background-color: var(--ug-settings-bg-color);
-    border-radius: 8px;
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
-    /* Initial state for the animation */
-    transform: scale(0.9);
-    opacity: 0;
-    transition: transform 0.3s ease, opacity 0.3s ease;
+  display: flex;
+  max-width: 800px;
+  max-height: 80vh;
+  width: 95vw;
+  background-color: var(--ug-settings-bg-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+  transform: scale(0.9);
+  opacity: 0;
+  transition: transform 0.3s ease, opacity 0.3s ease;
 }
 
 /* Apply the scale and fade-in effect when opening */
+
 .ug-settings-overlay.opening .ug-settings-container {
-    transform: scale(1);
-    opacity: 1;
-}
-
-/* --- Settings Panel Ribbon Navigation --- */
-.ug-settings-ribbon {
-  display: flex;
-  flex-direction: column;
-  padding: 10px;
-  border-right: 1px solid var(--ug-settings-input-border-color);
-}
-
-.ug-settings-ribbon-button {
-  display: block;
-  width: 100%;
-  padding: 10px 15px;
-  border: none;
-  background: none;
-  color: var(--ug-settings-text-color);
-  cursor: pointer;
-  font-size: 1em;
-  text-align: left;
-  border-bottom: 3px solid transparent;
-  transition: background-color 0.3s ease, color 0.3s ease;
-}
-
-.ug-settings-ribbon-button:hover,
-.ug-settings-ribbon-button.active {
-  background-color: #333;
-  border-bottom-color: var(--ug-settings-ribbon-active-color);
-}
-
-/* --- Settings Panel Content Area --- */
-.ug-settings-content {
-  flex-grow: 1;
-  padding: 20px;
-  overflow-y: auto;
-}
-
-.ug-settings-tab-content {
-  padding: 10px 0;
-}
-
-.ug-settings-close-btn {
-  position: absolute;
-  top: 15px;
-  right: 15px;
-  font-size: 2em;
-  background: none;
-  border: none;
-  color: var(--ug-settings-text-color);
-  cursor: pointer;
-}
-
-.ug-setting {
-  margin-bottom: 15px;
-  display: flex;
-  flex-direction: column;
-}
-
-.ug-setting label {
-  margin-bottom: 5px;
-  color: var(--ug-settings-text-color);
-}
-
-.ug-settings-input {
-  padding: 8px;
-  background-color: var(--ug-settings-input-bg-color);
-  color: var(--ug-settings-text-color);
-  border: 1px solid var(--ug-settings-input-border-color);
-  border-radius: 4px;
-  font-size: 1em;
-}
-
-.ug-placeholder-info {
-  margin-top: 5px;
-  font-size: 0.9em;
-  color: #aaa;
-}
-
-.ug-credits {
-  font-size: 0.9em;
-  color: #888;
-}
-
-.swal2-confirm,
-.ug-settings-save-button {
-  background-color: #007bff !important;
-  color: var(--ug-text-color) !important;
-  padding: 10px 20px !important;
-  border: none !important;
-  border-radius: 5px !important;
-  font-size: 18px;
-  cursor: pointer;
-  transition: background-color 0.3s ease;
-}
-
-.swal2-confirm:hover,
-.ug-settings-save-button:hover {
-  background-color: #0056b3 !important;
+  transform: scale(1);
+  opacity: 1;
 }
 
 /* --- Notification Area (Bottom Fixed) --- */
+
 .ug-notification-area {
   position: fixed;
   bottom: 0;
@@ -763,6 +570,8 @@ display:none;
   transform: none;
   left: auto;
   bottom: auto;
+  transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
+  opacity: 1;
 }
 
 .ug-notification-container.info {
@@ -806,12 +615,15 @@ display:none;
 }
 
 /* --- Slide In/Out Animations --- */
+
 .ug-slide-in {
   animation: ug-slide-in 0.5s ease-in-out forwards;
 }
 
 .ug-slide-out {
   animation: ug-slide-out 0.5s ease-in-out forwards;
+  opacity: 0;
+  transform: translateY(100%);
 }
 
 @keyframes ug-slide-in {
@@ -837,10 +649,30 @@ display:none;
       transform: translateY(100%);
   }
 }
+
 .ug-resized {
   max-width: 100%;
   max-height: 100%;
   width: auto;
   height: auto;
   object-fit: contain;
+}
+
+/* --- Control Visibility --- */
+.ug-gallery-toolbar.ug-controls-hidden,
+.ug-zoom-controls.ug-controls-hidden {
+  opacity: 0;
+  pointer-events: none; /* Make controls non-interactive when hidden */
+}
+
+/* --- Bottom Stripe Container Style --- */
+.ug-bottom-stripe-container {
+  width: 100%;
+  height: var(--ug-bottom-stripe-height); /* Or adjust as needed */
+  background-color: rgba(0, 0, 0, 0.5); /* Example background */
+  border-top: 1px solid var(--ug-border-color);
+  box-sizing: border-box; /* Ensure padding/border doesn't increase size */
+  overflow: hidden; /* Prevent overflow from thumbnails */
+  display: flex;
+  flex-direction: column; /* Stack thumbnail strip and counter if needed */
 }
