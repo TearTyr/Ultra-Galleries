@@ -1,10 +1,10 @@
-/* Ultra Galleries - Main Stylesheet */
+/* Ultra Galleries - Improved Settings Stylesheet */
 
 :root {
   --ug-main-bg-color: rgba(0, 0, 0, 0.85);
   --ug-overlay-bg-color: rgba(255, 255, 255, 0.05);
   --ug-border-color: rgba(255, 255, 255, 0.2);
-  --ug-text-color: #eee;
+  --ug-text-color: #ddd;
   --ug-button-bg-color: #444;
   --ug-button-hover-opacity: 0.9;
   --ug-transition-duration: 0.2s;
@@ -12,25 +12,28 @@
   --ug-notification-info: rgba(0, 0, 0, 0.75);
   --ug-notification-success: rgba(50, 150, 80, 0.9);
   --ug-notification-error: rgba(180, 70, 70, 0.9);
-  --ug-settings-bg-color: #333;
-  --ug-settings-input-bg-color: #555;
-  --ug-settings-input-border-color: #777;
+  --ug-settings-bg-color: #222;
+  --ug-settings-input-bg-color: #333;
+  --ug-settings-input-border-color: #555;
   --ug-settings-text-color: #ddd;
-  --ug-settings-ribbon-active-color: #58a6f0;
+  --ug-settings-header-color: #eee;
+  --ug-settings-ribbon-active-color: #a0a0a0; /* Active checkbox color - greyish */
   --ug-fullscreen-nav-size: 50px;
   --ug-fullscreen-icon-size: 35px;
   --ug-thumbnail-preview-scale: 2;
   --ug-thumbnail-size: 120px;
-  /* Increased thumbnail size */
   --ug-bottom-stripe-height: auto;
   --ug-gallery-modal-max-width: 95%;
-  /* Slightly wider modal in non-fullscreen */
   --ug-icon-size: 24px;
   --ug-expanded-thumbnail-size: 70px;
-  /* Size for thumbnails in expanded view */
   --ug-zoom-scale: 2;
-  /* Default zoom scale factor */
+  --ug-settings-font-family: 'Roboto', sans-serif;
 }
+
+body {
+    font-family: sans-serif; /* Reset body font */
+}
+
 
 /* --- General Icon Styling --- */
 
@@ -123,24 +126,17 @@
   flex-direction: column;
   overflow: hidden;
   transition: max-width 0.3s ease, max-height 0.3s ease, width 0.3s ease, height 0.3s ease;
-  /* Smooth transition for fullscreen */
 }
 
-/* Fullscreen Gallery Container Style */
+/* --- Fullscreen Gallery Container Style --- */
 
 .ug-gallery-overlay.ug-fullscreen-overlay .ug-gallery-container {
   max-width: 100vw;
-  /* Take full viewport width in fullscreen */
   max-height: 100vh;
-  /* Take full viewport height in fullscreen */
   width: 100vw;
-  /* Ensure width is 100vw */
   height: 100vh;
-  /* Ensure height is 100vh */
   border-radius: 0;
-  /* Remove border-radius in fullscreen */
   box-shadow: none;
-  /* Remove shadow in fullscreen */
 }
 
 /* --- Gallery Grid View Styles --- */
@@ -180,7 +176,7 @@
   height: 100%;
   object-fit: cover;
   display: block;
-  will-change: transform; /* Hardware acceleration for thumbnails */
+  will-change: transform;
 }
 
 /* --- Expanded View Styles --- */
@@ -192,264 +188,9 @@
   align-items: center;
   flex-grow: 1;
   overflow: hidden;
-  /* Clip zoom if it goes outside */
 }
 
 /* --- Toolbar Styles --- */
-.ug-gallery-toolbar {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  display: flex; /* Use flexbox for horizontal alignment */
-  gap: 10px; /* Space between buttons */
-  z-index: 11; /* Ensure toolbar is above other elements */
-  transition: opacity 0.3s ease; /* Transition for control visibility */
-  align-items: center; /* Vertically align items in the toolbar */
-}
-
-.ug-toolbar-button {
-  background: none;
-  border: none;
-  color: var(--ug-text-color);
-  font-size: 1.5em; /* Adjust as needed */
-  cursor: pointer;
-  opacity: 0.8;
-  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
-  padding: 8px;
-  border-radius: 5px;
-}
-
-.ug-toolbar-button:hover {
-  opacity: 1;
-  background-color: rgba(0, 0, 0, 0.3);
-}
-
-/* --- Zoom Controls Styles --- */
-.ug-zoom-controls {
-  display: flex;
-  gap: 5px;
-  margin-right: 10px; /* Add some right margin to separate from other toolbar buttons if needed */
-}
-
-.ug-zoom-controls.ug-controls-hidden {
-  opacity: 0;
-  pointer-events: none; /* Make zoom controls non-interactive when hidden */
-}
-
-.ug-gallery-toolbar.ug-controls-hidden {
-  opacity: 0;
-  pointer-events: none; /* Make toolbar non-interactive when hidden */
-}
-
-
-.ug-zoom-button {
-  background-color: var(--ug-button-bg-color);
-  color: var(--ug-text-color);
-  border: none;
-  padding: 8px 12px;
-  border-radius: 5px;
-  cursor: pointer;
-  opacity: 0.8;
-  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
-  font-size: 1em; /* Adjust font size for zoom buttons */
-  line-height: 1em; /* Adjust line height to vertically center text */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 28px; /* Fixed height for zoom buttons */
-  width: 28px;  /* Fixed width for zoom buttons (for + and -) */
-}
-
-.ug-zoom-button:hover {
-  opacity: 1;
-  background-color: rgba(0, 0, 0, 0.5);:root {
-  --ug-main-bg-color: rgba(0, 0, 0, 0.85);
-  --ug-overlay-bg-color: rgba(255, 255, 255, 0.05);
-  --ug-border-color: rgba(255, 255, 255, 0.2);
-  --ug-text-color: #ddd;
-  --ug-button-bg-color: #444;
-  --ug-button-hover-opacity: 0.9;
-  --ug-transition-duration: 0.2s;
-  --ug-transition-ease: ease-out;
-  --ug-notification-info: rgba(0, 0, 0, 0.75);
-  --ug-notification-success: rgba(50, 150, 80, 0.9);
-  --ug-notification-error: rgba(180, 70, 70, 0.9);
-  --ug-settings-bg-color: #222;
-  --ug-settings-input-bg-color: #333;
-  --ug-settings-input-border-color: #555;
-  --ug-settings-text-color: #ddd;
-  --ug-settings-header-color: #eee;
-  --ug-settings-ribbon-active-color: #a0a0a0;
-  --ug-fullscreen-nav-size: 50px;
-  --ug-fullscreen-icon-size: 35px;
-  --ug-thumbnail-preview-scale: 2;
-  --ug-thumbnail-size: 120px;
-  --ug-bottom-stripe-height: auto;
-  --ug-gallery-modal-max-width: 95%;
-  --ug-icon-size: 24px;
-  --ug-expanded-thumbnail-size: 70px;
-  --ug-zoom-scale: 2;
-  --ug-settings-font-family: 'Roboto', sans-serif;
-}
-
-body {
-    font-family: sans-serif;
-}
-
-/* --- Icon Styling --- */
-
-.ug-gallery-close::before,
-.ug-gallery-fullscreen::before,
-.ug-gallery-nav::before,
-.ug-settings-close-btn::before,
-.ug-notification-container #ug-notification-close::before,
-.settings-button::before,
-.ug-gallery-grid-close::before,
-.ug-toolbar-button::before,
-.ug-zoom-button::before {
-  display: inline-block;
-  width: var(--ug-icon-size);
-  height: var(--ug-icon-size);
-  line-height: var(--ug-icon-size);
-  text-align: center;
-  font-size: var(--ug-icon-size);
-  font-family: sans-serif;
-  vertical-align: middle;
-}
-
-/* --- Animations --- */
-
-.fade-in,
-.fade-out {
-  animation: var(--ug-animation-fade-in);
-}
-
-@keyframes fade-in {
-  from {
-      opacity: 0;
-  }
-
-  to {
-      opacity: 1;
-  }
-}
-
-@keyframes fade-out {
-  from {
-      opacity: 1;
-  }
-
-  to {
-      opacity: 0;
-  }
-}
-
-/* --- Gallery Overlay --- */
-
-.ug-gallery-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  padding: 0;
-  background-color: var(--ug-main-bg-color);
-  backdrop-filter: blur(15px);
-}
-
-.ug-gallery-overlay.ug-fullscreen-overlay {
-  background-color: black;
-  backdrop-filter: none;
-}
-
-.ug-fullscreen {
-  overflow: hidden !important;
-}
-
-/* --- Gallery Container --- */
-
-.ug-gallery-container {
-  position: relative;
-  width: 95vw;
-  max-width: var(--ug-gallery-modal-max-width);
-  height: 95vh;
-  max-height: 900px;
-  background-color: var(--ug-overlay-bg-color);
-  border-radius: 12px;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.2);
-  border: 1px solid var(--ug-border-color);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  transition: max-width 0.3s ease, max-height 0.3s ease, width 0.3s ease, height 0.3s ease;
-}
-
-.ug-gallery-overlay.ug-fullscreen-overlay .ug-gallery-container {
-  max-width: 100vw;
-  max-height: 100vh;
-  width: 100vw;
-  height: 100vh;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-/* --- Gallery Grid View --- */
-
-.ug-gallery-grid-view {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-}
-
-.ug-gallery-thumbnail-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--ug-thumbnail-size), 1fr));
-  grid-gap: 8px;
-  padding: 20px;
-  overflow-y: auto;
-}
-
-.ug-gallery-thumbnail-grid-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  aspect-ratio: 1 / 1;
-  overflow: hidden;
-  border-radius: 8px;
-  background-color: #222;
-  transition: transform 0.2s ease-out;
-}
-
-.ug-gallery-thumbnail-grid-container:hover {
-  transform: scale(1.05);
-}
-
-.ug-gallery-thumbnail {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-    will-change: transform;
-}
-
-/* --- Expanded View --- */
-
-.ug-gallery-expanded-view {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex-grow: 1;
-  overflow: hidden;
-}
-
-/* --- Toolbar --- */
 .ug-gallery-toolbar {
   position: absolute;
   top: 10px;
@@ -478,7 +219,7 @@ body {
   background-color: rgba(0, 0, 0, 0.3);
 }
 
-/* --- Zoom Controls --- */
+/* --- Zoom Controls Styles --- */
 .ug-zoom-controls {
   display: flex;
   gap: 5px;
@@ -519,7 +260,8 @@ body {
   background-color: rgba(0, 0, 0, 0.5);
 }
 
-/* --- Main Image Container --- */
+
+/* --- Main Image Container Styles --- */
 
 .ug-main-image-container {
   display: flex;
@@ -538,7 +280,8 @@ body {
   cursor: grabbing;
 }
 
-/* --- Main Image --- */
+
+/* --- Main Image Styles --- */
 
 .ug-main-image {
   max-width: none;
@@ -550,10 +293,10 @@ body {
   width: auto;
   height: auto;
   transition: transform 0.2s ease-out;
-    will-change: transform;
+  will-change: transform;
 }
 
-/* --- Navigation Container --- */
+/* --- Navigation Container Styles --- */
 .ug-gallery-nav-container {
   position: absolute;
   top: 0;
@@ -566,7 +309,8 @@ body {
   pointer-events: none;
 }
 
-/* --- Navigation Buttons --- */
+
+/* --- Navigation Buttons (Expanded View) --- */
 
 .ug-gallery-nav {
   background: rgba(0, 0, 0, 0.5);
@@ -595,7 +339,7 @@ body {
   right: 15px;
 }
 
-/* --- Close and Fullscreen Buttons --- */
+/* --- Close and Fullscreen Buttons (Expanded View) --- */
 
 .ug-gallery-close,
 .ug-gallery-fullscreen {
@@ -625,7 +369,7 @@ body {
   background-color: rgba(0, 0, 0, 0.3);
 }
 
-/* --- Grid Close Button --- */
+/* --- New Close Button for Grid View --- */
 
 .ug-gallery-grid-close {
   position: absolute;
@@ -647,7 +391,7 @@ body {
   background-color: rgba(0, 0, 0, 0.3);
 }
 
-/* --- Image Counter --- */
+/* --- Image Counter (Expanded View) --- */
 
 .ug-gallery-counter {
   position: absolute;
@@ -660,7 +404,7 @@ body {
   z-index: 10;
 }
 
-/* --- Thumbnail Strip --- */
+/* --- Thumbnail Strip Styles (Expanded View) --- */
 
 .ug-gallery-thumbnail-strip-container {
   position: absolute;
@@ -694,7 +438,7 @@ body {
   cursor: pointer;
   border: 2px solid transparent;
   transition: border-color 0.3s ease, transform 0.1s linear;
-    will-change: transform;
+  will-change: transform;
 }
 
 .ug-thumbnail:hover,
@@ -703,11 +447,13 @@ body {
   transform: scale(1.1);
 }
 
+/* --- Hide Class Utility --- */
+
 .ug-gallery-hide {
   display: none !important;
 }
 
-/* --- Settings Button --- */
+/* --- Settings Button, SweetAlert, Settings Panel, Notification Area --- */
 
 .settings-button {
   position: fixed;
@@ -727,8 +473,6 @@ body {
 .settings-button:hover {
   opacity: var(--ug-button-hover-opacity);
 }
-
-/* --- SweetAlert Styles --- */
 
 .swal2-popup {
   background: var(--ug-settings-bg-color) !important;
@@ -750,7 +494,7 @@ body {
   padding: 0.5em;
 }
 
-/* --- Settings Panel --- */
+/* --- Settings Panel Styles --- */
 
 .ug-settings-overlay {
   position: fixed;
@@ -765,6 +509,8 @@ body {
   background-color: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(5px);
 }
+
+/* Styles for the settings container */
 
 .ug-settings-container {
   display: flex;
@@ -784,11 +530,14 @@ body {
   font-family: var(--ug-settings-font-family);
 }
 
+/* Apply the scale and fade-in effect when opening */
+
 .ug-settings-overlay.opening .ug-settings-container {
   transform: scale(1);
   opacity: 1;
 }
 
+/* --- Style for settings header --- */
 .ug-settings-header {
   display: flex;
   justify-content: space-between;
@@ -822,12 +571,16 @@ body {
   background-color: rgba(0, 0, 0, 0.3);
 }
 
+
+/* --- Style for settings body --- */
 .ug-settings-body {
   display: flex;
   flex-direction: column;
   gap: 15px;
 }
 
+
+/* --- Style for settings sections --- */
 .ug-settings-section {
   margin-bottom: 0;
   padding: 10px 15px;
@@ -913,7 +666,8 @@ body {
     box-shadow: 0 0 0 2px rgba(160, 160, 160, 0.5);
 }
 
-/* --- Notification Area --- */
+
+/* --- Notification Area (Bottom Fixed) --- */
 
 .ug-notification-area {
   position: fixed;
@@ -986,7 +740,7 @@ body {
   cursor: default;
 }
 
-/* --- Slide Animations --- */
+/* --- Slide In/Out Animations --- */
 
 .ug-slide-in {
   animation: ug-slide-in 0.5s ease-in-out forwards;
@@ -1030,13 +784,14 @@ body {
   object-fit: contain;
 }
 
+/* --- Control Visibility --- */
 .ug-gallery-toolbar.ug-controls-hidden,
 .ug-zoom-controls.ug-controls-hidden {
   opacity: 0;
   pointer-events: none;
 }
 
-/* --- Bottom Stripe Container --- */
+/* --- Bottom Stripe Container Style --- */
 .ug-bottom-stripe-container {
   width: 100%;
   height: var(--ug-bottom-stripe-height);
