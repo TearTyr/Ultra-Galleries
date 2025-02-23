@@ -16,19 +16,19 @@
   --ug-settings-input-bg-color: #333;
   --ug-settings-input-border-color: #555;
   --ug-settings-text-color: #ddd;
-  --ug-settings-header-color: #eee;
-  --ug-settings-ribbon-active-color: #a0a0a0;
+  --ug-settings-ribbon-active-color: #58a6f0;
   --ug-fullscreen-nav-size: 50px;
   --ug-fullscreen-icon-size: 35px;
   --ug-thumbnail-preview-scale: 2;
   --ug-thumbnail-size: 120px;
-  --ug-bottom-stripe-height: 60px;
-  /* Consistent height */
+  /* Increased thumbnail size */
+  --ug-bottom-stripe-height: auto;
   --ug-gallery-modal-max-width: 95%;
   --ug-icon-size: 24px;
   --ug-expanded-thumbnail-size: 70px;
   --ug-settings-font-family: 'Roboto', sans-serif;
 }
+
 
 body {
   font-family: sans-serif;
@@ -122,7 +122,7 @@ body {
   transition: max-width 0.3s ease, max-height 0.3s ease, width 0.3s ease, height 0.3s ease;
 }
 
-/* Fullscreen Gallery Container */
+/* --- Fullscreen Gallery Container --- */
 .ug-gallery-overlay.ug-fullscreen-overlay .ug-gallery-container {
   max-width: 100vw;
   max-height: 100vh;
@@ -229,6 +229,7 @@ body {
 
 .ug-main-image-container.ug-grabbing {
   cursor: grabbing;
+  cursor: grabbing;
 }
 
 /* Main Image */
@@ -249,6 +250,7 @@ body {
 
 /* Navigation Container */
 .ug-gallery-nav-container {
+  position: absolute;
   position: absolute;
   top: 0;
   left: 0;
@@ -363,12 +365,7 @@ body {
   font-size: 1em;
   opacity: 0.7;
   z-index: 10;
-  background-color: rgba(0, 0, 0, 0.6);
-  /* Add background for visibility */
-  padding: 5px 10px;
-  /* Add padding */
-  border-radius: 5px;
-  /* Add border-radius */
+  /* Ensure counter is above the image */
 }
 
 /* Thumbnail Strip */
@@ -377,31 +374,14 @@ body {
   bottom: 0;
   left: 0;
   width: 100%;
-  height: var(--ug-bottom-stripe-height);
-  background-color: rgba(0, 0, 0, 0.6);
-  /* Consistent with bottom stripe */
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  box-sizing: border-box;
-  overflow: hidden;
+  height: var(--ug-bottom-stripe-height); /* Or adjust as needed */
+  background-color: rgba(0, 0, 0, 0.5); /* Example background */
+  border-top: 1px solid var(--ug-border-color);
+  box-sizing: border-box; /* Ensure padding/border doesn't increase size */
+  overflow: hidden; /* Prevent overflow from thumbnails */
   display: flex;
-  flex-direction: column;
-  transform: translateZ(0);
-}
-
-
-/* Bottom Stripe - Now just a container for the thumbnail strip */
-.ug-bottom-stripe-container {
-  width: 100%;
-  height: var(--ug-bottom-stripe-height);
-  /* Use consistent height */
-  background-color: rgba(0, 0, 0, 0.6);
-  /* Keep consistent */
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  box-sizing: border-box;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  /* Stack children vertically */
+  flex-direction: column; /* Stack thumbnail strip and counter if needed */
+  transform: translateZ(0); /* Hardware acceleration */
 }
 
 
@@ -410,8 +390,8 @@ body {
   overflow-x: auto;
   align-items: center;
   height: 100%;
-  /* Fill the container */
-  padding: 0 10px;
+  /* Make sure strip takes full height of its container */
+  padding: 10px;
 }
 
 .ug-thumbnail {
@@ -422,14 +402,16 @@ body {
   margin: 0 5px;
   cursor: pointer;
   border: 2px solid transparent;
-  transition: border-color 0.3s ease, transform 0.3s ease;
-  will-change: transform;
+  /* For selection indication */
+  transition: border-color 0.3s ease, transform 0.1s linear; /* Smoother thumbnail animation */
+  will-change: transform; /* Hardware acceleration for thumbnails */
 }
 
 .ug-thumbnail:hover,
 .ug-thumbnail.selected {
-  border-color: #4CAF50;
-  transform: scale(1.2);
+  border-color: var(--ug-settings-ribbon-active-color);
+  /* Highlight on hover or selection */
+  transform: scale(1.1);
 }
 
 /* Hide Class Utility */
@@ -478,6 +460,8 @@ body {
   padding: 0.5em;
 }
 
+/* --- Settings Panel Styles --- */
+
 /* Settings Panel */
 .ug-settings-overlay {
   position: fixed;
@@ -515,6 +499,136 @@ body {
   transform: scale(1);
   opacity: 1;
 }
+
+/* --- Style for settings header --- */
+.ug-settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 10px;
+  margin-bottom: 15px;
+  border-bottom: 1px solid var(--ug-settings-input-border-color);
+}
+
+.ug-settings-header h2 {
+  margin: 0;
+  color: var(--ug-settings-header-color);
+  font-size: 1.3em;
+  font-weight: bold;
+}
+
+.ug-settings-close-btn {
+  background: none;
+  border: none;
+  color: var(--ug-text-color);
+  font-size: 1.3em;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
+  padding: 6px;
+  border-radius: 3px;
+}
+
+.ug-settings-close-btn:hover {
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+
+/* --- Style for settings body --- */
+.ug-settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+
+/* --- Style for settings sections --- */
+.ug-settings-section {
+  margin-bottom: 0;
+  padding: 10px 15px;
+  border-radius: 3px;
+  background-color: #2a2a2a;
+  border: 1px solid var(--ug-settings-input-border-color);
+}
+
+.ug-settings-section:last-child {
+  margin-bottom: 0;
+}
+
+.ug-settings-section-header {
+  color: var(--ug-settings-header-color);
+  font-size: 1.1em;
+  margin-bottom: 10px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--ug-settings-input-border-color);
+}
+
+
+.ug-settings-label {
+  display: block;
+  margin-bottom: 3px;
+  font-weight: normal;
+  font-size: 0.95em;
+  color: #ccc;
+}
+
+.ug-settings-checkbox-label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  margin-bottom: 3px;
+}
+
+.ug-settings-checkbox-label input[type="checkbox"] {
+  margin-right: 8px;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--ug-settings-input-border-color);
+  background-color: var(--ug-settings-input-bg-color);
+  border-radius: 3px;
+  position: relative;
+  cursor: pointer;
+}
+
+.ug-settings-checkbox-label input[type="checkbox"]:checked::before {
+    content: '✓';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ug-settings-ribbon-active-color);
+    font-size: 14px;
+}
+.ug-settings-checkbox-label input[type="checkbox"]:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(160, 160, 160, 0.5);
+}
+
+
+.ug-settings-input {
+  background-color: var(--ug-settings-input-bg-color) !important;
+  color: var(--ug-settings-text-color) !important;
+  border: 1px solid var(--ug-settings-input-border-color) !important;
+  border-radius: 3px;
+  padding: 6px;
+  font-size: 0.95em;
+  width: calc(100% - 16px);
+  box-sizing: border-box;
+  margin-bottom: 8px;
+}
+.ug-settings-input:focus {
+    outline-color: var(--ug-settings-ribbon-active-color);
+    box-shadow: 0 0 0 2px rgba(160, 160, 160, 0.5);
+}
+
 
 /* Settings Header */
 .ug-settings-header {
@@ -764,67 +878,21 @@ body {
   /* Consistent with main image */
 }
 
-/* Fix: Ensure counter is positioned correctly, above thumbnail strip */
-.ug-gallery-counter {
-  bottom: calc(var(--ug-bottom-stripe-height) + 10px);
-  /* Position above the strip */
-  transform: translateX(-50%);
-  /* Center horizontally */
+/* --- Control Visibility --- */
+.ug-gallery-toolbar.ug-controls-hidden,
+.ug-zoom-controls.ug-controls-hidden {
+  opacity: 0;
+  pointer-events: none; /* Make controls non-interactive when hidden */
 }
 
-/* Fix: Thumbnail strip container consistent height */
-.ug-gallery-thumbnail-strip-container {
-  height: var(--ug-bottom-stripe-height);
-}
-
-/* --- Zoom & Pan Styles --- */
-.zoom-controls {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.zoom-controls button {
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 5px;
-}
-
-.zoom-controls img {
-    width: 20px; /* Adjust icon size as needed */
-    height: 20px;
-    vertical-align: middle;
-}
-
-.zoom-level {
-    font-size: 0.9em;
-    color: var(--ug-text-color); /* Ensure text color is consistent */
-}
-
-
-.image-container {
-    width: 100%;
-    height: 100%;
-    display: flex; /* To center the image initially */
-    justify-content: center;
-    align-items: center;
-    overflow: hidden; /* Ensure image doesn't overflow image-container if zoomed too much */
-    position: absolute; /* Important for transformations and panning */
-    top: 0;
-    left: 0;
-    transform-origin: center center; /* Zoom and scale from the center */
-    cursor: grab; /* Default grab cursor */
-    will-change: transform; /* Performance hint */
-}
-
-.image-container.dragging {
-    cursor: grabbing; /* Change cursor when dragging */
-}
-
-.gallery-image { /* Target the image using the 'gallery-image' class we added */
-    display: block; /* Prevent extra space below image */
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain; /* Or 'cover' if you prefer different scaling */
+/* --- Bottom Stripe Container Style --- */
+.ug-bottom-stripe-container {
+  width: 100%;
+  height: var(--ug-bottom-stripe-height); /* Or adjust as needed */
+  background-color: rgba(0, 0, 0, 0.5); /* Example background */
+  border-top: 1px solid var(--ug-border-color);
+  box-sizing: border-box; /* Ensure padding/border doesn't increase size */
+  overflow: hidden; /* Prevent overflow from thumbnails */
+  display: flex;
+  flex-direction: column; /* Stack thumbnail strip and counter if needed */
 }
