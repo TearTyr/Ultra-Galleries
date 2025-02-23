@@ -1,4 +1,3 @@
-// Ultra-Galleries.js
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
@@ -28,14 +27,6 @@
 	// --- Utility Functions ---
 	const getExtension = (filename) => filename.split('.').pop().toLowerCase() || 'jpg';
 	const sanitizeFileName = (name) => name.replace(/[/\\:*?"<>|]/g, '-');
-	const debounce = (func, delay) => {
-		let timeout;
-		return function(...args) {
-			const context = this;
-			clearTimeout(timeout);
-			timeout = setTimeout(() => func.apply(context, args), delay);
-		};
-	};
 	const setImageStyle = (img, styles) => {
 		if (img) {
 			Object.assign(img.style, styles);
@@ -71,11 +62,6 @@
 		GALLERY: '【GALLERY】',
 		SETTINGS: '⚙️',
 		FULLSCREEN: '⛶',
-		GRID_VIEW: '🖼️',
-		EXPANDED_VIEW: '🔍',
-		ZOOM_IN: '+',
-		ZOOM_OUT: '-',
-		ZOOM_RESET: 'Reset',
 		CLOSE: '✕'
 	};
 
@@ -106,8 +92,8 @@
 		THUMBNAIL_CONTAINER: 'thumbnail-container',
 		THUMBNAIL_GRID: 'thumbnail-grid',
 		NAVIGATION_BUTTON: 'navigation-button',
-		PREV_BUTTON: 'navigation-button prev',
-		NEXT_BUTTON: 'navigation-button next',
+		//PREV_BUTTON: 'navigation-button prev', // Removed - used directly in createNavigationButton
+		//NEXT_BUTTON: 'navigation-button next', // Removed - used directly in createNavigationButton
 		VIRTUAL_IMAGE: 'virtual-image',
 		THUMBNAIL: 'thumbnail',
 		THUMBNAIL_STRIP: 'thumbnail-strip',
@@ -135,7 +121,7 @@
 		UG_GALLERY_THUMBNAIL_GRID_CONTAINER: 'ug-gallery-thumbnail-grid-container',
 		UG_GALLERY_THUMBNAIL_GRID: 'ug-gallery-thumbnail-grid',
 		UG_GALLERY_EXPANDED_MEDIA: 'ug-gallery-expanded-media',
-		BOTTOM_STRIPE: 'ug-bottom-stripe',
+		//BOTTOM_STRIPE: 'ug-bottom-stripe', // Removed - No longer a separate element
 		UG_MAIN_IMAGE_CONTAINER: 'ug-main-image-container',
 		UG_MAIN_IMAGE: 'ug-main-image',
 		UG_GALLERY_NAV: 'ug-gallery-nav',
@@ -152,25 +138,29 @@
 		UG_GALLERY_COUNTER: 'ug-gallery-counter',
 		UG_GALLERY_GRID_CLOSE: 'ug-gallery-grid-close',
 		UG_GALLERY_THUMBNAIL_STRIP_CONTAINER: 'ug-gallery-thumbnail-strip-container',
-		/* New container for thumbnail strip */
 		UG_GALLERY_ZOOM_CONTAINER: 'ug-gallery-zoom-container',
-		/* Container for zoom functionality */
 		UG_GALLERY_ZOOM_IMAGE: 'ug-gallery-zoom-image',
-		/* Image within zoom container */
-		/* Class for the new grid close button */
 		UG_GALLERY_TOOLBAR: 'ug-gallery-toolbar',
 		UG_TOOLBAR_BUTTON: 'ug-toolbar-button',
-		UG_ZOOM_CONTROLS: 'ug-zoom-controls',
-		UG_ZOOM_BUTTON: 'ug-zoom-button',
 		UG_CONTROLS_HIDDEN_CLASS: 'ug-controls-hidden', // Class to hide controls
 		UG_GRABBING_CURSOR: 'ug-grabbing', // Class for grabbing cursor
-		UG_BOTTOM_STRIPE_CONTAINER: 'ug-bottom-stripe-container', //New container for bottom stripe
+		//UG_BOTTOM_STRIPE_CONTAINER: 'ug-bottom-stripe-container', // Removed - No longer needed
+		UG_SETTINGS_OVERLAY: 'ug-settings-overlay',
+		UG_SETTINGS_CONTAINER: 'ug-settings-container',
+		UG_SETTINGS_HEADER: 'ug-settings-header',
+		UG_SETTINGS_BODY: 'ug-settings-body',
+		UG_SETTINGS_CLOSE_BTN: 'ug-settings-close-btn',
+		UG_SETTINGS_SECTION: 'ug-settings-section',
+		UG_SETTINGS_SECTION_HEADER: 'ug-settings-section-header',
+		UG_SETTINGS_LABEL: 'ug-settings-label',
+		UG_SETTINGS_INPUT: 'ug-settings-input',
+		UG_SETTINGS_CHECKBOX_LABEL: 'ug-settings-checkbox-label',
+		UG_GALLERY_NAV_CONTAINER: 'ug-gallery-nav-container', // Container for nav buttons
 	};
 
 	const MAX_RETRIES = 3;
 	const RETRY_DELAY = 1500;
 	const IMAGE_BATCH_SIZE = 5;
-	const DEBOUNCE_DELAY = 10; // Reduced debounce for smoother drag
 
 	// --- State Management ---
 	const createReactiveState = (initialState, updateCallbacks = {}) => {
@@ -220,27 +210,31 @@
 		settingsOpen: false,
 		prevImageKey: GM_getValue('prevImageKey', 'k'),
 		nextImageKey: GM_getValue('nextImageKey', 'l'),
-		bottomStripeVisible: true,
-		dynamicResizing: GM_getValue('dynamicResizing', true), // Default to on
-		zoomEnabled: GM_getValue('zoomEnabled', true), // Default zoom enabled
-		isZoomed: false, // Track zoom state
-		zoomScale: 1, // Current zoom scale
-		controlsVisible: true, // Initially controls are visible,
-		isDragging: false, // Track if image is being dragged
+		bottomStripeVisible: true, // Keep this, but it now controls only the thumbnail strip
+		dynamicResizing: GM_getValue('dynamicResizing', true),
+		zoomEnabled: GM_getValue('zoomEnabled', true),
+		isZoomed: false,
+		zoomScale: 1,
+		controlsVisible: true,
+		isDragging: false,
 		dragStartPosition: {
 			x: 0,
 			y: 0
-		}, // Track drag start position
+		},
 		imageOffset: {
 			x: 0,
 			y: 0
-		}, // Track current image offset
+		},
+		lastWidth: 0,
+		lastHeight: 0,
+		zoomOrigin: {
+			x: 0,
+			y: 0
+		},
 	}, {
 		controlsVisible: (value) => {
 			const toolbar = galleryOverlay?.querySelector(`.${CLASS_NAMES.UG_GALLERY_TOOLBAR}`);
-			const zoomControls = galleryOverlay?.querySelector(`.${CLASS_NAMES.UG_ZOOM_CONTROLS}`);
 			if (toolbar) toolbar.classList.toggle(CLASS_NAMES.UG_CONTROLS_HIDDEN_CLASS, !value);
-			if (zoomControls) zoomControls.classList.toggle(CLASS_NAMES.UG_CONTROLS_HIDDEN_CLASS, !value);
 		},
 		galleryReady: (value) => {
 			if (value) {
@@ -322,167 +316,327 @@
 		},
 		zoomEnabled: (value) => {
 			GM_setValue('zoomEnabled', value);
-		}
+		},
+		bottomStripeVisible: (value) => { // Added update callback
+			GM_setValue('bottomStripeVisible', value);
+			if (galleryOverlay) {
+				const thumbnailStripContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_GALLERY_THUMBNAIL_STRIP_CONTAINER}`);
+				if (thumbnailStripContainer) {
+					thumbnailStripContainer.style.display = value ? 'flex' : 'none';
+				}
+			}
+		},
+		zoomScale: (value, oldValue) => {
+			applyZoom(); // Re-apply the transform whenever zoomScale changes
+		},
+		imageOffset: (value, oldValue) => {
+			applyZoom(); // Re-apply the transform whenever imageOffset changes
+		},
 	});
 
-	// --- Settings ---
+	// --- Zoom & Pan Variables ---
+	let scale = 1;
+	let translateX = 0;
+	let translateY = 0;
+	let isDragging = false;
+	let startX = 0;
+	let startY = 0;
+	let isTransformPending = false; // Flag to control requestAnimationFrame
+
+	const minScale = 0.5;
+	const maxScale = 5; // Increased maxScale slightly
+	const zoomSensitivity = 0.1;
+	const zoomStep = 0.2;
+	const throttleInterval = 16; // milliseconds
+	let lastMouseMoveTime = 0;
+
+	// --- Zoom & Pan Functions ---
+	function updateTransform() {
+		if (!isTransformPending && galleryOverlay) { // Check if galleryOverlay exists
+			isTransformPending = true;
+			requestAnimationFrame(() => {
+				const imageContainerElement = galleryOverlay.querySelector('.image-container'); // Get element within current gallery
+				const zoomLevelDisplayElement = galleryOverlay.querySelector('#zoom-level'); // Get element within current gallery
+				if (imageContainerElement && zoomLevelDisplayElement) { // Check if elements are found
+					imageContainerElement.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+					zoomLevelDisplayElement.textContent = `${Math.round(scale * 100)}%`;
+				}
+				isTransformPending = false;
+			});
+		}
+	}
+
+	function zoom(zoomFactor, pointX, pointY) {
+		let newScale = scale + zoomFactor * zoomSensitivity;
+		newScale = Math.max(minScale, Math.min(newScale, maxScale));
+
+		if (newScale !== scale) {
+			const preZoomMouseX = (pointX - translateX) / scale;
+			const preZoomMouseY = (pointY - translateY) / scale;
+
+			scale = newScale;
+
+			translateX = pointX - (preZoomMouseX * scale);
+			translateY = pointY - (preZoomMouseY * scale);
+
+			updateTransform();
+		}
+	}
+
+	// --- Refactored handleWheelZoom (adapted for userscript context) ---
+	const handleWheelZoom = (event) => {
+		if (!state.zoomEnabled || !galleryOverlay) return; // Check galleryOverlay
+		event.preventDefault();
+		event.stopPropagation();
+
+		const mainImageContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_MAIN_IMAGE_CONTAINER}`);
+		const mainImage = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_MAIN_IMAGE}`);
+		if (!mainImage || !mainImageContainer) return;
+
+		// Get bounding rect relative to viewport
+		const containerRect = mainImageContainer.getBoundingClientRect();
+
+		// Mouse position relative to container
+		const mouseX = event.clientX - containerRect.left;
+		const mouseY = event.clientY - containerRect.top;
+
+		// Calculate zoom direction and clamp scale
+		const delta = Math.sign(event.deltaY) * -0.1;
+		const newZoomScale = Math.max(1, Math.min(state.zoomScale + delta, maxScale)); // Increased max zoom to 5
+
+		// Calculate image position relative to original image
+		const imageX = (mouseX - translateX) / state.zoomScale;
+		const imageY = (mouseY - translateY) / state.zoomScale;
+
+		// Calculate new offset to keep zoom centered
+		const newOffsetX = mouseX - (imageX * newZoomScale);
+		const newOffsetY = mouseY - (imageY * newZoomScale);
+
+		// Apply boundaries
+		const boundedOffset = enforceBoundaries(newOffsetX, newOffsetY, newZoomScale, containerRect, mainImage);
+
+		// Update state
+		state.imageOffset.x = boundedOffset.x;
+		state.imageOffset.y = boundedOffset.y;
+		state.zoomScale = newZoomScale;
+
+		// Smooth transition
+		mainImageContainer.style.transition = 'transform 0.1s ease-out';
+		setTimeout(() => mainImageContainer.style.transition = '', 100);
+	};
+
+	// --- Boundary Enforcement Function ---
+	const enforceBoundaries = (offsetX, offsetY, scale, containerRect, image) => {
+		const imgWidth = image.naturalWidth * scale;
+		const imgHeight = image.naturalHeight * scale;
+		const containerWidth = containerRect.width;
+		const containerHeight = containerRect.height;
+
+		const maxX = Math.max(0, (imgWidth - containerWidth) / 2);
+		const maxY = Math.max(0, (imgHeight - containerHeight) / 2);
+
+		const minX = -maxX;
+		const minY = -maxY;
+
+		// Clamp the offset values
+		const boundedX = Math.max(minX, Math.min(maxX, offsetX));
+		const boundedY = Math.max(minY, Math.min(maxY, offsetY));
+
+		return {
+			x: boundedX,
+			y: boundedY
+		};
+	};
+
+	// --- Improved Drag Handling (adapted for userscript context) ---
+	const startDrag = (event) => {
+		if (state.zoomScale <= 1 || !galleryOverlay) return; // Check galleryOverlay
+		state.isDragging = true;
+
+		const mainImageContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_MAIN_IMAGE_CONTAINER}`);
+		if (!mainImageContainer) return; // Prevent errors
+		mainImageContainer.style.cursor = 'grabbing';
+		mainImageContainer.style.transition = 'none';
+
+		// Store initial positions with current offset
+		state.dragStartPosition = {
+			x: event.clientX - state.imageOffset.x,
+			y: event.clientY - state.imageOffset.y
+		};
+	};
+
+	const dragImage = (event) => {
+		if (!state.isDragging || !galleryOverlay) return; // Check galleryOverlay
+
+		const mainImageContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_MAIN_IMAGE_CONTAINER}`);
+		if (!mainImageContainer) return; // Prevent errors
+		const containerRect = mainImageContainer.getBoundingClientRect();
+		const mainImage = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_MAIN_IMAGE}`);
+
+		// Calculate new offset based on drag
+		const newX = event.clientX - state.dragStartPosition.x;
+		const newY = event.clientY - state.dragStartPosition.y;
+
+		// Apply boundaries
+		const boundedOffset = enforceBoundaries(newX, newY, state.zoomScale, containerRect, mainImage);
+
+		state.imageOffset.x = boundedOffset.x;
+		state.imageOffset.y = boundedOffset.y;
+	};
+
+	const endDrag = () => {
+		if (!state.isDragging || !galleryOverlay) return; // Check galleryOverlay
+		state.isDragging = false;
+
+		const mainImageContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_MAIN_IMAGE_CONTAINER}`);
+		if (!mainImageContainer) return; // Prevent errors
+		mainImageContainer.style.cursor = 'grab';
+		mainImageContainer.style.transition = 'transform 0.3s ease-out';
+	};
+
+	const resetZoom = () => {
+		state.zoomScale = 1;
+		state.imageOffset = {
+			x: 0,
+			y: 0
+		};
+		const mainImageContainer = galleryOverlay?.querySelector(`.${CLASS_NAMES.UG_MAIN_IMAGE_CONTAINER}`);
+		if (mainImageContainer) {
+			mainImageContainer.style.transform = `translate(0px, 0px) scale(1)`;
+		}
+		updateTransform(); // Ensure zoom level display updates immediately
+	};
+
+	// --- Settings ---  (This section remains largely the same, just updating for the removed zoom settings)
 	const createSettingsUI = () => {
-		// Settings Overlay Container
 		const settingsOverlay = document.createElement('div');
 		settingsOverlay.id = 'ug-settings-overlay';
-		settingsOverlay.classList.add('ug-settings-overlay');
+		settingsOverlay.classList.add(CLASS_NAMES.UG_SETTINGS_OVERLAY);
 
-		// Settings Container - inner panel
 		const settingsContainer = document.createElement('div');
-		settingsContainer.classList.add('ug-settings-container');
+		settingsContainer.classList.add(CLASS_NAMES.UG_SETTINGS_CONTAINER);
 		settingsOverlay.appendChild(settingsContainer);
 
-		// Settings Header
 		const settingsHeader = document.createElement('div');
-		settingsHeader.classList.add('ug-settings-header');
+		settingsHeader.classList.add(CLASS_NAMES.UG_SETTINGS_HEADER);
 		settingsContainer.appendChild(settingsHeader);
 
 		const headerText = document.createElement('h2');
 		headerText.textContent = 'Ultra Galleries Settings';
 		settingsHeader.appendChild(headerText);
 
-		// Close Button (X) - Top Right
 		const closeButton = document.createElement('button');
-		closeButton.classList.add('ug-settings-close-btn');
+		closeButton.classList.add(CLASS_NAMES.UG_SETTINGS_CLOSE_BTN);
 		closeButton.textContent = BUTTONS.CLOSE;
 		closeButton.addEventListener('click', () => state.settingsOpen = false);
 		settingsHeader.appendChild(closeButton);
 
-		// Settings Body - for options
 		const settingsBody = document.createElement('div');
-		settingsBody.classList.add('ug-settings-body');
+		settingsBody.classList.add(CLASS_NAMES.UG_SETTINGS_BODY);
 		settingsContainer.appendChild(settingsBody);
 
-		// Settings Sections - layout as needed, e.g., using fieldsets or divs
-		const sectionGeneral = document.createElement('fieldset');
-		sectionGeneral.innerHTML = `<legend>General Settings</legend>`;
+		const sectionGeneral = document.createElement('div');
+		sectionGeneral.classList.add(CLASS_NAMES.UG_SETTINGS_SECTION);
+		sectionGeneral.innerHTML = `<h3 class="${CLASS_NAMES.UG_SETTINGS_SECTION_HEADER}">General Settings</h3>`;
 		settingsBody.appendChild(sectionGeneral);
 
-		const sectionKeys = document.createElement('fieldset');
-		sectionKeys.innerHTML = `<legend>Keyboard Shortcuts</legend>`;
+		const sectionKeys = document.createElement('div');
+		sectionKeys.classList.add(CLASS_NAMES.UG_SETTINGS_SECTION);
+		sectionKeys.innerHTML = `<h3 class="${CLASS_NAMES.UG_SETTINGS_SECTION_HEADER}">Keyboard Shortcuts</h3>`;
 		settingsBody.appendChild(sectionKeys);
 
-		const sectionNotifications = document.createElement('fieldset');
-		sectionNotifications.innerHTML = `<legend>Notifications</legend>`;
+		const sectionNotifications = document.createElement('div');
+		sectionNotifications.classList.add(CLASS_NAMES.UG_SETTINGS_SECTION);
+		sectionNotifications.innerHTML = `<h3 class="${CLASS_NAMES.UG_SETTINGS_SECTION_HEADER}">Notifications</h3>`;
 		settingsBody.appendChild(sectionNotifications);
 
-		const sectionFormatting = document.createElement('fieldset');
-		sectionFormatting.innerHTML = `<legend>File Formatting</legend>`;
+		const sectionFormatting = document.createElement('div');
+		sectionFormatting.classList.add(CLASS_NAMES.UG_SETTINGS_SECTION);
+		sectionFormatting.innerHTML = `<h3 class="${CLASS_NAMES.UG_SETTINGS_SECTION_HEADER}">File Formatting</h3>`;
 		settingsBody.appendChild(sectionFormatting);
-
-		const sectionZoom = document.createElement('fieldset'); // New section for zoom
-		sectionZoom.innerHTML = `<legend>Zoom Settings</legend>`;
-		settingsBody.appendChild(sectionZoom);
 
 		// --- General Settings ---
 		// Dynamic Resizing Toggle
-		const dynamicResizingLabel = document.createElement('label');
-		dynamicResizingLabel.innerHTML = `Dynamic Resizing: <input type="checkbox" id="dynamicResizingToggle" ${state.dynamicResizing ? 'checked' : ''}>`;
-		const dynamicResizingInput = dynamicResizingLabel.querySelector('input');
-		dynamicResizingInput.addEventListener('change', (e) => {
+		const dynamicResizingLabel = document.createElement('div');
+		dynamicResizingLabel.classList.add(CLASS_NAMES.UG_SETTINGS_CHECKBOX_LABEL);
+		dynamicResizingLabel.innerHTML = `<input type="checkbox" id="dynamicResizingToggle" ${state.dynamicResizing ? 'checked' : ''} class="${CLASS_NAMES.UG_SETTINGS_INPUT}"> <label class="${CLASS_NAMES.UG_SETTINGS_LABEL}" for="dynamicResizingToggle">Dynamic Resizing</label>`;
+		dynamicResizingLabel.querySelector('input').addEventListener('change', (e) => {
 			state.dynamicResizing = e.target.checked;
 			GM_setValue('dynamicResizing', state.dynamicResizing);
 		});
 		sectionGeneral.appendChild(dynamicResizingLabel);
 
 		// Animations Toggle
-		const animationsLabel = document.createElement('label');
-		animationsLabel.innerHTML = `Enable Animations: <input type="checkbox" id="animationsToggle" ${state.animationsEnabled ? 'checked' : ''}>`;
-		const animationsInput = animationsLabel.querySelector('input');
-		animationsInput.addEventListener('change', (e) => {
+		const animationsLabel = document.createElement('div');
+		animationsLabel.classList.add(CLASS_NAMES.UG_SETTINGS_CHECKBOX_LABEL);
+		animationsLabel.innerHTML = `<input type="checkbox" id="animationsToggle" ${state.animationsEnabled ? 'checked' : ''} class="${CLASS_NAMES.UG_SETTINGS_INPUT}"> <label class="${CLASS_NAMES.UG_SETTINGS_label}" for="animationsToggle">Enable Animations</label>`;
+		animationsLabel.querySelector('input').addEventListener('change', (e) => {
 			state.animationsEnabled = e.target.checked;
 			GM_setValue('animationsEnabled', state.animationsEnabled);
 		});
 		sectionGeneral.appendChild(animationsLabel);
 
-		// Bottom Stripe Visibility Toggle
-		const bottomStripeLabel = document.createElement('label');
-		bottomStripeLabel.innerHTML = `Show Thumbnail Stripe: <input type="checkbox" id="bottomStripeToggle" ${state.bottomStripeVisible ? 'checked' : ''}>`;
-		const bottomStripeInput = bottomStripeLabel.querySelector('input');
-		bottomStripeInput.addEventListener('change', (e) => {
-			state.bottomStripeVisible = e.target.checked;
-			GM_setValue('bottomStripeVisible', state.bottomStripeVisible);
-			if (galleryOverlay) {
-				const bottomStripeContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_BOTTOM_STRIPE_CONTAINER}`);
-				if (bottomStripeContainer) {
-					bottomStripeContainer.style.display = state.bottomStripeVisible ? 'flex' : 'none';
-				}
-			}
+		// Bottom Stripe Visibility Toggle (now only controls thumbnail strip)
+		const bottomStripeLabel = document.createElement('div');
+		bottomStripeLabel.classList.add(CLASS_NAMES.UG_SETTINGS_CHECKBOX_LABEL);
+		bottomStripeLabel.innerHTML = `<input type="checkbox" id="bottomStripeToggle" ${state.bottomStripeVisible ? 'checked' : ''} class="${CLASS_NAMES.UG_SETTINGS_INPUT}"> <label class="${CLASS_NAMES.UG_SETTINGS_LABEL}" for="bottomStripeToggle">Show Thumbnail Strip</label>`;
+		bottomStripeLabel.querySelector('input').addEventListener('change', (e) => {
+			state.bottomStripeVisible = e.target.checked; // This will now trigger the update callback
 		});
 		sectionGeneral.appendChild(bottomStripeLabel);
 
-
-		// --- Zoom Settings ---
 		// Zoom Enable Toggle
-		const zoomEnableLabel = document.createElement('label');
-		zoomEnableLabel.innerHTML = `Enable Zoom Functionality: <input type="checkbox" id="zoomEnableToggle" ${state.zoomEnabled ? 'checked' : ''}>`;
-		const zoomEnableInput = zoomEnableLabel.querySelector('input');
-		zoomEnableInput.addEventListener('change', (e) => {
+		const zoomEnabledLabel = document.createElement('div');
+		zoomEnabledLabel.classList.add(CLASS_NAMES.UG_SETTINGS_CHECKBOX_LABEL);
+		zoomEnabledLabel.innerHTML = `<input type="checkbox" id="zoomEnabledToggle" ${state.zoomEnabled ? 'checked' : ''} class="${CLASS_NAMES.UG_SETTINGS_INPUT}"> <label class="${CLASS_NAMES.UG_SETTINGS_LABEL}" for="zoomEnabledToggle">Enable Zoom & Pan</label>`;
+		zoomEnabledLabel.querySelector('input').addEventListener('change', (e) => {
 			state.zoomEnabled = e.target.checked;
 			GM_setValue('zoomEnabled', state.zoomEnabled);
-			if (!state.zoomEnabled) {
-				state.isZoomed = false; // Reset zoom state if disabled
-				updateZoomToggleButton(); // Update zoom toggle button
-				resetZoom(); // Reset zoom
-				const zoomControls = galleryOverlay?.querySelector(`.${CLASS_NAMES.UG_ZOOM_CONTROLS}`);
-				if (zoomControls) zoomControls.classList.add(CLASS_NAMES.UG_GALLERY_HIDE); // Hide zoom controls
-			}
 		});
-		sectionZoom.appendChild(zoomEnableLabel);
-
+		sectionGeneral.appendChild(zoomEnabledLabel);
 
 		// --- Keyboard Shortcuts ---
-		// Gallery Key Input
-		const galleryKeyLabel = document.createElement('label');
-		galleryKeyLabel.innerHTML = `Gallery Key: <input type="text" id="galleryKeyInput" value="${state.galleryKey}" maxlength="1" style="width: 2em;">`;
-		const galleryKeyInput = galleryKeyLabel.querySelector('input');
-		galleryKeyInput.addEventListener('change', (e) => {
+		const galleryKeyLabel = document.createElement('div');
+		galleryKeyLabel.classList.add(CLASS_NAMES.UG_SETTINGS_LABEL);
+		galleryKeyLabel.innerHTML = `<label class="${CLASS_NAMES.UG_SETTINGS_LABEL}" for="galleryKeyInput">Gallery Key:</label> <input type="text" id="galleryKeyInput" value="${state.galleryKey}" maxlength="1" style="width: 2em;" class="${CLASS_NAMES.UG_SETTINGS_INPUT}">`;
+		galleryKeyLabel.querySelector('input').addEventListener('change', (e) => {
 			state.galleryKey = e.target.value;
 			GM_setValue('galleryKey', state.galleryKey);
 		});
 		sectionKeys.appendChild(galleryKeyLabel);
 
-		// Prev Image Key Input
-		const prevImageKeyLabel = document.createElement('label');
-		prevImageKeyLabel.innerHTML = `Previous Image Key: <input type="text" id="prevImageKeyInput" value="${state.prevImageKey}" maxlength="1" style="width: 2em;">`;
-		const prevImageKeyInput = prevImageKeyLabel.querySelector('input');
-		prevImageKeyInput.addEventListener('change', (e) => {
+		const prevImageKeyLabel = document.createElement('div');
+		prevImageKeyLabel.classList.add(CLASS_NAMES.UG_SETTINGS_LABEL);
+		prevImageKeyLabel.innerHTML = `<label class="${CLASS_NAMES.UG_SETTINGS_LABEL}" for="prevImageKeyInput">Previous Image Key:</label> <input type="text" id="prevImageKeyInput" value="${state.prevImageKey}" maxlength="1" style="width: 2em;" class="${CLASS_NAMES.UG_SETTINGS_INPUT}">`;
+		prevImageKeyLabel.querySelector('input').addEventListener('change', (e) => {
 			state.prevImageKey = e.target.value;
 			GM_setValue('prevImageKey', state.prevImageKey);
 		});
 		sectionKeys.appendChild(prevImageKeyLabel);
 
-		// Next Image Key Input
-		const nextImageKeyLabel = document.createElement('label');
-		nextImageKeyLabel.innerHTML = `Next Image Key: <input type="text" id="nextImageKeyInput" value="${state.nextImageKey}" maxlength="1" style="width: 2em;">`;
-		const nextImageKeyInput = nextImageKeyLabel.querySelector('input');
-		nextImageKeyInput.addEventListener('change', (e) => {
+		const nextImageKeyLabel = document.createElement('div');
+		nextImageKeyLabel.classList.add(CLASS_NAMES.UG_SETTINGS_LABEL);
+		nextImageKeyLabel.innerHTML = `<label class="${CLASS_NAMES.UG_SETTINGS_LABEL}" for="nextImageKeyInput">Next Image Key:</label> <input type="text" id="nextImageKeyInput" value="${state.nextImageKey}" maxlength="1" style="width: 2em;" class="${CLASS_NAMES.UG_SETTINGS_INPUT}">`;
+		nextImageKeyLabel.querySelector('input').addEventListener('change', (e) => {
 			state.nextImageKey = e.target.value;
 			GM_setValue('nextImageKey', state.nextImageKey);
 		});
 		sectionKeys.appendChild(nextImageKeyLabel);
 
 		// --- Notifications Settings ---
-		// Notifications Enabled Toggle
-		const notificationsEnabledLabel = document.createElement('label');
-		notificationsEnabledLabel.innerHTML = `Enable Notifications: <input type="checkbox" id="notificationsEnabledToggle" ${state.notificationsEnabled ? 'checked' : ''}>`;
-		const notificationsEnabledInput = notificationsEnabledLabel.querySelector('input');
-		notificationsEnabledInput.addEventListener('change', (e) => {
+		const notificationsEnabledLabel = document.createElement('div');
+		notificationsEnabledLabel.classList.add(CLASS_NAMES.UG_SETTINGS_CHECKBOX_LABEL);
+		notificationsEnabledLabel.innerHTML = `<input type="checkbox" id="notificationsEnabledToggle" ${state.notificationsEnabled ? 'checked' : ''} class="${CLASS_NAMES.UG_SETTINGS_INPUT}"> <label class="${CLASS_NAMES.UG_SETTINGS_LABEL}" for="notificationsEnabledToggle">Enable Notifications</label>`;
+		notificationsEnabledLabel.querySelector('input').addEventListener('change', (e) => {
 			state.notificationsEnabled = e.target.checked;
 			GM_setValue('notificationsEnabled', state.notificationsEnabled);
 		});
 		sectionNotifications.appendChild(notificationsEnabledLabel);
 
-		// Notification Area Visibility Toggle
-		const notificationAreaVisibleLabel = document.createElement('label');
-		notificationAreaVisibleLabel.innerHTML = `Show Notification Area: <input type="checkbox" id="notificationAreaVisibleToggle" ${state.notificationAreaVisible ? 'checked' : ''}>`;
-		const notificationAreaVisibleInput = notificationAreaVisibleLabel.querySelector('input');
-		notificationAreaVisibleInput.addEventListener('change', (e) => {
+		const notificationAreaVisibleLabel = document.createElement('div');
+		notificationAreaVisibleLabel.classList.add(CLASS_NAMES.UG_SETTINGS_CHECKBOX_LABEL);
+		notificationAreaVisibleLabel.innerHTML = `<input type="checkbox" id="notificationAreaVisibleToggle" ${state.notificationAreaVisible ? 'checked' : ''} class="${CLASS_NAMES.UG_SETTINGS_INPUT}"> <label class="${CLASS_NAMES.UG_SETTINGS_LABEL}" for="notificationAreaVisibleToggle">Show Notification Area</label>`;
+		notificationAreaVisibleLabel.querySelector('input').addEventListener('change', (e) => {
 			state.notificationAreaVisible = e.target.checked;
 			GM_setValue('notificationAreaVisible', state.notificationAreaVisible);
 			const notificationArea = document.getElementById(CLASS_NAMES.NOTIFICATION_AREA);
@@ -492,23 +646,20 @@
 		});
 		sectionNotifications.appendChild(notificationAreaVisibleLabel);
 
-
 		// --- File Formatting Settings ---
-		// Zip File Name Format Input
-		const zipFileNameFormatLabel = document.createElement('label');
-		zipFileNameFormatLabel.innerHTML = `Zip File Name Format: <input type="text" id="zipFileNameFormatInput" value="${state.zipFileNameFormat}" style="width: 100%;">`;
-		const zipFileNameFormatInput = zipFileNameFormatLabel.querySelector('input');
-		zipFileNameFormatInput.addEventListener('change', (e) => {
+		const zipFileNameFormatLabel = document.createElement('div');
+		zipFileNameFormatLabel.classList.add(CLASS_NAMES.UG_SETTINGS_LABEL);
+		zipFileNameFormatLabel.innerHTML = `<label class="${CLASS_NAMES.UG_SETTINGS_LABEL}" for="zipFileNameFormatInput">Zip File Name Format:</label> <input type="text" id="zipFileNameFormatInput" value="${state.zipFileNameFormat}" style="width: 100%;" class="${CLASS_NAMES.UG_SETTINGS_INPUT}">`;
+		zipFileNameFormatLabel.querySelector('input').addEventListener('change', (e) => {
 			state.zipFileNameFormat = e.target.value;
 			GM_setValue('zipFileNameFormat', state.zipFileNameFormat);
 		});
 		sectionFormatting.appendChild(zipFileNameFormatLabel);
 
-		// Image File Name Format Input
-		const imageFileNameFormatLabel = document.createElement('label');
-		imageFileNameFormatLabel.innerHTML = `Image File Name Format: <input type="text" id="imageFileNameFormatInput" value="${state.imageFileNameFormat}" style="width: 100%;">`;
-		const imageFileNameFormatInput = imageFileNameFormatLabel.querySelector('input');
-		imageFileNameFormatInput.addEventListener('change', (e) => {
+		const imageFileNameFormatLabel = document.createElement('div');
+		imageFileNameFormatLabel.classList.add(CLASS_NAMES.UG_SETTINGS_LABEL);
+		imageFileNameFormatLabel.innerHTML = `<label class="${CLASS_NAMES.UG_SETTINGS_LABEL}" for="imageFileNameFormatInput">Image File Name Format:</label> <input type="text" id="imageFileNameFormatInput" value="${state.imageFileNameFormat}" style="width: 100%;" class="${CLASS_NAMES.UG_SETTINGS_INPUT}">`;
+		imageFileNameFormatLabel.querySelector('input').addEventListener('change', (e) => {
 			state.imageFileNameFormat = e.target.value;
 			GM_setValue('imageFileNameFormat', state.imageFileNameFormat);
 		});
@@ -589,12 +740,16 @@
 		return newDiv;
 	};
 
+	// Simplified Navigation Button Creation
 	const createNavigationButton = (direction) => {
 		const button = document.createElement('button');
 		button.textContent = direction === 'prev' ? '←' : '→';
-		button.className = `${CLASS_NAMES.NAVIGATION_BUTTON} ${direction}`;
+		button.className = `${CLASS_NAMES.UG_GALLERY_NAV} ${direction === 'prev' ? CLASS_NAMES.UG_GALLERY_PREV : CLASS_NAMES.UG_GALLERY_NEXT}`; // Directly apply classes
+		button.addEventListener('click', direction === 'prev' ? prevImage : nextImage);
+		button.setAttribute('aria-label', direction === 'prev' ? 'Previous Image' : 'Next Image');
 		return button;
 	};
+
 
 	// --- Image Loading Functions ---
 	let elements = {
@@ -605,7 +760,6 @@
 		statusElement: null,
 		galleryButton: null,
 		settingsButton: null,
-		zoomToggleButton: null
 	};
 
 	let galleryKeyListenerAttached = false;
@@ -640,13 +794,20 @@
 		const originalScrollPosition = window.pageYOffset;
 		const maxScrollHeight = document.body.scrollHeight - window.innerHeight;
 		const scrollStep = window.innerHeight * 0.75;
+		let currentScrollY = originalScrollPosition;
 
-		for (let scrollPos = originalScrollPosition; scrollPos < maxScrollHeight; scrollPos += scrollStep) {
-			window.scrollTo(0, scrollPos);
-			await new Promise(resolve => setTimeout(resolve, 100));
+		for (; currentScrollY < maxScrollHeight;) {
+			const scrollAmount = Math.min(scrollStep, maxScrollHeight - currentScrollY);
+			currentScrollY += scrollAmount;
+			window.scrollBy({
+				top: scrollAmount,
+				behavior: 'smooth'
+			});
+			await new Promise(resolve => setTimeout(resolve, 250));
 		};
 		window.scrollTo(0, originalScrollPosition);
 	};
+
 
 	const loadImage = async (mediaLink, index) => {
 		try {
@@ -778,127 +939,129 @@
 		const expandedView = document.createElement('div');
 		expandedView.classList.add(CLASS_NAMES.UG_GALLERY_EXPANDED_VIEW, CLASS_NAMES.UG_GALLERY_HIDE);
 		galleryContainer.appendChild(expandedView);
-		//expandedView.addEventListener('click', toggleControlsVisibility); // Click to hide controls - Removed for now, click on image instead
 
 		// Toolbar for expanded view
 		const toolbar = document.createElement('div');
 		toolbar.classList.add(CLASS_NAMES.UG_GALLERY_TOOLBAR);
 		expandedView.appendChild(toolbar);
-		toolbar.addEventListener('mousedown', (e) => e.stopPropagation()); // Prevent toolbar interactions from triggering image drag
-
-		// Zoom Controls - moved to toolbar
-		const zoomControls = document.createElement('div');
-		zoomControls.classList.add(CLASS_NAMES.UG_ZOOM_CONTROLS);
-		toolbar.appendChild(zoomControls);
-		zoomControls.addEventListener('mousedown', (e) => e.stopPropagation()); // Prevent zoom controls interaction from triggering image drag
-
-		const zoomInButton = document.createElement('button');
-		zoomInButton.textContent = BUTTONS.ZOOM_IN;
-		zoomInButton.classList.add(CLASS_NAMES.UG_ZOOM_BUTTON);
-		zoomInButton.addEventListener('click', zoomIn);
-		zoomInButton.setAttribute('aria-label', 'Zoom In'); // Accessibility
-		zoomControls.appendChild(zoomInButton);
-
-		const zoomOutButton = document.createElement('button');
-		zoomOutButton.textContent = BUTTONS.ZOOM_OUT;
-		zoomOutButton.classList.add(CLASS_NAMES.UG_ZOOM_BUTTON);
-		zoomOutButton.addEventListener('click', zoomOut);
-		zoomOutButton.setAttribute('aria-label', 'Zoom Out'); // Accessibility
-		zoomControls.appendChild(zoomOutButton);
-
-		const zoomResetButton = document.createElement('button');
-		zoomResetButton.textContent = BUTTONS.ZOOM_RESET;
-		zoomResetButton.classList.add(CLASS_NAMES.UG_ZOOM_BUTTON);
-		zoomResetButton.addEventListener('click', resetZoom);
-		zoomResetButton.setAttribute('aria-label', 'Reset Zoom'); // Accessibility
-		zoomControls.appendChild(zoomResetButton);
-		zoomControls.classList.add(CLASS_NAMES.UG_GALLERY_HIDE); // Initially hidden
-
-
-		const zoomToggleButton = document.createElement('button');
-		zoomToggleButton.classList.add(CLASS_NAMES.UG_TOOLBAR_BUTTON);
-		zoomToggleButton.textContent = BUTTONS.EXPANDED_VIEW;
-		zoomToggleButton.addEventListener('click', toggleZoom);
-		zoomToggleButton.setAttribute('aria-label', 'Toggle Zoom'); // Accessibility
-		toolbar.appendChild(zoomToggleButton);
-		elements.zoomToggleButton = zoomToggleButton; // Store for state update
+		toolbar.addEventListener('mousedown', (e) => e.stopPropagation());
 
 		const expandedCloseButton = document.createElement('button');
 		expandedCloseButton.classList.add(CLASS_NAMES.UG_TOOLBAR_BUTTON);
 		expandedCloseButton.textContent = BUTTONS.CLOSE;
-		expandedCloseButton.addEventListener('click', showGridView); // Go back to grid view
-		expandedCloseButton.setAttribute('aria-label', 'Close Expanded View'); // Accessibility
+		expandedCloseButton.addEventListener('click', showGridView);
+		expandedCloseButton.setAttribute('aria-label', 'Close Expanded View');
 		toolbar.appendChild(expandedCloseButton);
+
+		// ** --- Zoom Controls Container --- **
+		const zoomControlsContainer = document.createElement('div');
+		zoomControlsContainer.classList.add('zoom-controls'); // Add class for styling
+		toolbar.appendChild(zoomControlsContainer);
+
+		const zoomOutBtn = document.createElement('button');
+		zoomOutBtn.id = 'zoom-out-btn';
+		zoomOutBtn.title = 'Zoom Out';
+		zoomOutBtn.classList.add(CLASS_NAMES.UG_TOOLBAR_BUTTON); // Apply toolbar button style
+		zoomOutBtn.innerHTML = '<img src="https://www.svgrepo.com/show/263638/zoom-out-search.svg" alt="Zoom Out">'; // Icon
+		zoomOutBtn.addEventListener('click', () => {
+			if (galleryOverlay) { // Check if galleryOverlay exists
+				const mainImageContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_MAIN_IMAGE_CONTAINER}`);
+				if (mainImageContainer) {
+					zoom(-zoomStep, mainImageContainer.offsetWidth / 2, mainImageContainer.offsetHeight / 2); // Zoom out center
+				}
+			}
+		});
+		zoomControlsContainer.appendChild(zoomOutBtn);
+
+		const zoomLevelDisplay = document.createElement('span');
+		zoomLevelDisplay.id = 'zoom-level';
+		zoomLevelDisplay.classList.add('zoom-level'); // Add class for styling
+		zoomLevelDisplay.textContent = '100%';
+		zoomControlsContainer.appendChild(zoomLevelDisplay);
+
+		const zoomInBtn = document.createElement('button');
+		zoomInBtn.id = 'zoom-in-btn';
+		zoomInBtn.title = 'Zoom In';
+		zoomInBtn.classList.add(CLASS_NAMES.UG_TOOLBAR_BUTTON);
+		zoomInBtn.innerHTML = '<img src="https://www.svgrepo.com/show/263635/zoom-in.svg" alt="Zoom In">';
+		// **Modified Event Listener:**
+		zoomInBtn.addEventListener('click', () => {
+			if (galleryOverlay) { // Check if galleryOverlay exists
+				const mainImageContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_MAIN_IMAGE_CONTAINER}`);
+				if (mainImageContainer) {
+					zoom(zoomStep, mainImageContainer.offsetWidth / 2, mainImageContainer.offsetHeight / 2); // Zoom in center
+				}
+			}
+		});
+		zoomControlsContainer.appendChild(zoomInBtn);
+
+		const resetZoomBtn = document.createElement('button');
+		resetZoomBtn.id = 'reset-btn';
+		resetZoomBtn.title = 'Reset Zoom & Position';
+		resetZoomBtn.classList.add(CLASS_NAMES.UG_TOOLBAR_BUTTON);
+		resetZoomBtn.textContent = 'Reset';
+		// **Modified Event Listener:**
+		resetZoomBtn.addEventListener('click', resetZoom);
+		zoomControlsContainer.appendChild(resetZoomBtn);
+		// ** --- End Zoom Controls Container --- **
 
 
 		const thumbnailGrid = document.createElement('div');
 		thumbnailGrid.classList.add(CLASS_NAMES.UG_GALLERY_THUMBNAIL_GRID);
 		gridView.appendChild(thumbnailGrid);
 
-		const expandedZoomContainer = document.createElement('div'); // Zoom Container
+		// ** --- Main Image Container (with image-container class) --- **
+		const expandedZoomContainer = document.createElement('div');
 		expandedZoomContainer.classList.add(CLASS_NAMES.UG_GALLERY_ZOOM_CONTAINER);
 		expandedView.appendChild(expandedZoomContainer);
 
 		const mainImageContainer = document.createElement('div');
-		mainImageContainer.classList.add(CLASS_NAMES.UG_MAIN_IMAGE_CONTAINER);
-		expandedZoomContainer.appendChild(mainImageContainer); // Append to zoom container
-		mainImageContainer.addEventListener('click', handleImageClickForZoom); // Click to zoom
+		mainImageContainer.classList.add(CLASS_NAMES.UG_MAIN_IMAGE_CONTAINER, 'image-container'); // **Added 'image-container' class here**
+		expandedZoomContainer.appendChild(mainImageContainer);
 		mainImageContainer.addEventListener('wheel', handleWheelZoom, {
 			passive: false
-		}); // Add wheel zoom listener
+		});
+
+		// Smooth Panning
 		mainImageContainer.addEventListener('mousedown', startDrag);
-		mainImageContainer.addEventListener('mousemove', debouncedDragImage); // Use debounced drag function
-		mainImageContainer.addEventListener('mouseup', endDrag);
-		mainImageContainer.addEventListener('mouseleave', endDrag);
+		document.addEventListener('mousemove', dragImage);
+		document.addEventListener('mouseup', endDrag);
+		document.addEventListener('mouseleave', endDrag);
 
 
 		const mainImage = document.createElement('img');
-		mainImage.classList.add(CLASS_NAMES.UG_MAIN_IMAGE, CLASS_NAMES.UG_GALLERY_ZOOM_IMAGE); // Add zoom image class
+		mainImage.classList.add(CLASS_NAMES.UG_MAIN_IMAGE, CLASS_NAMES.UG_GALLERY_ZOOM_IMAGE, 'gallery-image'); // **Added 'gallery-image' class here**
 		mainImageContainer.appendChild(mainImage);
+		// ** --- End Main Image Container --- **
 
-		const navContainer = document.createElement('div'); // Container for nav buttons
-		navContainer.classList.add(CLASS_NAMES.UG_GALLERY_NAV_CONTAINER); // Add class for styling if needed
-		expandedView.appendChild(navContainer);
-		navContainer.addEventListener('mousedown', (e) => e.stopPropagation()); // Prevent nav buttons interaction from triggering image drag
 
-		const prevButton = document.createElement('button');
-		prevButton.textContent = '←';
-		prevButton.classList.add(CLASS_NAMES.UG_GALLERY_NAV, CLASS_NAMES.UG_GALLERY_PREV, CLASS_NAMES.UG_GALLERY_HIDE);
-		navContainer.appendChild(prevButton); // Append to nav container
-		prevButton.addEventListener('click', prevImage);
-		prevButton.setAttribute('aria-label', 'Previous Image'); // Accessibility
+		const navContainer = document.createElement('div');
+		navContainer.classList.add(CLASS_NAMES.UG_GALLERY_NAV_CONTAINER);
+		expandedView.appendChild(navContainer); // Directly in expandedView
+		navContainer.addEventListener('mousedown', (e) => e.stopPropagation());
 
-		const nextButton = document.createElement('button');
-		nextButton.textContent = '→';
-		nextButton.classList.add(CLASS_NAMES.UG_GALLERY_NAV, CLASS_NAMES.UG_GALLERY_NEXT, CLASS_NAMES.UG_GALLERY_HIDE);
-		navContainer.appendChild(nextButton); // Append to nav container
-		nextButton.addEventListener('click', nextImage);
-		nextButton.setAttribute('aria-label', 'Next Image'); // Accessibility
+		const prevButton = createNavigationButton('prev'); // Use the simplified function
+		navContainer.appendChild(prevButton);
 
+		const nextButton = createNavigationButton('next'); // Use the simplified function
+		navContainer.appendChild(nextButton);
 
 		const fullscreenButton = document.createElement('button');
 		fullscreenButton.textContent = BUTTONS.FULLSCREEN;
-		fullscreenButton.classList.add(CLASS_NAMES.UG_GALLERY_FULLSCREEN, CLASS_NAMES.UG_TOOLBAR_BUTTON); // Added toolbar button class
+		fullscreenButton.classList.add(CLASS_NAMES.UG_GALLERY_FULLSCREEN, CLASS_NAMES.UG_TOOLBAR_BUTTON);
 		toolbar.appendChild(fullscreenButton);
 		fullscreenButton.addEventListener('click', toggleFullscreen);
-		fullscreenButton.setAttribute('aria-label', 'Toggle Fullscreen'); // Accessibility
+		fullscreenButton.setAttribute('aria-label', 'Toggle Fullscreen');
 
 		const counter = document.createElement('div');
 		counter.classList.add(CLASS_NAMES.UG_GALLERY_COUNTER, CLASS_NAMES.UG_GALLERY_HIDE);
-		expandedView.appendChild(counter);
+		expandedView.appendChild(counter); // Directly in expandedView
 
-		// Bottom Stripe Container - NEW CONTAINER
-		const bottomStripeContainer = document.createElement('div');
-		bottomStripeContainer.classList.add(CLASS_NAMES.UG_BOTTOM_STRIPE_CONTAINER);
-		expandedView.appendChild(bottomStripeContainer);
-
-
-		// Thumbnail Strip Container - MOVED TO BOTTOM STRIPE CONTAINER
+		// Thumbnail Strip Container - Directly inside expandedView, no extra wrapper
 		const thumbnailStripContainer = document.createElement('div');
 		thumbnailStripContainer.classList.add(CLASS_NAMES.UG_GALLERY_THUMBNAIL_STRIP_CONTAINER);
-		bottomStripeContainer.appendChild(thumbnailStripContainer);
-		thumbnailStripContainer.addEventListener('mousedown', (e) => e.stopPropagation()); // Prevent thumbnail strip interaction from triggering image drag
-
+		expandedView.appendChild(thumbnailStripContainer); // Directly in expandedView
+		thumbnailStripContainer.addEventListener('mousedown', (e) => e.stopPropagation());
 
 		const thumbnailStrip = document.createElement('div');
 		thumbnailStrip.classList.add(CLASS_NAMES.UG_THUMBNAIL_STRIP);
@@ -909,7 +1072,7 @@
 		gridCloseButton.classList.add(CLASS_NAMES.UG_GALLERY_GRID_CLOSE);
 		gridView.appendChild(gridCloseButton);
 		gridCloseButton.addEventListener('click', closeGallery);
-		gridCloseButton.setAttribute('aria-label', 'Close Gallery'); // Accessibility
+		gridCloseButton.setAttribute('aria-label', 'Close Gallery');
 
 		document.body.appendChild(galleryOverlay);
 
@@ -924,12 +1087,11 @@
 			thumbnailContainer.appendChild(thumbnail);
 			thumbnailGrid.appendChild(thumbnailContainer);
 
-			// Thumbnails for expanded view strip
 			const stripThumbnail = document.createElement('img');
 			stripThumbnail.src = src;
 			stripThumbnail.classList.add(CLASS_NAMES.UG_THUMBNAIL);
 			stripThumbnail.dataset.index = index;
-			stripThumbnail.setAttribute('aria-label', `Thumbnail ${index + 1}`); // Accessibility
+			stripThumbnail.setAttribute('aria-label', `Thumbnail ${index + 1}`);
 			stripThumbnail.addEventListener('click', () => showExpandedView(index));
 			thumbnailStrip.appendChild(stripThumbnail);
 		});
@@ -941,10 +1103,9 @@
 		if (!galleryOverlay) return;
 		galleryOverlay.querySelector(`.${CLASS_NAMES.UG_GALLERY_GRID_VIEW}`).classList.remove(CLASS_NAMES.UG_GALLERY_HIDE);
 		galleryOverlay.querySelector(`.${CLASS_NAMES.UG_GALLERY_EXPANDED_VIEW}`).classList.add(CLASS_NAMES.UG_GALLERY_HIDE);
-		resetZoom(); // Reset zoom when going back to grid
+		resetZoom();
 		state.isZoomed = false;
-		updateZoomToggleButton(); // Update zoom toggle button state
-		state.controlsVisible = true; // Show controls when returning to grid
+		state.controlsVisible = true;
 	};
 
 	const showExpandedView = (index) => {
@@ -955,7 +1116,6 @@
 		const prevButton = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_GALLERY_PREV}`);
 		const nextButton = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_GALLERY_NEXT}`);
 		const thumbnailStrip = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_THUMBNAIL_STRIP}`);
-		const zoomControls = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_ZOOM_CONTROLS}`);
 
 		if (index < 0 || index >= state.fullSizeImageSrcs.length) {
 			console.error("Invalid image index:", index);
@@ -965,41 +1125,37 @@
 		const imageUrl = state.fullSizeImageSrcs[index];
 
 		mainImage.onload = () => {
-			// Image loaded successfully
+			initializeImage(mainImage, galleryOverlay.querySelector(`.${CLASS_NAMES.UG_MAIN_IMAGE_CONTAINER}`));
 		};
 
 		mainImage.onerror = () => {
 			console.error("Error loading image:", imageUrl);
-			mainImage.src = ''; // Clear src to prevent retries
+			mainImage.src = '';
 			mainImage.alt = "Error loading image";
 		};
 
 		mainImage.src = imageUrl;
 		mainImage.alt = `Image ${index + 1} of ${state.fullSizeImageSrcs.length}`;
-		resetZoom(); // Reset zoom when loading a new image
+		resetZoom();
 		state.isZoomed = false;
-		updateZoomToggleButton(); // Update zoom toggle button state
-		state.controlsVisible = true; // Ensure controls are visible when image changes
+		state.controlsVisible = true;
 
 		counter.textContent = `${index + 1} / ${state.fullSizeImageSrcs.length}`;
 
 		state.currentGalleryIndex = index;
 
-		galleryOverlay.querySelector(`.${CLASS_NAMES.UG_GALLERY_GRID_VIEW}`).classList.add(CLASS_NAMES.UG_GALLERY_HIDE); // Hide grid view
-		galleryOverlay.querySelector(`.${CLASS_NAMES.UG_GALLERY_EXPANDED_VIEW}`).classList.remove(CLASS_NAMES.UG_GALLERY_HIDE); // Show expanded view
-		counter.classList.remove(CLASS_NAMES.UG_GALLERY_HIDE); // Show counter
-		prevButton.classList.remove(CLASS_NAMES.UG_GALLERY_HIDE); // Show nav buttons
-		nextButton.classList.remove(CLASS_NAMES.UG_GALLERY_HIDE);
-		zoomControls.classList.remove(CLASS_NAMES.UG_GALLERY_HIDE); // Show zoom controls if zoom is enabled
-		thumbnailStrip.scrollLeft = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_THUMBNAIL}[data-index="${index}"]`).offsetLeft - thumbnailStrip.offsetWidth / 2 + 50; // Scroll to selected thumbnail
+		galleryOverlay.querySelector(`.${CLASS_NAMES.UG_GALLERY_GRID_VIEW}`).classList.add(CLASS_NAMES.UG_GALLERY_HIDE);
+		galleryOverlay.querySelector(`.${CLASS_NAMES.UG_GALLERY_EXPANDED_VIEW}`).classList.remove(CLASS_NAMES.UG_GALLERY_HIDE);
+		counter.classList.remove(CLASS_NAMES.UG_GALLERY_HIDE);
 
-		// Update thumbnail strip selection
+		// Scroll the thumbnail strip
+		thumbnailStrip.scrollLeft = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_THUMBNAIL}[data-index="${index}"]`).offsetLeft - thumbnailStrip.offsetWidth / 2 + 50;
+
 		galleryOverlay.querySelectorAll(`.${CLASS_NAMES.UG_THUMBNAIL}`).forEach(thumb => {
 			thumb.classList.remove('selected');
 		});
 		galleryOverlay.querySelector(`.${CLASS_NAMES.UG_THUMBNAIL}[data-index="${index}"]`).classList.add('selected');
 
-		// Update nav button visibility based on index
 		prevButton.classList[index === 0 ? 'add' : 'remove'](CLASS_NAMES.UG_GALLERY_HIDE);
 		nextButton.classList[index === state.fullSizeImageSrcs.length - 1 ? 'add' : 'remove'](CLASS_NAMES.UG_GALLERY_HIDE);
 	};
@@ -1047,114 +1203,66 @@
 		}
 	};
 
-	// Zoom functions
-	const toggleZoom = () => {
-		if (!state.zoomEnabled) return;
 
-		state.isZoomed = !state.isZoomed;
-		updateZoomToggleButton();
-		const zoomControls = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_ZOOM_CONTROLS}`);
-
-		if (state.isZoomed) {
-			zoomControls.classList.remove(CLASS_NAMES.UG_GALLERY_HIDE);
-		} else {
-			zoomControls.classList.add(CLASS_NAMES.UG_GALLERY_HIDE);
-			resetZoom();
-		}
-	};
-
-	const updateZoomToggleButton = () => {
-		if (elements.zoomToggleButton) {
-			elements.zoomToggleButton.textContent = state.isZoomed ? BUTTONS.GRID_VIEW : BUTTONS.EXPANDED_VIEW;
-			elements.zoomToggleButton.setAttribute('aria-label', state.isZoomed ? 'Grid View' : 'Expanded View');
-		}
-	};
-
-	const zoomIn = () => {
-		if (!state.zoomEnabled || !state.isZoomed) return;
-		state.zoomScale = Math.min(state.zoomScale + 0.25, 2);
-		applyZoom();
-	};
-
-	const zoomOut = () => {
-		if (!state.zoomEnabled || !state.isZoomed) return;
-		state.zoomScale = Math.max(state.zoomScale - 0.25, 0.25);
-		applyZoom();
-	};
-
-	const resetZoom = () => {
-		state.zoomScale = 1;
-		state.imageOffset = {
-			x: 0,
-			y: 0
-		};
-		applyZoom();
-	};
-
+	// --- applyZoom ---
 	const applyZoom = () => {
 		const mainImageContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_MAIN_IMAGE_CONTAINER}`);
-		mainImageContainer.style.transform = `scale(${state.zoomScale}) translate(${state.imageOffset.x}px, ${state.imageOffset.y}px)`;
-		if (state.isZoomed && state.zoomScale > 1) {
-			mainImageContainer.classList.add(CLASS_NAMES.UG_GRABBING_CURSOR);
+		if (!mainImageContainer) return;
+
+		// Apply the transform. Order is VERY important: translate THEN scale.
+		mainImageContainer.style.transform = `translate(${state.imageOffset.x}px, ${state.imageOffset.y}px) scale(${state.zoomScale})`;
+
+		// Update cursor (grab/grabbing).
+		mainImageContainer.classList.toggle(CLASS_NAMES.UG_GRABBING_CURSOR, state.zoomScale > 1);
+	};
+
+	// --- initializeImage ---
+	const initializeImage = (image, container) => {
+		const containerWidth = container.offsetWidth;
+		const containerHeight = container.offsetHeight;
+		const imageWidth = image.naturalWidth;
+		const imageHeight = image.naturalHeight;
+
+		const aspectRatio = imageWidth / imageHeight;
+		let newWidth, newHeight;
+
+		if (aspectRatio > containerWidth / containerHeight) {
+			newWidth = containerWidth;
+			newHeight = containerWidth / aspectRatio;
 		} else {
-			mainImageContainer.classList.remove(CLASS_NAMES.UG_GRABBING_CURSOR);
+			newHeight = containerHeight;
+			newWidth = containerHeight * aspectRatio;
 		}
-	};
 
-	const handleImageClickForZoom = () => {
-		if (state.zoomEnabled) {
-			toggleZoom();
-		}
-	};
+		const initialScale = newWidth / imageWidth;
+		const translateX = (containerWidth - newWidth) / 2;
+		const translateY = (containerHeight - newHeight) / 2;
 
-	const handleWheelZoom = (event) => {
-		if (!state.zoomEnabled || !state.isZoomed) return;
-		event.preventDefault();
-		const delta = event.deltaY > 0 ? -0.25 : 0.25;
-		state.zoomScale = Math.max(0.25, Math.min(state.zoomScale + delta, 2));
+		// Set initial state (VERY IMPORTANT)
+		state.zoomScale = initialScale;
+		state.imageOffset.x = translateX;
+		state.imageOffset.y = translateY;
+
+		// Apply initial transform using state (for consistency)
 		applyZoom();
 	};
-
 	const toggleControlsVisibility = () => {
 		state.controlsVisible = !state.controlsVisible;
 	};
 
-	// Dragging functions
-	const startDrag = (event) => {
-		if (!state.isZoomed || state.zoomScale <= 1) return;
-		state.isDragging = true;
-		state.dragStartPosition = {
-			x: event.clientX,
-			y: event.clientY
-		};
-		galleryOverlay.querySelector(`.${CLASS_NAMES.UG_MAIN_IMAGE_CONTAINER}`).style.cursor = 'grabbing';
+	const handleWindowResize = () => {
+		if (!galleryOverlay) return;
+		const mainImageContainer = galleryOverlay.querySelector(`.${CLASS_NAMES.UG_MAIN_IMAGE_CONTAINER}`);
+		const newWidth = mainImageContainer.offsetWidth;
+		const newHeight = mainImageContainer.offsetHeight;
+
+		if (newWidth !== state.lastWidth || newHeight !== state.lastHeight) {
+			state.lastWidth = newWidth;
+			state.lastHeight = newHeight;
+			resetZoom();
+			applyZoom();
+		}
 	};
-
-	const dragImage = (event) => {
-		if (!state.isDragging) return;
-
-		const deltaX = event.clientX - state.dragStartPosition.x;
-		const deltaY = event.clientY - state.dragStartPosition.y;
-
-		state.imageOffset = {
-			x: state.imageOffset.x + deltaX,
-			y: state.imageOffset.y + deltaY
-		};
-		applyZoom();
-		state.dragStartPosition = {
-			x: event.clientX,
-			y: event.clientY
-		};
-	};
-
-	// Debounced drag function
-	const debouncedDragImage = debounce(dragImage, DEBOUNCE_DELAY);
-
-	const endDrag = () => {
-		state.isDragging = false;
-		galleryOverlay.querySelector(`.${CLASS_NAMES.UG_MAIN_IMAGE_CONTAINER}`).style.cursor = 'grab';
-	};
-
 
 	const handleGalleryKey = (event) => {
 		if (!isPostPage()) return;
@@ -1164,7 +1272,7 @@
 		} else if (state.isGalleryMode && !galleryOverlay.querySelector(`.${CLASS_NAMES.UG_GALLERY_GRID_VIEW}`).classList.contains(CLASS_NAMES.UG_GALLERY_HIDE)) {
 			return;
 		} else if (state.isGalleryMode) {
-			if (['Escape', state.prevImageKey, state.nextImageKey, 'ArrowLeft', 'ArrowRight', '+', '-', 'k', 'l'].includes(event.key)) {
+			if (['Escape', state.prevImageKey, state.nextImageKey, 'ArrowLeft', 'ArrowRight', 'k', 'l'].includes(event.key)) {
 				event.preventDefault();
 				switch (event.key) {
 					case 'Escape':
@@ -1180,24 +1288,17 @@
 					case 'ArrowRight':
 						nextImage();
 						break;
-					case '+':
-						zoomIn();
-						break;
-					case '-':
-						zoomOut();
-						break;
 				}
 			}
 		}
 	};
 
-	// --- Keyboard event handlers ---
 	const handleSettingsKey = (event) => {
 		if (state.settingsOpen && event.key === 'Escape') {
 			state.settingsOpen = false;
 		}
 	};
-	// Function to simulate button clicks for all images
+
 	const clickAllImageButtons = (action) => {
 		const fileDivs = document.querySelectorAll(SELECTORS.FILE_DIVS);
 		const parentDiv = fileDivs[0]?.parentNode;
@@ -1213,7 +1314,6 @@
 		});
 	};
 
-	// --- Downloading and Post Actions ---
 	const downloadAllImages = async () => {
 		const images = document.querySelectorAll(SELECTORS.IMAGE_LINK);
 		const attachmentLinks = document.querySelectorAll(SELECTORS.ATTACHMENT_LINK);
@@ -1348,7 +1448,6 @@
 		}
 	};
 
-	// Function to download a single image by its index
 	const downloadImageByIndex = (index) => {
 		const imgLink = document.querySelectorAll(SELECTORS.IMAGE_LINK)[index];
 
@@ -1388,10 +1487,10 @@
 		}
 	};
 
-	const initPostActions = () => {
+	const initPostActions = () => { // Remains largely unchanged
 		state.postActionsInitialized = true;
 		if (!isPostPage() || state.currentPostUrl === window.location.href) return;
-		cleanupPostActions(); // Clean up before doing anything
+		cleanupPostActions();
 
 		const currentPageUrl = window.location.href;
 
@@ -1418,7 +1517,7 @@
 
 			if (!elements.postActions.querySelector(`.${CLASS_NAMES.UG_BUTTON}`)) {
 				const downloadAllButton = createToggleButton(BUTTONS.DOWNLOAD_ALL, downloadAllImages);
-				const galleryButton = createToggleButton('Loading Gallery...', toggleGallery, true); // Initially disabled, toggleGallery function
+				const galleryButton = createToggleButton('Loading Gallery...', toggleGallery, true);
 				elements.galleryButton = galleryButton;
 
 				const heightButton = createToggleButton(BUTTONS.HEIGHT, () => clickAllImageButtons('height'));
@@ -1426,11 +1525,10 @@
 				const fullButton = createToggleButton(BUTTONS.FULL, () => clickAllImageButtons('full'));
 
 				elements.postActions.append(heightButton, widthButton, fullButton, downloadAllButton, galleryButton);
-				elements.galleryButton.style.display = 'inline-block'; // Always show
+				elements.galleryButton.style.display = 'inline-block';
 			}
 		}
 
-		// settings button
 		if (!elements.settingsButton) {
 			const settingsButton = document.createElement('button');
 			settingsButton.textContent = BUTTONS.SETTINGS;
@@ -1438,8 +1536,8 @@
 			settingsButton.addEventListener('click', () => {
 				state.settingsOpen = !state.settingsOpen;
 			});
-			document.body.appendChild(settingsButton); // Append to body
-			elements.settingsButton = settingsButton; // Keep track of it
+			document.body.appendChild(settingsButton);
+			elements.settingsButton = settingsButton;
 		}
 
 		const fileDivs = document.querySelectorAll(SELECTORS.FILE_DIVS);
@@ -1452,7 +1550,7 @@
 			existingButtonGroups.forEach(buttonGroup => {
 				const imageContainer = buttonGroup.nextElementSibling;
 				if (!imageContainer || !state.displayedImages.some(img => img.closest(SELECTORS.THUMBNAIL) === imageContainer)) {
-					buttonGroup.remove(); // Remove only if not associated with a current image
+					buttonGroup.remove();
 				}
 			});
 
@@ -1468,10 +1566,10 @@
 					imageContainer.parentNode.removeChild(imageContainer);
 					buttonContainer.parentNode.removeChild(buttonContainer);
 
-					state.virtualGallery.splice(index, 1); // Remove from virtual gallery
-					state.originalImageSrcs.splice(index, 1); // And original srcs
+					state.virtualGallery.splice(index, 1);
+					state.originalImageSrcs.splice(index, 1);
 					state.totalImages--;
-					state.displayedImages.splice(index, 1); // and displayed images
+					state.displayedImages.splice(index, 1);
 					state.notification = `Images Done Loading! Total: ${state.totalImages}`;
 					state.notificationType = 'success';
 				};
@@ -1489,17 +1587,17 @@
 							text: BUTTONS.FULL,
 							action: () => imageActions.full(img),
 							name: 'FULL'
-						}, // Add name for hiding
+						},
 						{
 							text: BUTTONS.DOWNLOAD,
 							action: () => downloadImageByIndex(index),
 							name: 'DOWNLOAD'
-						}, // Add name for hiding
+						},
 						{
 							text: BUTTONS.REMOVE,
 							action: removeImage,
 							name: 'REMOVE'
-						} // Add name for hiding
+						}
 					]);
 
 					const thumbnail = img.closest(SELECTORS.THUMBNAIL);
@@ -1507,7 +1605,7 @@
 						thumbnail.parentNode.insertBefore(newDiv, thumbnail);
 					}
 				}
-				img.addEventListener('click', () => toggleGallery()); // Open gallery on thumbnail click
+				img.addEventListener('click', () => toggleGallery());
 			});
 
 			parentDiv.addEventListener('click', delegatedImageClickHandler);
@@ -1535,7 +1633,6 @@
 		state.currentPostUrl = currentPageUrl;
 	};
 
-	// Function to update the gallery button state
 	const updateGalleryButton = (enabled) => {
 		if (elements.galleryButton) {
 			elements.galleryButton.textContent = enabled ? BUTTONS.GALLERY : 'Loading Gallery...';
@@ -1544,7 +1641,6 @@
 		}
 	};
 
-	// Function to clean up post actions and UI elements
 	const cleanupPostActions = () => {
 		if (elements.postActions) {
 			elements.postActions.querySelectorAll(`.${CLASS_NAMES.UG_BUTTON}`).forEach(button => button.remove());
@@ -1570,7 +1666,6 @@
 		elements.postActions = null;
 	};
 
-	// Function to resize all images
 	const resizeAllImages = (action) => {
 		document
 			.querySelectorAll(SELECTORS.FILES_IMG)
@@ -1581,7 +1676,6 @@
 			});
 	};
 
-	// Function to resize a single image
 	const resizeImage = (evt) => {
 		const action = Object.keys(BUTTONS)
 			.find((key) => BUTTONS[key] === evt.currentTarget.textContent)
@@ -1595,7 +1689,6 @@
 		}
 	};
 
-	// Function to show the loading overlay
 	const showLoadingOverlay = (text) => {
 		if (!elements.loadingOverlay) {
 			elements.loadingOverlay = createLoadingOverlay(text);
@@ -1605,7 +1698,6 @@
 		}
 	};
 
-	// Function to update the loading overlay text
 	const updateLoadingOverlayText = (text) => {
 		if (elements.loadingOverlay) {
 			const loadingText = elements.loadingOverlay.querySelector('div');
@@ -1615,7 +1707,6 @@
 		}
 	};
 
-	// Function to hide the loading overlay
 	const hideLoadingOverlay = () => {
 		if (elements.loadingOverlay) {
 			elements.loadingOverlay.remove();
@@ -1623,8 +1714,6 @@
 		}
 	};
 
-	// --- Notification System ---
-	// Function to create the notification area
 	const createNotificationArea = () => {
 		const notificationArea = document.createElement('div');
 		notificationArea.id = CLASS_NAMES.NOTIFICATION_AREA;
@@ -1633,7 +1722,6 @@
 		return notificationArea;
 	};
 
-	// Function to create a notification
 	const createNotification = () => {
 		let notificationArea = document.getElementById(CLASS_NAMES.NOTIFICATION_AREA);
 		if (!notificationArea) {
@@ -1667,7 +1755,6 @@
 		return notificationContainer;
 	};
 
-	// Function to show a notification
 	const showNotification = (message, type = 'info') => {
 		if (!state.notificationsEnabled && type !== 'error') return;
 		let notificationArea = document.getElementById(CLASS_NAMES.NOTIFICATION_AREA);
@@ -1693,11 +1780,11 @@
 			notificationContainer.classList.remove('ug-slide-out');
 		} else {
 			notificationContainer.classList.remove('ug-slide-in', 'ug-slide-out');
+			notificationContainer.style.display = 'flex';
 		}
 		notificationContainer.style.display = 'flex';
 	};
 
-	// Function to hide a notification
 	const hideNotification = () => {
 		const notificationContainer = document.getElementById(CLASS_NAMES.NOTIFICATION_CONTAINER);
 		if (!notificationContainer) return;
@@ -1714,7 +1801,6 @@
 		}
 	};
 
-	// --- Error Handling Functions ---
 	const handleImageError = (mediaSrc, reject) => {
 		console.error(`Image failed to load: ${mediaSrc}`);
 		state.loadedImages++;
@@ -1737,10 +1823,9 @@
 		state.loadedImages++;
 		state.notification = 'Error loading some media.';
 		state.notificationType = 'error';
+		reject();
 	};
 
-
-	// --- Mutation Observer and Initialization ---
 	const isPostPage = () => {
 		const url = window.location.href;
 		const validPatterns = [
@@ -1764,7 +1849,8 @@
 
 	let uiCache = {};
 	let previousPageUrl = null;
-	const injectUI = debounce(() => {
+
+	const injectUI = () => { // Remains largely unchanged
 		if (!isPostPage()) {
 			state.postActionsInitialized = false;
 			state.notification = null;
@@ -1850,7 +1936,7 @@
 			state.currentPostUrl = currentPageUrl;
 			previousPageUrl = currentPageUrl;
 		}
-	}, DEBOUNCE_DELAY);
+	};
 
 	const init = () => {
 		if (!galleryKeyListenerAttached) {
@@ -1861,6 +1947,9 @@
 		if (!document.getElementById(CLASS_NAMES.NOTIFICATION_AREA) && state.notificationAreaVisible) {
 			createNotificationArea();
 		}
+
+		window.addEventListener('resize', handleWindowResize);
+
 		const targetNode = document.body;
 		const config = {
 			childList: true,
