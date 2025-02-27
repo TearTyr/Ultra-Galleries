@@ -1,40 +1,101 @@
-/* Ultra Galleries */
+/* ====================================================
+   Ultra Galleries - Enhanced CSS
+   ==================================================== */
 
+/* ------------------- VARIABLES ------------------- */
 :root {
+  /* Base colors */
   --ug-main-bg-color: rgba(0, 0, 0, 0.85);
   --ug-overlay-bg-color: rgba(255, 255, 255, 0.05);
   --ug-border-color: rgba(255, 255, 255, 0.2);
   --ug-text-color: #ddd;
   --ug-button-bg-color: #444;
+  --ug-button-hover-bg-color: rgba(0, 0, 0, 0.3);
   --ug-button-hover-opacity: 0.9;
-  --ug-transition-duration: 0.2s;
-  --ug-transition-ease: ease-out;
+  
+  /* Notifications */
   --ug-notification-info: rgba(0, 0, 0, 0.75);
   --ug-notification-success: rgba(50, 150, 80, 0.9);
   --ug-notification-error: rgba(180, 70, 70, 0.9);
+  
+  /* Settings */
   --ug-settings-bg-color: #222;
   --ug-settings-input-bg-color: #333;
   --ug-settings-input-border-color: #555;
   --ug-settings-text-color: #ddd;
   --ug-settings-header-color: #eee;
   --ug-settings-ribbon-active-color: #a0a0a0;
+  
+  /* Dimensions */
   --ug-fullscreen-nav-size: 50px;
   --ug-fullscreen-icon-size: 35px;
   --ug-thumbnail-preview-scale: 2;
   --ug-thumbnail-size: 120px;
   --ug-bottom-stripe-height: 60px;
-  /* Consistent height */
   --ug-gallery-modal-max-width: 95%;
   --ug-icon-size: 24px;
   --ug-expanded-thumbnail-size: 70px;
-  --ug-settings-font-family: 'Roboto', sans-serif;
+  
+  /* Animations */
+  --ug-transition-duration: 0.2s;
+  --ug-transition-ease: ease-out;
+  --ug-transition-fast: 0.15s ease;
+  --ug-transition-medium: 0.3s ease;
+  
+  /* Focus */
+  --ug-focus-ring-color: #4d90fe;
+  --ug-focus-ring-width: 2px;
+  
+  /* Selected item */
+  --ug-selected-color: #4CAF50;
+  --ug-selected-hover-color: #66BB6A;
 }
 
-body {
-  font-family: sans-serif;
+/* Dark mode detection - will make colors slightly different when in dark mode */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ug-main-bg-color: rgba(0, 0, 0, 0.9);
+    --ug-settings-bg-color: #1a1a1a;
+    --ug-settings-input-bg-color: #2a2a2a;
+  }
 }
 
-/* General Icon Styling */
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ug-transition-duration: 0s;
+    --ug-transition-fast: 0s;
+    --ug-transition-medium: 0s;
+  }
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  :root {
+    --ug-thumbnail-size: 90px;
+    --ug-bottom-stripe-height: 50px;
+    --ug-icon-size: 20px;
+  }
+}
+
+/* ------------------- BASE STYLES ------------------- */
+.ug-gallery-overlay *,
+.ug-settings-overlay *,
+.ug-notification-container * {
+  box-sizing: border-box;
+}
+
+/* Make all focusable elements have a visible focus state */
+.ug-gallery-overlay button:focus-visible,
+.ug-gallery-overlay a:focus-visible,
+.ug-settings-overlay button:focus-visible,
+.ug-settings-overlay a:focus-visible,
+.ug-settings-overlay input:focus-visible {
+  outline: var(--ug-focus-ring-width) solid var(--ug-focus-ring-color);
+  outline-offset: 2px;
+}
+
+/* ------------------- ICON STYLING ------------------- */
 .ug-gallery-close::before,
 .ug-gallery-fullscreen::before,
 .ug-gallery-nav::before,
@@ -53,33 +114,121 @@ body {
   vertical-align: middle;
 }
 
-/* Animation Utility Classes */
-.fade-in,
+/* ------------------- ANIMATIONS ------------------- */
+.fade-in {
+  animation: fade-in 0.3s ease forwards;
+}
+
 .fade-out {
-  animation: var(--ug-animation-fade-in);
+  animation: fade-out 0.3s ease forwards;
 }
 
 @keyframes fade-in {
-  from {
-      opacity: 0;
-  }
-
-  to {
-      opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes fade-out {
-  from {
-      opacity: 1;
-  }
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
 
+/* Slide In/Out Animations */
+.ug-slide-in {
+  animation: ug-slide-in 0.5s ease-in-out forwards;
+}
+
+.ug-slide-out {
+  animation: ug-slide-out 0.5s ease-in-out forwards;
+  opacity: 0;
+  transform: translateY(100%);
+}
+
+@keyframes ug-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
   to {
-      opacity: 0;
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-/* Gallery Overlay Styles */
+@keyframes ug-slide-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+}
+
+/* Loading animation */
+@keyframes loading-pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+.loading {
+  position: relative;
+}
+
+.loading::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  animation: loading-pulse 1.5s infinite;
+}
+
+.loading::before {
+  content: "Loading...";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  z-index: 1;
+  font-size: 16px;
+}
+
+/* Error state */
+.error {
+  position: relative;
+}
+
+.error::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(180, 70, 70, 0.5);
+}
+
+.error::before {
+  content: "Error loading image";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  z-index: 1;
+  font-size: 16px;
+}
+
+/* ------------------- GALLERY OVERLAY ------------------- */
 .ug-gallery-overlay {
   position: fixed;
   top: 0;
@@ -94,18 +243,21 @@ body {
   padding: 0;
   background-color: var(--ug-main-bg-color);
   backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  transition: background-color var(--ug-transition-medium);
 }
 
 .ug-gallery-overlay.ug-fullscreen-overlay {
   background-color: black;
   backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .ug-fullscreen {
   overflow: hidden !important;
 }
 
-/* Gallery Container Styles */
+/* ------------------- GALLERY CONTAINER ------------------- */
 .ug-gallery-container {
   position: relative;
   width: 95vw;
@@ -119,7 +271,9 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: max-width 0.3s ease, max-height 0.3s ease, width 0.3s ease, height 0.3s ease;
+  transition: max-width var(--ug-transition-medium), max-height var(--ug-transition-medium), 
+              width var(--ug-transition-medium), height var(--ug-transition-medium);
+  will-change: width, height;
 }
 
 /* Fullscreen Gallery Container */
@@ -130,14 +284,30 @@ body {
   height: 100vh;
   border-radius: 0;
   box-shadow: none;
+  border: none;
 }
 
-/* Gallery Grid View */
+/* ------------------- GRID VIEW ------------------- */
 .ug-gallery-grid-view {
   flex-grow: 1;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+.ug-gallery-grid-view::-webkit-scrollbar {
+  width: 8px;
+}
+
+.ug-gallery-grid-view::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+}
+
+.ug-gallery-grid-view::-webkit-scrollbar-track {
+  background-color: transparent;
 }
 
 .ug-gallery-thumbnail-grid {
@@ -156,11 +326,18 @@ body {
   overflow: hidden;
   border-radius: 8px;
   background-color: #222;
-  transition: transform 0.2s ease-out;
+  transition: transform var(--ug-transition-fast);
+  will-change: transform;
+  position: relative;
 }
 
 .ug-gallery-thumbnail-grid-container:hover {
   transform: scale(1.05);
+  z-index: 2;
+}
+
+.ug-gallery-thumbnail-grid-container:focus-within {
+  box-shadow: 0 0 0 2px var(--ug-focus-ring-color);
 }
 
 .ug-gallery-thumbnail {
@@ -171,7 +348,7 @@ body {
   will-change: transform;
 }
 
-/* Expanded View */
+/* ------------------- EXPANDED VIEW ------------------- */
 .ug-gallery-expanded-view {
   position: relative;
   display: flex;
@@ -181,7 +358,7 @@ body {
   overflow: hidden;
 }
 
-/* Toolbar Styles */
+/* ------------------- TOOLBAR ------------------- */
 .ug-gallery-toolbar {
   position: absolute;
   top: 10px;
@@ -189,8 +366,16 @@ body {
   display: flex;
   gap: 10px;
   z-index: 11;
-  transition: opacity 0.3s ease;
+  background-color: rgba(0, 0, 0, 0.5);
+  border-radius: 8px;
+  padding: 5px;
+  flex-direction: row; /* Ensure horizontal layout */
   align-items: center;
+}
+
+.ug-controls-hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .ug-toolbar-button {
@@ -200,39 +385,87 @@ body {
   font-size: 1.5em;
   cursor: pointer;
   opacity: 0.8;
-  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
+  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease), 
+              background-color var(--ug-transition-duration) var(--ug-transition-ease);
   padding: 8px;
   border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .ug-toolbar-button:hover {
   opacity: 1;
-  background-color: rgba(0, 0, 0, 0.3);
+  background-color: var(--ug-button-hover-bg-color);
 }
 
-/* Main Image Container */
-.ug-main-image-container {
+/* Zoom controls */
+.zoom-controls {
   display: flex;
   align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  width: 100%;
-  height: calc(100% - var(--ug-bottom-stripe-height));
-  /* Subtract stripe height */
-  transition: transform 0.3s ease-out;
-  transform-origin: center center;
+  gap: 10px;
+}
+
+.zoom-controls button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 5px;
+}
+
+.zoom-controls img {
+  width: 20px;
+  height: 20px;
+  vertical-align: middle;
+}
+
+.zoom-level {
+  font-size: 0.9em;
+  color: var(--ug-text-color);
+  min-width: 45px;
+  text-align: center;
+}
+
+/* ------------------- MAIN IMAGE CONTAINER ------------------- */
+.ug-main-image-container {
   cursor: grab;
   touch-action: none;
-  /* Prevent scroll interference - GOOD! */
+  will-change: transform;
   transform: translateZ(0);
+  transition: transform 0.08s ease-out; /* Small transition for smoother feel */
 }
 
 .ug-main-image-container.ug-grabbing {
-  cursor: grabbing;
+  cursor: grabbing !important;
 }
 
-/* Main Image */
-.ug-main-image {
+/* Add visual indicator that image can be panned when zoomed */
+.ug-main-image-container::after {
+  content: "";
+  position: absolute;
+  top: 15px;
+  left: 15px;
+  width: 30px;
+  height: 30px;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" opacity="0.7"><path d="M10 9h4V6h3l-5-5-5 5h3v3zm-1 1H6V7l-5 5 5 5v-3h3v-4zm14 2l-5-5v3h-3v4h3v3l5-5zm-9 3h-4v3H7l5 5 5-5h-3v-3z"/></svg>');
+  background-size: contain;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.ug-main-image-container.zoomed::after {
+  opacity: 0.6; /* Only show when zoomed */
+}
+
+/* Hide the indicator when dragging */
+.ug-main-image-container.ug-grabbing::after {
+  opacity: 0;
+}
+
+/* ------------------- MAIN IMAGE ------------------- */
+.ug-main-image, .gallery-image {
   object-fit: contain;
   border-radius: 8px;
   background-color: #111;
@@ -240,33 +473,27 @@ body {
   width: auto;
   height: auto;
   max-width: none;
-  /* Remove max-width and max-height */
   max-height: none;
-  transition: transform 0.3s ease-out;
-  /* Add transition for smoothness */
   will-change: transform;
 }
 
-/* Navigation Container */
+/* ------------------- NAVIGATION CONTAINER ------------------- */
 .ug-gallery-nav-container {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: calc(100% - var(--ug-bottom-stripe-height));
-  /* Match main image container */
   display: flex;
   justify-content: space-between;
   align-items: center;
   pointer-events: none;
   padding: 0 20px;
-  /* Add padding */
   box-sizing: border-box;
-  /* Include padding in width calculation */
-
+  z-index: 2;
 }
 
-/* Navigation Buttons */
+/* ------------------- NAVIGATION BUTTONS ------------------- */
 .ug-gallery-nav {
   background: rgba(0, 0, 0, 0.7);
   border: none;
@@ -274,16 +501,18 @@ body {
   font-size: 3em;
   cursor: pointer;
   padding: 0.5em;
-  /* Reduced padding */
   border-radius: 50%;
-  /* Keep circular */
   opacity: 0.8;
-  transition: opacity 0.3s ease;
+  transition: opacity var(--ug-transition-medium), 
+              background-color var(--ug-transition-medium);
   z-index: 12;
   pointer-events: auto;
   line-height: 1;
-  /* Ensure icon is vertically centered */
-
+  min-width: 1.5em;
+  min-height: 1.5em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .ug-gallery-nav:hover {
@@ -293,31 +522,23 @@ body {
 
 .ug-gallery-prev {
   left: 0;
-  /* Position relative to the padding of the container */
 }
 
 .ug-gallery-next {
   right: 0;
-  /* Position relative to the padding of the container */
 }
 
-/* Close and Fullscreen Buttons */
+/* ------------------- CLOSE & FULLSCREEN BUTTONS ------------------- */
 .ug-gallery-close,
 .ug-gallery-fullscreen {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  background: none;
-  border: none;
-  color: var(--ug-text-color);
-  font-size: 2em;
-  cursor: pointer;
-  opacity: 0.8;
-  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
-  padding: 8px;
-  border-radius: 5px;
-  z-index: 10;
+  position: static; /* Remove absolute positioning */
+  top: auto;
+  right: auto;
+  left: auto;
+  z-index: auto;
+  margin: 0 5px; /* Add some spacing between buttons */
 }
+
 
 .ug-gallery-fullscreen {
   left: 10px;
@@ -327,10 +548,10 @@ body {
 .ug-gallery-close:hover,
 .ug-gallery-fullscreen:hover {
   opacity: 1;
-  background-color: rgba(0, 0, 0, 0.3);
+  background-color: var(--ug-button-hover-bg-color);
 }
 
-/* Grid View Close Button */
+/* ------------------- GRID VIEW CLOSE BUTTON ------------------- */
 .ug-gallery-grid-close {
   position: absolute;
   top: 10px;
@@ -341,37 +562,39 @@ body {
   font-size: 2em;
   cursor: pointer;
   opacity: 0.8;
-  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
+  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease),
+              background-color var(--ug-transition-duration) var(--ug-transition-ease);
   padding: 8px;
   border-radius: 5px;
+  z-index: 10;
 }
 
 .ug-gallery-grid-close:hover {
   opacity: 1;
-  background-color: rgba(0, 0, 0, 0.3);
+  background-color: var(--ug-button-hover-bg-color);
 }
 
-/* Image Counter */
+/* ------------------- IMAGE COUNTER ------------------- */
 .ug-gallery-counter {
   position: absolute;
-  bottom: 10px;
-  /* Position above the thumbnail strip */
+  bottom: calc(var(--ug-bottom-stripe-height) + 10px);
   left: 50%;
-  transform: translate(-50%, -150%);
-  /* Adjusted for new positioning */
+  transform: translateX(-50%);
   color: var(--ug-text-color);
   font-size: 1em;
   opacity: 0.7;
   z-index: 10;
   background-color: rgba(0, 0, 0, 0.6);
-  /* Add background for visibility */
   padding: 5px 10px;
-  /* Add padding */
   border-radius: 5px;
-  /* Add border-radius */
+  transition: opacity var(--ug-transition-medium);
 }
 
-/* Thumbnail Strip */
+.ug-controls-hidden .ug-gallery-counter {
+  opacity: 0;
+}
+
+/* ------------------- THUMBNAIL STRIP ------------------- */
 .ug-gallery-thumbnail-strip-container {
   position: absolute;
   bottom: 0;
@@ -379,39 +602,44 @@ body {
   width: 100%;
   height: var(--ug-bottom-stripe-height);
   background-color: rgba(0, 0, 0, 0.6);
-  /* Consistent with bottom stripe */
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   box-sizing: border-box;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   transform: translateZ(0);
+  z-index: 3;
+  transition: transform var(--ug-transition-medium), opacity var(--ug-transition-medium);
 }
 
-
-/* Bottom Stripe - Now just a container for the thumbnail strip */
-.ug-bottom-stripe-container {
-  width: 100%;
-  height: var(--ug-bottom-stripe-height);
-  /* Use consistent height */
-  background-color: rgba(0, 0, 0, 0.6);
-  /* Keep consistent */
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  box-sizing: border-box;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  /* Stack children vertically */
+.ug-controls-hidden .ug-gallery-thumbnail-strip-container {
+  transform: translateY(100%);
+  opacity: 0;
 }
-
 
 .ug-thumbnail-strip {
   display: flex;
   overflow-x: auto;
   align-items: center;
   height: 100%;
-  /* Fill the container */
   padding: 0 10px;
+  gap: 10px;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+.ug-thumbnail-strip::-webkit-scrollbar {
+  height: 6px;
+}
+
+.ug-thumbnail-strip::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+}
+
+.ug-thumbnail-strip::-webkit-scrollbar-track {
+  background-color: transparent;
 }
 
 .ug-thumbnail {
@@ -422,22 +650,39 @@ body {
   margin: 0 5px;
   cursor: pointer;
   border: 2px solid transparent;
-  transition: border-color 0.3s ease, transform 0.3s ease;
+  transition: border-color var(--ug-transition-medium), 
+              transform var(--ug-transition-medium);
   will-change: transform;
+  flex-shrink: 0;
 }
 
-.ug-thumbnail:hover,
+.ug-thumbnail:hover {
+  transform: scale(1.2);
+  z-index: 2;
+}
+
 .ug-thumbnail.selected {
-  border-color: #4CAF50;
+  border-color: var(--ug-selected-color);
+  transform: scale(1.2);
+  z-index: 2;
+}
+
+.ug-thumbnail:focus-visible {
+  border-color: var(--ug-focus-ring-color);
   transform: scale(1.2);
 }
 
-/* Hide Class Utility */
+/* ------------------- UTILITY CLASSES ------------------- */
 .ug-gallery-hide {
   display: none !important;
 }
 
-/* Settings Button */
+.ug-no-click {
+  pointer-events: none;
+  cursor: default;
+}
+
+/* ------------------- SETTINGS BUTTON ------------------- */
 .settings-button {
   position: fixed;
   bottom: 25px;
@@ -450,20 +695,27 @@ body {
   opacity: 0.8;
   font-size: 18px;
   cursor: pointer;
-  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
+  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease),
+              background-color var(--ug-transition-duration) var(--ug-transition-ease);
+  border: none;
 }
 
 .settings-button:hover {
-  opacity: var(--ug-button-hover-opacity);
+  opacity: 1;
+  background-color: rgba(80, 80, 80, 0.9);
 }
 
-/* Swal Styles */
+/* ------------------- SWAL STYLES ------------------- */
 .swal2-popup {
   background: var(--ug-settings-bg-color) !important;
   color: var(--ug-settings-text-color) !important;
-  font-size: 18px;
-  border-radius: 8px;
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+  font-size: 18px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1) !important;
+}
+
+.swal2-title, .swal2-html-container {
+  color: var(--ug-settings-text-color) !important;
 }
 
 .swal2-content {
@@ -474,11 +726,20 @@ body {
   background-color: var(--ug-settings-input-bg-color) !important;
   color: var(--ug-settings-text-color) !important;
   border: 1px solid var(--ug-settings-input-border-color) !important;
-  font-size: 18px;
-  padding: 0.5em;
+  font-size: 18px !important;
+  padding: 0.5em !important;
 }
 
-/* Settings Panel */
+.swal2-confirm {
+  background-color: #4CAF50 !important;
+}
+
+.swal2-cancel {
+  background-color: #f44336 !important;
+}
+
+/* ------------------- SETTINGS PANEL ------------------- */
+/* ------------------- SETTINGS PANEL ------------------- */
 .ug-settings-overlay {
   position: fixed;
   top: 0;
@@ -489,26 +750,28 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  background-color: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(5px);
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .ug-settings-container {
   display: flex;
   flex-direction: column;
-  max-width: 500px;
-  max-height: 80vh;
+  max-width: 550px;
+  max-height: 85vh;
   width: 95vw;
-  background-color: var(--ug-settings-bg-color);
-  border-radius: 5px;
-  box-shadow: none;
-  border: 1px solid var(--ug-border-color);
-  transform: scale(0.9);
+  background-color: rgba(30, 32, 35, 0.95);
+  border-radius: 12px;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4), 
+              0 0 0 1px rgba(255, 255, 255, 0.1);
+  transform: scale(0.95);
   opacity: 0;
-  transition: transform 0.3s ease, opacity 0.3s ease;
-  padding: 20px;
-  overflow-y: auto;
-  font-family: var(--ug-settings-font-family);
+  transition: transform 0.3s cubic-bezier(0.19, 1, 0.22, 1), 
+              opacity 0.3s cubic-bezier(0.19, 1, 0.22, 1);
+  padding: 0;
+  overflow: hidden;
+  color: #eaeaea;
 }
 
 .ug-settings-overlay.opening .ug-settings-container {
@@ -521,62 +784,101 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-bottom: 10px;
-  margin-bottom: 15px;
-  border-bottom: 1px solid var(--ug-settings-input-border-color);
+  padding: 20px 24px;
+  background: linear-gradient(to bottom, rgba(60, 63, 68, 0.8), rgba(35, 37, 40, 0.8));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .ug-settings-header h2 {
   margin: 0;
-  color: var(--ug-settings-header-color);
-  font-size: 1.3em;
-  font-weight: bold;
+  color: #ffffff;
+  font-size: 1.4em;
+  font-weight: 600;
+  letter-spacing: 0.3px;
 }
 
 .ug-settings-close-btn {
-  background: none;
+  background: rgba(255, 255, 255, 0.05);
   border: none;
-  color: var(--ug-text-color);
-  font-size: 1.3em;
+  color: #eaeaea;
+  font-size: 1.2em;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  opacity: 0.8;
-  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease);
-  padding: 6px;
-  border-radius: 3px;
+  border-radius: 50%;
+  transition: all 0.2s ease;
 }
 
 .ug-settings-close-btn:hover {
-  opacity: 1;
-  background-color: rgba(0, 0, 0, 0.3);
+  background-color: rgba(255, 255, 255, 0.15);
+  transform: scale(1.05);
+}
+
+.ug-settings-close-btn::before {
+  display: inline-block;
+  width: var(--ug-icon-size);
+  height: var(--ug-icon-size);
+  line-height: var(--ug-icon-size);
+  text-align: center;
+  font-size: var(--ug-icon-size);
+  font-family: sans-serif;
+  vertical-align: middle;
 }
 
 /* Settings Body */
 .ug-settings-body {
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 18px;
+  padding: 24px;
+  overflow-y: auto;
+  max-height: calc(85vh - 80px);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.ug-settings-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.ug-settings-body::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+}
+
+.ug-settings-body::-webkit-scrollbar-track {
+  background-color: transparent;
+  margin: 4px;
 }
 
 /* Settings Sections */
 .ug-settings-section {
-  margin-bottom: 0;
-  padding: 10px 15px;
-  border-radius: 3px;
-  background-color: #2a2a2a;
-  border: 1px solid var(--ug-settings-input-border-color);
+  background-color: rgba(40, 42, 46, 0.6);
+  border-radius: 10px;
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.ug-settings-section:last-child {
-  margin-bottom: 0;
+.ug-settings-section:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .ug-settings-section-header {
-  color: var(--ug-settings-header-color);
-  font-size: 1.1em;
-  margin-bottom: 10px;
-  padding-bottom: 5px;
-  border-bottom: 1px solid var(--ug-settings-input-border-color);
+  color: #ffffff;
+  font-size: 1.15em;
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-weight: 500;
+  letter-spacing: 0.5px;
 }
+
 
 /* Settings Labels */
 .ug-settings-label {
@@ -645,7 +947,7 @@ body {
   box-shadow: 0 0 0 2px rgba(160, 160, 160, 0.5);
 }
 
-/* Notification Area */
+/* ------------------- NOTIFICATIONS ------------------- */
 .ug-notification-area {
   position: fixed;
   bottom: 0;
@@ -712,119 +1014,144 @@ body {
   text-decoration: underline;
 }
 
-.ug-no-click {
-  pointer-events: none;
-  cursor: default;
+/* ------------------- LOADING OVERLAY ------------------- */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
 }
 
-/* Slide In/Out Animations */
-.ug-slide-in {
-  animation: ug-slide-in 0.5s ease-in-out forwards;
+.loading-overlay div {
+  color: white;
+  font-size: 1.5em;
+  background-color: rgba(0, 0, 0, 0.5);
+  padding: 20px 40px;
+  border-radius: 10px;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+  position: relative;
 }
 
-.ug-slide-out {
-  animation: ug-slide-out 0.5s ease-in-out forwards;
-  opacity: 0;
-  transform: translateY(100%);
+.loading-overlay div::after {
+  content: "...";
+  position: absolute;
+  animation: ellipsis 1.5s infinite;
+  width: 20px;
+  text-align: left;
+  display: inline-block;
 }
 
-@keyframes ug-slide-in {
-  from {
-      opacity: 0;
-      transform: translateY(100%);
+@keyframes ellipsis {
+  0% { content: "."; }
+  33% { content: ".."; }
+  66% { content: "..."; }
+}
+
+/* ------------------- BUTTONS AND CONTROLS ------------------- */
+/* Button container styles */
+.ug-button-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+/* Button styles */
+.ug-button {
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: opacity var(--ug-transition-duration) var(--ug-transition-ease),
+              background-color var(--ug-transition-duration) var(--ug-transition-ease);
+  display: inline-flex;
+  text-decoration: none;
+}
+
+.ug-button:hover {
+  opacity: var(--ug-button-hover-opacity);
+  background-color: #555;
+}
+
+.ug-button.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ------------------- RESPONSIVE ADJUSTMENTS ------------------- */
+@media (max-width: 768px) {
+  .ug-gallery-container {
+    width: 100vw;
+    height: 100vh;
+    max-width: 100vw;
+    max-height: 100vh;
+    border-radius: 0;
   }
-
-  to {
-      opacity: 1;
-      transform: translateY(0);
+  
+  .ug-gallery-toolbar {
+    top: 5px;
+    right: 5px;
   }
-}
-
-@keyframes ug-slide-out {
-  from {
-      opacity: 1;
-      transform: translateY(0);
+  
+  .ug-gallery-nav {
+    font-size: 2em;
+    padding: 0.3em;
   }
-
-  to {
-      opacity: 0;
-      transform: translateY(100%);
+  
+  .ug-gallery-grid-close,
+  .ug-gallery-fullscreen {
+    font-size: 1.5em;
+    top: 5px;
   }
-}
-
-/* Fix: Ensure toolbar doesn't overlap with main image */
-.ug-gallery-toolbar {
-  top: 10px;
-  /* Adjust as needed */
-}
-
-/* Fix: Ensure navigation arrows don't overlap with main image */
-.ug-gallery-nav-container {
-  height: calc(100% - var(--ug-bottom-stripe-height));
-  /* Consistent with main image */
-}
-
-/* Fix: Ensure counter is positioned correctly, above thumbnail strip */
-.ug-gallery-counter {
-  bottom: calc(var(--ug-bottom-stripe-height) + 10px);
-  /* Position above the strip */
-  transform: translateX(-50%);
-  /* Center horizontally */
-}
-
-/* Fix: Thumbnail strip container consistent height */
-.ug-gallery-thumbnail-strip-container {
-  height: var(--ug-bottom-stripe-height);
-}
-
-/* --- Zoom & Pan Styles --- */
-.zoom-controls {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.zoom-controls button {
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 5px;
-}
-
-.zoom-controls img {
-    width: 20px; /* Adjust icon size as needed */
-    height: 20px;
-    vertical-align: middle;
-}
-
-.zoom-level {
+  
+  .ug-gallery-counter {
     font-size: 0.9em;
-    color: var(--ug-text-color); /* Ensure text color is consistent */
-}
-
-
-.image-container {
+  }
+  
+  .zoom-controls {
+    gap: 2px;
+  }
+  
+  .zoom-level {
+    min-width: 40px;
+    font-size: 12px;
+  }
+  
+  .ug-toolbar-button {
+    padding: 6px;
+  }
+  
+  .ug-settings-container {
     width: 100%;
-    height: 100%;
-    display: flex; /* To center the image initially */
-    justify-content: center;
-    align-items: center;
-    overflow: hidden; /* Ensure image doesn't overflow image-container if zoomed too much */
-    position: absolute; /* Important for transformations and panning */
-    top: 0;
-    left: 0;
-    transform-origin: center center; /* Zoom and scale from the center */
-    cursor: grab; /* Default grab cursor */
-    will-change: transform; /* Performance hint */
-}
-
-.image-container.dragging {
-    cursor: grabbing; /* Change cursor when dragging */
-}
-
-.gallery-image { /* Target the image using the 'gallery-image' class we added */
-    display: block; /* Prevent extra space below image */
     max-width: 100%;
+    height: 100%;
     max-height: 100%;
-    object-fit: contain; /* Or 'cover' if you prefer different scaling */
+    border-radius: 0;
+  }
+  
+  .ug-notification-container {
+    font-size: 14px;
+    padding: 10px 15px;
+  }
+}
+
+/* Small screens adjustments */
+@media (max-width: 480px) {
+  .ug-gallery-thumbnail-grid {
+    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+    grid-gap: 5px;
+    padding: 10px;
+  }
+  
+  .zoom-controls button img {
+    width: 16px;
+    height: 16px;
+  }
 }
