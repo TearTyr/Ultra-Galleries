@@ -18,6 +18,7 @@ This userscript provides a seamless and efficient way to interact with image and
     - Full resolution (`FULL`)
 - **Image Removal:** Option to remove individual images from the gallery view.
 - **Gallery View:** New gallery view for easier browsing of images within a post.
+- **Zoom & Pan:** Advanced zooming with mouse wheel, buttons, and double-click support, plus smooth panning capabilities.
 
 ### Downloading
 
@@ -29,15 +30,25 @@ This userscript provides a seamless and efficient way to interact with image and
 ### Performance and User Experience
 
 - **Improved Image Loading:** Modified image loading mechanism to prevent rate-limiting issues.
-- **Retry Mechanism:** Implements exponential backoff for failed image loads. (Currently disabled, will be re-implemented in a future update)
+- **Retry Mechanism:** Implements exponential backoff for failed image loads.
 - **Status Updates:** Provides real-time status updates for image loading and download progress.
+- **Mobile Support:** Touch-friendly interface with pinch-to-zoom and double-tap interactions.
 
 ### Video Handling
 
 - Includes video files in batch downloads.
 - Preserves original video filenames.
 
-### New Features (v2.4.0)
+### New Features (v3.0.0)
+
+- **Enhanced Zoom Controls:** Improved zoom button visibility with color inversion for better accessibility against different backgrounds.
+- **Advanced Zoom & Pan:** Smooth zoom functionality with mouse wheel, dedicated zoom buttons, and double-click support.
+- **Touch Support:** Mobile-friendly interface with pinch-to-zoom, double-tap to zoom, and smooth touch panning.
+- **Inertia Panning:** Momentum-based panning for smooth navigation of zoomed images.
+- **Expanded Settings Panel:** New settings section for zoom and pan configuration including maximum zoom level and inertia preferences.
+- **Performance Improvements:** Optimized image handling for smoother operation and better memory management.
+
+### Previous Updates (v2.4.0)
 
 - **Gallery Key Binding:** Use a customizable key to open the gallery. Configurable in settings. Defaults to 'g'.
 - **Expanded View:** Images and videos can be viewed in an expanded overlay within the gallery. Navigation through arrow keys or on-screen buttons.
@@ -48,7 +59,11 @@ This userscript provides a seamless and efficient way to interact with image and
 
 ## Usage
 
-After installation, navigate to a post on `kemono.su`, `coomer.su`, or `nekohouse.su`. You'll see new buttons for resizing, downloading, and removing images. Use the `DL ALL` button to initiate a batch download of all media in the post. The `GALLERY` button opens the new gallery view. Press the configured gallery key (default 'g') to quickly open the gallery. **Within the gallery view, you can open an image or video in an expanded view by clicking on its thumbnail. Once in expanded view, navigate using the  'k' (previous) and 'l' (next) keys or the on-screen navigation buttons.**
+After installation, navigate to a post on `kemono.su`, `coomer.su`, or `nekohouse.su`. You'll see new buttons for resizing, downloading, and removing images. Use the `DL ALL` button to initiate a batch download of all media in the post. The `GALLERY` button opens the new gallery view. Press the configured gallery key (default 'g') to quickly open the gallery. 
+
+**Within the gallery view, you can open an image or video in an expanded view by clicking on its thumbnail. Once in expanded view, navigate using the  'k' (previous) and 'l' (next) keys or the on-screen navigation buttons.**
+
+**To zoom in on an image, use the mouse wheel, the zoom buttons in the toolbar, or double-click on the image. When zoomed in, click and drag to pan around the image. On mobile devices, use pinch gestures to zoom and swipe to pan.**
 
 ## Dependencies
 
@@ -70,4 +85,4 @@ After installation, navigate to a post on `kemono.su`, `coomer.su`, or `nekohous
 
 ## Version
 
-Current version: 2.4.0
+Current version: 3.0.0
