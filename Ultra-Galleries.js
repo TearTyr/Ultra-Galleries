@@ -2895,7 +2895,7 @@
         // Load CSS
         GM.xmlHttpRequest({
             method: 'GET',
-            url: 'https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/TestingBranch/Ultra-Galleries.css',
+            url: 'https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/main/Ultra-Galleries.css',
             onload: function(response) {
                 if (response.status === 200) {
                     GM_addStyle(response.responseText);
