@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1027300-ntf
-// @version      3.1.2
+// @version      3.1.3 
 // @description  Modern image gallery with enhanced browsing, fullscreen, and download features
 // @author       ntf (original), Meri/TearTyr (maintained and improved)
 // @match        *://kemono.su/*
@@ -15,12 +15,15 @@
 // @grant        GM_addStyle
 // @grant        GM_setValue
 // @grant        GM_getValue
-// @require      https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js
-// @require      https://cdn.jsdelivr.net/npm/jszip@3.1.4/dist/jszip.min.js
+// @grant        GM_getResourceText
+// @require      https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js 
+// @require      https://unpkg.com/jszip@3.9.1/dist/jszip.min.js
 // @require      https://cdn.jsdelivr.net/npm/file-saver@1.3.2/FileSaver.min.js
 // @require      https://cdn.jsdelivr.net/npm/sweetalert2@11
+// @require      https://unpkg.com/dexie@3.2.7/dist/dexie.min.js
+// @resource     upngJsRaw https://unpkg.com/upng-js@2.1.0/UPNG.js
+// @resource     pakoJsRaw https://unpkg.com/pako@2.1.0/dist/pako.min.js
 // ==/UserScript==
-
 (function() {
     'use strict';
 
@@ -351,12 +354,13 @@
         notificationPosition: GM_getValue('notificationPosition', 'bottom'),
         animationsEnabled: GM_getValue('animationsEnabled', true),
 
+        // Download settings
+        optimizePngInZip: GM_getValue('optimizePngInZip', false),
+        enablePersistentCaching: GM_getValue('enablePersistentCaching', true),
+
         // Notification state
         notification: null,
         notificationType: 'info',
-
-        // Download settings
-        downloadThumbnail: GM_getValue('downloadThumbnail', true),
 
         // Button visibility settings
         hideNavArrows: GM_getValue('hideNavArrows', false),
@@ -404,8 +408,12 @@
     }, {
         // State update callbacks
         controlsVisible: (value) => {
-            const toolbar = galleryOverlay?.querySelector(`.${CSS.GALLERY.TOOLBAR}`);
-            if (toolbar) toolbar.classList.toggle(CSS.GALLERY.CONTROLS_HIDDEN, !value);
+            if (galleryOverlay && galleryOverlay.length) {
+                const $toolbar = galleryOverlay.find(`.${CSS.GALLERY.TOOLBAR}`);
+                if ($toolbar.length) { // Check if toolbar was found
+                    $toolbar.toggleClass(CSS.GALLERY.CONTROLS_HIDDEN, !value);
+                }
+            }
         },
         galleryReady: (value) => {
             updateGalleryButton(value);
@@ -491,31 +499,37 @@
         zoomScale: (value, oldValue) => {
             Zoom.applyZoom();
 
-            const container = galleryOverlay?.querySelector(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
-            if (container) {
-                container.classList.toggle(CSS.GALLERY.ZOOMED, value > 1);
-                container.style.cursor = value > 1 ? 'grab' : 'default';
-            }
 
-            // Show instructions tooltip first time
-            if (value > 1 && oldValue === 1 && state.zoomIndicatorVisible) {
-                const tooltip = Utils.createTooltip('Click and drag to pan image');
-                galleryOverlay.appendChild(tooltip);
-                state.zoomIndicatorVisible = false;
+            if (galleryOverlay && galleryOverlay.length) {
+                const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
+                if ($container.length) {
+                    $container.toggleClass(CSS.GALLERY.ZOOMED, value > 1);
+                    $container.css('cursor', value > 1 ? 'grab' : 'default'); 
+                }
+
+                // Show instructions tooltip first time
+                if (value > 1 && oldValue === 1 && state.zoomIndicatorVisible) {
+                    const tooltip = Utils.createTooltip('Click and drag to pan image');
+                    galleryOverlay.append(tooltip); 
+                    state.zoomIndicatorVisible = false; 
+                }
             }
         },
         imageOffset: () => Zoom.applyZoom(),
         isDragging: (value) => {
-            const container = galleryOverlay?.querySelector(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
-            if (container) {
-                container.classList.toggle(CSS.GALLERY.GRABBING, value);
+           
+            if (galleryOverlay && galleryOverlay.length) {
+                const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
+                if ($container.length) { 
+                    $container.toggleClass(CSS.GALLERY.GRABBING, value);
 
-                if (value && state.inertiaActive) {
-                    state.inertiaActive = false;
-                    state.velocity = { x: 0, y: 0 };
-                    if (state.inertiaAnimFrame) {
-                        cancelAnimationFrame(state.inertiaAnimFrame);
-                        state.inertiaAnimFrame = null;
+                    if (value && state.inertiaActive) {
+                        state.inertiaActive = false;
+                        state.velocity = { x: 0, y: 0 };
+                        if (state.inertiaAnimFrame) {
+                            cancelAnimationFrame(state.inertiaAnimFrame);
+                            state.inertiaAnimFrame = null;
+                        }
                     }
                 }
             }
@@ -528,10 +542,133 @@
                 notifArea.style.bottom = value === 'bottom' ? '10px' : 'auto';
             }
         },
-        downloadThumbnail: (value) => {
-            GM_setValue('downloadThumbnail', value);
-        }
+
+        enablePersistentCaching: (value) => { 
+            GM_setValue('enablePersistentCaching', value);
+            if (value && !db) { // Initialize Dexie if enabled and not already done
+                initDexie();
+            } else if (!value && db) {
+                // Optionally, you might want to clear the cache when disabling, or just leave it.
+                // For now, we just stop using it.
+                console.log("Ultra Galleries: Persistent caching disabled. Existing cache remains but won't be used.");
+            }
+        },
+        optimizePngInZip: (value) => { 
+        GM_setValue('optimizePngInZip', value);
+        },
     });
+
+    // ====================================================
+    // Resource Loading
+    // ====================================================
+    let loadedUPNG = null;
+    let loadedPako = null;
+
+    async function loadResourceScript(resourceName, globalVarName, onWindow = true) {
+        try {
+            const scriptText = GM_getResourceText(resourceName);
+            if (!scriptText) {
+                console.error(`Ultra Galleries: Resource ${resourceName} not found or empty.`);
+                return null;
+            }
+
+            if (onWindow && typeof window[globalVarName] !== 'undefined') {
+                console.log(`Ultra Galleries: ${globalVarName} already on window.`);
+                return window[globalVarName];
+            }
+
+            // check if a common global for the library exists after eval
+            if (resourceName === 'upngJsRaw' && typeof UPNG !== 'undefined') return UPNG;
+            if (resourceName === 'pakoJsRaw' && typeof pako !== 'undefined') return pako;
+            
+            console.log(`Ultra Galleries: Loading resource ${resourceName} into global scope...`);
+            // Indirect eval to run in global scope
+            (0, eval)(scriptText);
+
+
+            if (onWindow && typeof window[globalVarName] !== 'undefined') {
+                console.log(`Ultra Galleries: ${globalVarName} loaded from resource ${resourceName}.`);
+                return window[globalVarName];
+            } else if (resourceName === 'upngJsRaw' && typeof UPNG !== 'undefined') {
+                 console.log(`Ultra Galleries: UPNG loaded from resource ${resourceName}.`);
+                 window.UPNG = UPNG; // Ensure it's explicitly on window if needed elsewhere by this name
+                 return UPNG;
+            } else if (resourceName === 'pakoJsRaw' && typeof pako !== 'undefined') {
+                console.log(`Ultra Galleries: pako loaded from resource ${resourceName}.`);
+                window.pako = pako; // Ensure it's explicitly on window
+                return pako;
+            } else {
+                console.warn(`Ultra Galleries: Resource ${resourceName} evaluated, but expected global '${globalVarName}' not found. The library might use a different name or be an ESM module not directly exposing a global via eval.`);
+                return null;
+            }
+        } catch (e) {
+            console.error(`Ultra Galleries: Error loading resource ${resourceName}:`, e);
+            return null;
+        }
+    }
+
+    // ====================================================
+    // Dexie Database Initialization
+    // ====================================================
+    let db = null;
+
+    function initDexie() {
+        if (typeof Dexie === 'undefined') {
+            console.error("Ultra Galleries: Dexie.js is not loaded. Persistent caching will be unavailable.");
+            return false;
+        }
+        db = new Dexie('UltraGalleriesCache');
+        db.version(1).stores({
+            // Store original URL as key, and the image blob, plus when it was cached
+            imageCache: 'url, cachedAt, blob'
+        });
+        console.log("Ultra Galleries: Dexie database initialized.");
+        return true;
+    }
+
+    async function storeImageInDexie(url, blob) {
+        if (!db || !state.enablePersistentCaching) return;
+        try {
+            await db.imageCache.put({ url: url, blob: blob, cachedAt: Date.now() });
+            // console.log(`Ultra Galleries: Cached image in Dexie: ${url}`);
+        } catch (e) {
+            console.error(`Ultra Galleries: Error caching image ${url} in Dexie:`, e);
+            // Handle QuotaExceededError or other errors if necessary
+            if (e.name === 'QuotaExceededError') {
+                console.warn("Ultra Galleries: Dexie cache quota exceeded. Consider clearing cache or increasing quota.");
+                // Potentially implement a cache cleanup strategy here (e.g., remove oldest items)
+            }
+        }
+    }
+
+    async function getImageFromDexie(url) {
+        if (!db || !state.enablePersistentCaching) return null;
+        try {
+            const record = await db.imageCache.get(url);
+            if (record && record.blob) {
+                // console.log(`Ultra Galleries: Retrieved image from Dexie: ${url}`);
+                return record.blob;
+            }
+            return null;
+        } catch (e) {
+            console.error(`Ultra Galleries: Error retrieving image ${url} from Dexie:`, e);
+            return null;
+        }
+    }
+
+    async function clearDexieCache() {
+        if (!db) return;
+        try {
+            await db.imageCache.clear();
+            state.notification = "Persistent image cache cleared.";
+            state.notificationType = "success";
+            console.log("Ultra Galleries: Dexie imageCache cleared.");
+        } catch (e) {
+            console.error("Ultra Galleries: Error clearing Dexie cache:", e);
+            state.notification = "Error clearing cache. See console.";
+            state.notificationType = "error";
+        }
+    }
 
     // ====================================================
     // Zoom & Pan Module
@@ -539,387 +676,299 @@
 
     const Zoom = {
         applyZoom: () => {
-            const container = galleryOverlay?.querySelector(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
-            if (!container) return;
+            if (!galleryOverlay || !galleryOverlay.length) return;
+            const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
+            if (!$container.length) return;
 
-            container.style.transform = `translate(${state.imageOffset.x}px, ${state.imageOffset.y}px) scale(${state.zoomScale})`;
+            $container.css('transform', `translate(${state.imageOffset.x}px, ${state.imageOffset.y}px) scale(${state.zoomScale})`);
 
-            const zoomDisplay = galleryOverlay?.querySelector('#zoom-level');
-            if (zoomDisplay) {
-                zoomDisplay.textContent = `${Math.round(state.zoomScale * 100)}%`;
+            const $zoomDisplay = galleryOverlay.find('#zoom-level');
+            if ($zoomDisplay.length) {
+                $zoomDisplay.text(`${Math.round(state.zoomScale * 100)}%`);
             }
-
-            // Toggle zoomed class
-            container.classList.toggle('zoomed', state.zoomScale !== 1);
+            $container.toggleClass(CSS.GALLERY.ZOOMED, state.zoomScale !== 1);
         },
 
-        handleWheelZoom: (event) => {
-            if (!state.zoomEnabled || !galleryOverlay) return;
-            event.preventDefault();
-            event.stopPropagation();
+    handleWheelZoom: (event) => { 
+        if (!state.zoomEnabled || !galleryOverlay || !galleryOverlay.length) return;
+        
+        event.preventDefault(); 
+        event.stopPropagation();
 
-            const container = galleryOverlay.querySelector(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
-            const image = galleryOverlay.querySelector(`.${CSS.GALLERY.MAIN_IMG}`);
-            if (!image || !container) return;
+        const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
+        const $image = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG}`);
+        if (!$image.length || !$container.length) return;
 
-            const rect = container.getBoundingClientRect();
-            const mouseX = event.clientX - rect.left;
-            const mouseY = event.clientY - rect.top;
-            const delta = Math.sign(event.deltaY) * -0.1;
-            const newScale = Math.max(CONFIG.MIN_SCALE, Math.min(state.zoomScale + delta, CONFIG.MAX_SCALE));
+        const containerDOM = $container[0];
+        // const imageDOM = $image[0]; // Not directly used for naturalWidth/Height here
+        const rect = containerDOM.getBoundingClientRect();
+        const originalEvent = event.originalEvent || event; // Get original DOM event for deltaY
 
-            // Calculate zoom centered on mouse position
-            const imageX = (mouseX - state.imageOffset.x) / state.zoomScale;
-            const imageY = (mouseY - state.imageOffset.y) / state.zoomScale;
-            const newOffsetX = mouseX - (imageX * newScale);
-            const newOffsetY = mouseY - (imageY * newScale);
+        const mouseX = originalEvent.clientX - rect.left;
+        const mouseY = originalEvent.clientY - rect.top;
+        const delta = Math.sign(originalEvent.deltaY) * -0.1; // Use originalEvent.deltaY for scroll direction
+        const newScale = Math.max(CONFIG.MIN_SCALE, Math.min(state.zoomScale + delta, CONFIG.MAX_SCALE));
 
-            // Update state
-            state.imageOffset.x = newOffsetX;
-            state.imageOffset.y = newOffsetY;
-            state.zoomScale = newScale;
+        // Calculate new offsets to keep zoom centered on mouse pointer
+        const imageXUnderPointer = (mouseX - state.imageOffset.x) / state.zoomScale;
+        const imageYUnderPointer = (mouseY - state.imageOffset.y) / state.zoomScale;
 
-            // Apply smooth zoom
-            container.style.transition = 'transform 0.1s ease-out';
-            setTimeout(() => container.style.transition = '', 100);
-            Zoom.applyZoom();
+        const newOffsetX = mouseX - (imageXUnderPointer * newScale);
+        const newOffsetY = mouseY - (imageYUnderPointer * newScale);
+
+        state.imageOffset.x = newOffsetX;
+        state.imageOffset.y = newOffsetY;
+        state.zoomScale = newScale; // This will trigger the reactive 'zoomScale' callback
         },
 
-        enforceBoundaries: (offsetX, offsetY, scale, containerRect, image) => {
-            const imgWidth = image.naturalWidth * scale;
-            const imgHeight = image.naturalHeight * scale;
+        enforceBoundaries: (offsetX, offsetY, scale, containerRect, imageDOM) => { // imageDOM is DOM element
+            if (!imageDOM || !containerRect) return { x: offsetX, y: offsetY };
+            const imgWidth = imageDOM.naturalWidth * scale;
+            const imgHeight = imageDOM.naturalHeight * scale;
             const containerWidth = containerRect.width;
             const containerHeight = containerRect.height;
 
-            // Handle centering for small images or edge resistance for large images
             if (imgWidth <= containerWidth) {
-                // Center horizontally
                 offsetX = (containerWidth - imgWidth) / 2;
             } else {
-                // Apply resistance near edges
                 const maxX = (imgWidth - containerWidth) / 2;
                 const minX = -maxX;
-
-                if (offsetX > maxX) {
-                    const overshot = offsetX - maxX;
-                    offsetX = maxX + (overshot * CONFIG.PAN_RESISTANCE / scale);
-                } else if (offsetX < minX) {
-                    const overshot = minX - offsetX;
-                    offsetX = minX - (overshot * CONFIG.PAN_RESISTANCE / scale);
-                }
+                if (offsetX > maxX) offsetX = maxX + ((offsetX - maxX) * CONFIG.PAN_RESISTANCE / scale);
+                else if (offsetX < minX) offsetX = minX - ((minX - offsetX) * CONFIG.PAN_RESISTANCE / scale);
             }
 
             if (imgHeight <= containerHeight) {
-                // Center vertically
                 offsetY = (containerHeight - imgHeight) / 2;
             } else {
-                // Apply resistance near edges
                 const maxY = (imgHeight - containerHeight) / 2;
                 const minY = -maxY;
-
-                if (offsetY > maxY) {
-                    const overshot = offsetY - maxY;
-                    offsetY = maxY + (overshot * CONFIG.PAN_RESISTANCE / scale);
-                } else if (offsetY < minY) {
-                    const overshot = minY - offsetY;
-                    offsetY = minY - (overshot * CONFIG.PAN_RESISTANCE / scale);
-                }
+                if (offsetY > maxY) offsetY = maxY + ((offsetY - maxY) * CONFIG.PAN_RESISTANCE / scale);
+                else if (offsetY < minY) offsetY = minY - ((minY - offsetY) * CONFIG.PAN_RESISTANCE / scale);
             }
-
             return { x: offsetX, y: offsetY };
         },
 
-        startDrag: (event) => {
-            if (!galleryOverlay) return;
+        startDrag: (event) => { 
+            if (!galleryOverlay || !galleryOverlay.length) return;
+            if (event.button === 2 && event.type === 'mousedown') return; // Allow context menu on actual mousedown
 
-            // Allow context menu on right click
-            if (event.button === 2) return;
-
-            event.preventDefault();
+            if (event.preventDefault) event.preventDefault();
             state.isDragging = true;
 
             const clientX = event.clientX || (event.touches && event.touches[0].clientX);
             const clientY = event.clientY || (event.touches && event.touches[0].clientY);
 
             state.dragStartPosition = { x: clientX, y: clientY };
-            state.dragStartOffset = {
-                x: state.imageOffset.x,
-                y: state.imageOffset.y
-            };
+            state.dragStartOffset = { x: state.imageOffset.x, y: state.imageOffset.y };
 
-            // Visual feedback
-            const container = galleryOverlay.querySelector(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
-            if (container) {
-                container.classList.add(CSS.GALLERY.GRABBING);
+            const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
+            if ($container.length) {
+                $container.addClass(CSS.GALLERY.GRABBING);
             }
         },
 
         dragImage: (event) => {
-            if (!state.isDragging || !galleryOverlay) return;
+            if (!state.isDragging || !galleryOverlay || !galleryOverlay.length) return;
 
             const clientX = event.clientX || (event.touches && event.touches[0].clientX);
             const clientY = event.clientY || (event.touches && event.touches[0].clientY);
 
-            if (!clientX || !clientY) return;
+            if (clientX === undefined || clientY === undefined) return;
 
             const deltaX = clientX - state.dragStartPosition.x;
             const deltaY = clientY - state.dragStartPosition.y;
 
             state.imageOffset.x = state.dragStartOffset.x + deltaX;
             state.imageOffset.y = state.dragStartOffset.y + deltaY;
-
             Zoom.applyZoom();
         },
 
         endDrag: () => {
-            if (!state.isDragging || !galleryOverlay) return;
-
+            if (!state.isDragging || !galleryOverlay || !galleryOverlay.length) return;
             state.isDragging = false;
-
-            const container = galleryOverlay.querySelector(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
-            if (container) {
-                container.classList.remove(CSS.GALLERY.GRABBING);
+            const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
+            if ($container.length) {
+                $container.removeClass(CSS.GALLERY.GRABBING);
             }
         },
 
         resetZoom: () => {
-            if (!galleryOverlay) return;
-
-            const container = galleryOverlay.querySelector(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
-            if (container) {
-                container.style.transition = 'transform 0.3s ease-out';
-
+            if (!galleryOverlay || !galleryOverlay.length) return;
+            const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
+            if ($container.length) {
+                $container.css('transition', 'transform 0.3s ease-out');
                 state.zoomScale = 1;
                 state.imageOffset = { x: 0, y: 0 };
-
                 Zoom.applyZoom();
-
-                setTimeout(() => container.style.transition = '', 300);
+                setTimeout(() => $container.css('transition', ''), 300);
             }
         },
 
-        initializeImage: (image, container) => {
-            if (!image || !container) return;
+        initializeImage: (imageDOM, containerDOM) => {
+            if (!imageDOM || !containerDOM) return;
 
-            // Reset styles
-            image.style.width = '';
-            image.style.height = '';
-            image.style.maxWidth = '100%';
-            image.style.maxHeight = '100%';
+            $(imageDOM).css({width: '', height: '', maxWidth: '100%', maxHeight: '100%'}); 
 
-            const containerWidth = container.offsetWidth;
-            const containerHeight = container.offsetHeight;
-            const imageWidth = image.naturalWidth;
-            const imageHeight = image.naturalHeight;
+            const containerWidth = containerDOM.offsetWidth;
+            const containerHeight = containerDOM.offsetHeight;
+            const imageWidth = imageDOM.naturalWidth;
+            const imageHeight = imageDOM.naturalHeight;
+
+            if (imageWidth === 0 || imageHeight === 0) {
+                Zoom.resetZoom(); Zoom.applyZoom(); return;
+            }
             const aspectRatio = imageWidth / imageHeight;
 
-            // Set optimal size
             if (aspectRatio > containerWidth / containerHeight) {
-                image.style.width = '100%';
-                image.style.height = 'auto';
+                $(imageDOM).css({width: '100%', height: 'auto'});
             } else {
-                image.style.width = 'auto';
-                image.style.height = '100%';
+                $(imageDOM).css({width: 'auto', height: '100%'});
             }
-
-            // Reset zoom state
             state.zoomScale = 1;
             state.imageOffset = { x: 0, y: 0 };
-
             Zoom.applyZoom();
         },
 
         zoom: (step) => {
-            if (!galleryOverlay) return;
+            if (!galleryOverlay || !galleryOverlay.length) return;
+            const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
+            if (!$container.length) return;
 
-            const container = galleryOverlay.querySelector(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
-            if (!container) return;
-
-            const rect = container.getBoundingClientRect();
+            const containerDOM = $container[0];
+            const rect = containerDOM.getBoundingClientRect();
             const centerX = rect.width / 2;
             const centerY = rect.height / 2;
-
             const newScale = Math.max(CONFIG.MIN_SCALE, Math.min(state.zoomScale + step, CONFIG.MAX_SCALE));
 
             if (state.zoomScale !== newScale) {
-                // Center zoom on image center
                 const imageX = (centerX - state.imageOffset.x) / state.zoomScale;
                 const imageY = (centerY - state.imageOffset.y) / state.zoomScale;
-
                 const newOffsetX = centerX - (imageX * newScale);
                 const newOffsetY = centerY - (imageY * newScale);
 
-                // Smooth transition
-                container.style.transition = 'transform 0.2s ease-out';
-
+                $container.css('transition', 'transform 0.2s ease-out');
                 state.imageOffset.x = newOffsetX;
                 state.imageOffset.y = newOffsetY;
                 state.zoomScale = newScale;
-
                 Zoom.applyZoom();
-
-                setTimeout(() => container.style.transition = '', 200);
+                setTimeout(() => $container.css('transition', ''), 200);
             }
         },
 
         setupTouchEvents: () => {
-            const container = galleryOverlay?.querySelector(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
-            if (!container) return;
+            if (!galleryOverlay || !galleryOverlay.length) return;
+            const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
+            if (!$container.length) return;
+
+            const containerDOM = $container[0]; // Get DOM element for addEventListener
 
             let initialTouchDistance = 0;
             let initialScale = 1;
-            let lastTapTime = 0;
             let longPressTimer = null;
             const passiveSupported = Utils.supportsPassiveEvents();
 
-            // Touch start handler
             const touchStart = (e) => {
-                // Start long press timer for context menu
                 if (e.touches.length === 1) {
                     clearTimeout(longPressTimer);
                     longPressTimer = setTimeout(() => {
-                        e.target.classList.add(CSS.LONG_PRESS);
+                        $(e.target).addClass(CSS.LONG_PRESS);
                         if (state.isDragging) Zoom.endDrag();
                     }, 500);
                 }
 
                 if (e.touches.length === 1) {
-                    // Double tap detection
                     const now = Date.now();
                     const timeSinceLastTap = now - state.lastTapTime;
-
                     if (timeSinceLastTap < CONFIG.DOUBLE_TAP_THRESHOLD && timeSinceLastTap > 0) {
-                        // Toggle zoom
                         if (state.zoomScale > 1) {
                             Zoom.resetZoom();
                         } else {
-                            // Zoom in to tap position
                             const touch = e.touches[0];
-                            const rect = container.getBoundingClientRect();
+                            const rect = containerDOM.getBoundingClientRect();
                             const touchX = touch.clientX - rect.left;
                             const touchY = touch.clientY - rect.top;
-
                             state.zoomOrigin = { x: touchX, y: touchY };
                             const newScale = 2.5;
-
                             const imageX = (touchX - state.imageOffset.x) / state.zoomScale;
                             const imageY = (touchY - state.imageOffset.y) / state.zoomScale;
-
                             const newOffsetX = touchX - (imageX * newScale);
                             const newOffsetY = touchY - (imageY * newScale);
-
-                            const image = galleryOverlay.querySelector(`.${CSS.GALLERY.MAIN_IMG}`);
-                            const boundedOffset = Zoom.enforceBoundaries(
-                                newOffsetX, newOffsetY, newScale, rect, image
-                            );
-
-                            container.style.transition = 'transform 0.3s ease-out';
+                            const imageDOM = $container.find(`.${CSS.GALLERY.MAIN_IMG}`)[0];
+                            if (!imageDOM) return;
+                            const boundedOffset = Zoom.enforceBoundaries(newOffsetX, newOffsetY, newScale, rect, imageDOM);
+                            $container.css('transition', 'transform 0.3s ease-out');
                             state.imageOffset.x = boundedOffset.x;
                             state.imageOffset.y = boundedOffset.y;
                             state.zoomScale = newScale;
-
-                            setTimeout(() => container.style.transition = '', 300);
+                            Zoom.applyZoom();
+                            setTimeout(() => $container.css('transition', ''), 300);
                         }
-
-                        state.lastTapTime = 0;
-                        return;
+                        state.lastTapTime = 0; e.preventDefault(); return;
                     }
-
-                    // Regular pan start
                     state.lastTapTime = now;
-                    const touch = e.touches[0];
-                    Zoom.startDrag({
-                        clientX: touch.clientX,
-                        clientY: touch.clientY
-                    });
+                    Zoom.startDrag({ clientX: e.touches[0].clientX, clientY: e.touches[0].clientY, button: 0, preventDefault: () => e.preventDefault(), touches: e.touches });
                 } else if (e.touches.length === 2) {
-                    // Clear long press for multi-touch
-                    clearTimeout(longPressTimer);
-                    e.preventDefault();
-
-                    // Pinch zoom setup
-                    const touch1 = e.touches[0];
-                    const touch2 = e.touches[1];
-
-                    initialTouchDistance = Utils.getDistance(touch1, touch2);
+                    clearTimeout(longPressTimer); e.preventDefault();
+                    initialTouchDistance = Utils.getDistance(e.touches[0], e.touches[1]);
                     initialScale = state.zoomScale;
-
-                    state.zoomOrigin = Utils.getMidpoint(touch1, touch2);
+                    const rect = containerDOM.getBoundingClientRect();
+                    const midPointScreen = Utils.getMidpoint(e.touches[0], e.touches[1]);
+                    state.zoomOrigin = { x: midPointScreen.x - rect.left, y: midPointScreen.y - rect.top };
                     state.pinchZoomActive = true;
-
                     if (state.isDragging) Zoom.endDrag();
                 }
             };
 
-            // Touch move handler
             const touchMove = (e) => {
-                // Clear long press on movement
                 clearTimeout(longPressTimer);
-
                 if (e.touches.length === 1 && state.isDragging) {
-                    const touch = e.touches[0];
-                    Zoom.dragImage({
-                        clientX: touch.clientX,
-                        clientY: touch.clientY
-                    });
+                    e.preventDefault();
+                    Zoom.dragImage({ clientX: e.touches[0].clientX, clientY: e.touches[0].clientY, touches: e.touches });
                 } else if (e.touches.length === 2 && state.pinchZoomActive) {
                     e.preventDefault();
-
-                    const touch1 = e.touches[0];
-                    const touch2 = e.touches[1];
-
-                    const currentDistance = Utils.getDistance(touch1, touch2);
+                    const currentDistance = Utils.getDistance(e.touches[0], e.touches[1]);
+                    if (initialTouchDistance === 0) return;
                     const scaleFactor = currentDistance / initialTouchDistance;
-                    const newScale = Math.max(CONFIG.MIN_SCALE,
-                                         Math.min(initialScale * scaleFactor, CONFIG.MAX_SCALE));
+                    const newScale = Math.max(CONFIG.MIN_SCALE, Math.min(initialScale * scaleFactor, CONFIG.MAX_SCALE));
+                    const rect = containerDOM.getBoundingClientRect();
+                    const imageDOM = $container.find(`.${CSS.GALLERY.MAIN_IMG}`)[0];
 
-                    const midpoint = Utils.getMidpoint(touch1, touch2);
-                    const rect = container.getBoundingClientRect();
-                    const image = galleryOverlay.querySelector(`.${CSS.GALLERY.MAIN_IMG}`);
-
-                    // Only update for significant changes
-                    if (Math.abs(newScale - state.zoomScale) > 0.01) {
-                        const touchX = midpoint.x - rect.left;
-                        const touchY = midpoint.y - rect.top;
-
-                        const imageX = (touchX - state.imageOffset.x) / state.zoomScale;
-                        const imageY = (touchY - state.imageOffset.y) / state.zoomScale;
-
-                        const newOffsetX = touchX - (imageX * newScale);
-                        const newOffsetY = touchY - (imageY * newScale);
-
-                        const boundedOffset = Zoom.enforceBoundaries(
-                            newOffsetX, newOffsetY, newScale, rect, image
-                        );
-
+                    if (Math.abs(newScale - state.zoomScale) > 0.01 || e.touches.length !== 2) {
+                        const imageX = (state.zoomOrigin.x - state.imageOffset.x) / state.zoomScale;
+                        const imageY = (state.zoomOrigin.y - state.imageOffset.y) / state.zoomScale;
+                        const newOffsetX = state.zoomOrigin.x - (imageX * newScale);
+                        const newOffsetY = state.zoomOrigin.y - (imageY * newScale);
+                        if (!imageDOM) return;
+                        const boundedOffset = Zoom.enforceBoundaries(newOffsetX, newOffsetY, newScale, rect, imageDOM);
                         state.imageOffset.x = boundedOffset.x;
                         state.imageOffset.y = boundedOffset.y;
                         state.zoomScale = newScale;
+                        Zoom.applyZoom();
                     }
                 }
             };
 
-            // Touch end handler
             const touchEnd = (e) => {
                 clearTimeout(longPressTimer);
-
-                // Remove long press indicator
-                container.querySelectorAll(`.${CSS.LONG_PRESS}`).forEach(el => {
-                    el.classList.remove(CSS.LONG_PRESS);
-                });
-
-                if (e.touches.length === 0 || state.pinchZoomActive) {
-                    if (state.isDragging) Zoom.endDrag();
-                    state.pinchZoomActive = false;
-                    initialTouchDistance = 0;
+                $container.find(`.${CSS.LONG_PRESS}`).removeClass(CSS.LONG_PRESS);
+                if (e.touches.length < 2 && state.pinchZoomActive) {
+                    state.pinchZoomActive = false; initialTouchDistance = 0;
+                }
+                if (e.touches.length === 0 && state.isDragging) {
+                    Zoom.endDrag();
                 }
             };
 
-            // Add event listeners
-            container.addEventListener('touchstart', touchStart, passiveSupported ? { passive: false } : false);
-            container.addEventListener('touchmove', touchMove, passiveSupported ? { passive: false } : false);
-            container.addEventListener('touchend', touchEnd);
-            container.addEventListener('touchcancel', touchEnd);
+            const eventOptions = passiveSupported ? { passive: false } : false;
+            containerDOM.removeEventListener('touchstart', touchStart, eventOptions); // Try removing first
+            containerDOM.removeEventListener('touchmove', touchMove, eventOptions);
+            containerDOM.removeEventListener('touchend', touchEnd);
+            containerDOM.removeEventListener('touchcancel', touchEnd);
+
+            containerDOM.addEventListener('touchstart', touchStart, eventOptions);
+            containerDOM.addEventListener('touchmove', touchMove, eventOptions);
+            containerDOM.addEventListener('touchend', touchEnd);
+            containerDOM.addEventListener('touchcancel', touchEnd);
         }
     };
 
@@ -976,7 +1025,7 @@
                 }
 
                 if (!createThisButton) {
-                    return; 
+                    return;
                 }
 
                 const button = UI.createToggleButton(config.text, config.action);
@@ -1102,76 +1151,122 @@
         },
 
         createSettingsUI: () => {
-            const overlay = document.createElement('div');
-            overlay.id = 'ug-settings-overlay';
-            overlay.classList.add(CSS.SETTINGS.OVERLAY);
+            const $overlay = $('<div>').attr('id', 'ug-settings-overlay').addClass(CSS.SETTINGS.OVERLAY);
 
-            const container = document.createElement('div');
-            container.classList.add(CSS.SETTINGS.CONTAINER);
-            overlay.appendChild(container);
+            const $container = $('<div>').addClass(CSS.SETTINGS.CONTAINER);
+            $overlay.append($container);
 
-            const header = document.createElement('div');
-            header.classList.add(CSS.SETTINGS.HEADER);
-            container.appendChild(header);
+            const $header = $('<div>').addClass(CSS.SETTINGS.HEADER);
+            $container.append($header);
 
-            const headerText = document.createElement('h2');
-            headerText.textContent = 'Ultra Galleries Settings';
-            header.appendChild(headerText);
+            const $headerText = $('<h2>').text('Ultra Galleries Settings');
+            $header.append($headerText);
 
-            const closeBtn = document.createElement('button');
-            closeBtn.classList.add(CSS.SETTINGS.CLOSE_BTN);
-            closeBtn.textContent = BUTTONS.CLOSE;
-            closeBtn.addEventListener('click', () => state.settingsOpen = false);
-            header.appendChild(closeBtn);
+            const $closeBtn = $('<button>').addClass(CSS.SETTINGS.CLOSE_BTN)
+                .text(BUTTONS.CLOSE)
+                .on('click', () => state.settingsOpen = false);
+            $header.append($closeBtn);
 
-            const body = document.createElement('div');
-            body.classList.add(CSS.SETTINGS.BODY);
-            container.appendChild(body);
+            const $body = $('<div>').addClass(CSS.SETTINGS.BODY);
+            $container.append($body);
 
-            // Create sections
+            function createSection($parent, title) {
+                const $section = $('<div>').addClass(CSS.SETTINGS.SECTION);
+                $section.append($('<h3>').addClass(CSS.SETTINGS.SECTION_HEADER).text(title));
+                $parent.append($section);
+                return $section; // Return the jQuery object for the section
+            }
+
+            function addCheckbox($parent, id, label, checked, onChange) {
+                const $div = $('<div>').addClass(CSS.SETTINGS.CHECKBOX_LABEL);
+                const $input = $('<input type="checkbox">').attr('id', id).prop('checked', checked).addClass(CSS.SETTINGS.INPUT)
+                    .on('change', e => onChange($(e.target).prop('checked')));
+                const $label = $('<label>').attr('for', id).text(label).addClass(CSS.SETTINGS.LABEL);
+                $div.append($input, $label);
+                $parent.append($div);
+                return $div;
+            }
+
+            function addTextInput($parent, id, label, value, maxLength, onChange) {
+                const $div = $('<div>').addClass(CSS.SETTINGS.LABEL);
+                $div.html(`
+                    <label class="${CSS.SETTINGS.LABEL}" for="${id}">${label}</label>
+                    <input type="text" id="${id}" value="${value}" maxlength="${maxLength}"
+                        style="width: 2em;" class="${CSS.SETTINGS.INPUT}">
+                `);
+                $div.find('input').on('change', e => onChange($(e.target).val()));
+                $parent.append($div);
+                return $div;
+            }
+
+            function addTextAreaInput($parent, id, label, value, onChange) {
+                const $div = $('<div>').addClass(CSS.SETTINGS.LABEL);
+                $div.html(`
+                    <label class="${CSS.SETTINGS.LABEL}" for="${id}">${label}</label>
+                    <input type="text" id="${id}" value="${value}" style="width: 100%;" class="${CSS.SETTINGS.INPUT}">
+                `);
+                $div.find('input').on('change', e => onChange($(e.target).val()));
+                $parent.append($div);
+                return $div;
+            }
+
+            function addNumberInput($parent, id, label, value, min, max, step, onChange) {
+                const $div = $('<div>').addClass(CSS.SETTINGS.LABEL);
+                $div.html(`
+                    <label for="${id}">${label}</label>
+                    <input type="number" id="${id}" value="${value}" min="${min}" max="${max}"
+                        step="${step}" class="${CSS.SETTINGS.INPUT}">
+                `);
+                $div.find('input').on('change', e => onChange(parseFloat($(e.target).val())));
+                $parent.append($div);
+                return $div;
+            }
+
+            // Create sections (using jQuery objects for sections)
             const sections = {
-                general: createSection(body, 'General Settings'),
-                keys: createSection(body, 'Keyboard Shortcuts'),
-                notifications: createSection(body, 'Notifications'),
-                formatting: createSection(body, 'File Formatting'),
-                buttonVisibility: createSection(body, 'Button Visibility'),
-                panZoom: createSection(body, 'Pan & Zoom Settings')
+                general: createSection($body, 'General Settings'),
+                keys: createSection($body, 'Keyboard Shortcuts'),
+                notifications: createSection($body, 'Notifications'),
+                formatting: createSection($body, 'File Formatting'),
+                optimizations: createSection($body, 'Download Optimizations'),
+                buttonVisibility: createSection($body, 'Button Visibility'),
+                panZoom: createSection($body, 'Pan & Zoom Settings')
             };
 
             // --- General Settings ---
             addCheckbox(sections.general, 'dynamicResizingToggle', 'Dynamic Resizing',
-                       state.dynamicResizing, val => {
+                    state.dynamicResizing, val => {
                 state.dynamicResizing = val;
                 GM_setValue('dynamicResizing', val);
             });
 
             addCheckbox(sections.general, 'animationsToggle', 'Enable Animations',
-                       state.animationsEnabled, val => {
+                    state.animationsEnabled, val => {
                 state.animationsEnabled = val;
                 GM_setValue('animationsEnabled', val);
             });
 
             addCheckbox(sections.general, 'bottomStripeToggle', 'Show Thumbnail Strip',
-                       state.bottomStripeVisible, val => {
+                    state.bottomStripeVisible, val => {
                 state.bottomStripeVisible = val;
                 GM_setValue('bottomStripeVisible', val);
             });
 
             // --- Pan & Zoom Settings ---
             addCheckbox(sections.panZoom, 'zoomEnabledToggle', 'Enable Zoom & Pan',
-                       state.zoomEnabled, val => {
+                    state.zoomEnabled, val => {
                 state.zoomEnabled = val;
                 GM_setValue('zoomEnabled', val);
             });
 
             addCheckbox(sections.panZoom, 'inertiaEnabledToggle', 'Enable Smooth Pan Inertia',
-                       state.inertiaEnabled, val => {
+                    state.inertiaEnabled, val => {
                 state.inertiaEnabled = val;
                 GM_setValue('inertiaEnabled', val);
             });
 
             addNumberInput(sections.panZoom, 'maxZoomInput', 'Maximum Zoom Level:',
-                          CONFIG.MAX_SCALE, 2, 10, 0.5, val => {
+                        CONFIG.MAX_SCALE, 2, 10, 0.5, val => {
                 if (val >= 2 && val <= 10) {
                     CONFIG.MAX_SCALE = val;
                     GM_setValue('maxZoomScale', val);
@@ -1219,13 +1314,13 @@
 
             // --- Notifications Settings ---
             addCheckbox(sections.notifications, 'notificationsEnabledToggle', 'Enable Notifications',
-                       state.notificationsEnabled, val => {
+                    state.notificationsEnabled, val => {
                 state.notificationsEnabled = val;
                 GM_setValue('notificationsEnabled', val);
             });
 
             addCheckbox(sections.notifications, 'notificationAreaVisibleToggle', 'Show Notification Area',
-                       state.notificationAreaVisible, val => {
+                    state.notificationAreaVisible, val => {
                 state.notificationAreaVisible = val;
                 GM_setValue('notificationAreaVisible', val);
                 const area = document.getElementById(CSS.NOTIF_AREA);
@@ -1233,93 +1328,67 @@
             });
 
             // Add dropdown for notification position
-            const posDiv = document.createElement('div');
-            posDiv.classList.add(CSS.SETTINGS.LABEL);
-            posDiv.innerHTML = `
+            const $posDiv = $('<div>').addClass(CSS.SETTINGS.LABEL).html(`
                 <label class="${CSS.SETTINGS.LABEL}">Notification Position:</label>
                 <select id="notificationPosition" class="${CSS.SETTINGS.INPUT}">
                     <option value="top" ${state.notificationPosition === 'top' ? 'selected' : ''}>Top</option>
                     <option value="bottom" ${state.notificationPosition === 'bottom' ? 'selected' : ''}>Bottom</option>
                 </select>
-            `;
-            posDiv.querySelector('select').addEventListener('change', e => {
+            `);
+            $posDiv.find('select').on('change', e => {
                 state.notificationPosition = e.target.value;
             });
-            sections.notifications.appendChild(posDiv);
+            sections.notifications.append($posDiv);
+
+            // --- Download Optimizations Settings ---
+            addCheckbox(sections.optimizations, 'optimizePngToggle', 'Optimize PNGs in ZIP (Smaller files, Slower zipping)',
+                    state.optimizePngInZip, val => {
+                state.optimizePngInZip = val;
+            });
+            addCheckbox(sections.optimizations, 'persistentCachingToggle', 'Enable Persistent Image Caching (Faster revisit load times)',
+                state.enablePersistentCaching, val => {
+            state.enablePersistentCaching = val;
+            });
+
+            // Create and append the Clear Cache Button here, within the 'optimizations' section
+            const $clearCacheButton = $('<button class="ug-button ug-settings-input" style="margin-top: 10px; display: block;">Clear Persistent Cache</button>');
+            $clearCacheButton.on('click', async () => {
+                if (!db && state.enablePersistentCaching) { // Attempt to init Dexie if not already
+                    initDexie();
+                }
+                if (!db) {
+                    Swal.fire('Cache Not Ready', 'The persistent cache system is not currently active.', 'info');
+                    return;
+                }
+                const result = await Swal.fire({
+                    title: 'Clear Cache?',
+                    text: "This will remove all persistently cached images. Are you sure?",
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Yes, clear it!',
+                    cancelButtonText: 'No, cancel'
+                });
+                if (result.isConfirmed) {
+                    clearDexieCache(); // This function shows its own notification
+                }
+            });
+            sections.optimizations.append($clearCacheButton);
 
             // --- File Formatting Settings ---
             addTextAreaInput(sections.formatting, 'zipFileNameFormatInput', 'Zip File Name Format:',
-                           state.zipFileNameFormat, val => {
+                        state.zipFileNameFormat, val => {
                 state.zipFileNameFormat = val;
                 GM_setValue('zipFileNameFormat', val);
             });
 
             addTextAreaInput(sections.formatting, 'imageFileNameFormatInput', 'Image File Name Format:',
-                           state.imageFileNameFormat, val => {
+                        state.imageFileNameFormat, val => {
                 state.imageFileNameFormat = val;
                 GM_setValue('imageFileNameFormat', val);
             });
 
-            document.body.appendChild(overlay);
-
-            // Helper functions for creating settings UI elements
-            function createSection(parent, title) {
-                const section = document.createElement('div');
-                section.classList.add(CSS.SETTINGS.SECTION);
-                section.innerHTML = `<h3 class="${CSS.SETTINGS.SECTION_HEADER}">${title}</h3>`;
-                parent.appendChild(section);
-                return section;
-            }
-
-            function addCheckbox(parent, id, label, checked, onChange) {
-                const div = document.createElement('div');
-                div.classList.add(CSS.SETTINGS.CHECKBOX_LABEL);
-                div.innerHTML = `
-                    <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} class="${CSS.SETTINGS.INPUT}">
-                    <label class="${CSS.SETTINGS.LABEL}" for="${id}">${label}</label>
-                `;
-                div.querySelector('input').addEventListener('change', e => onChange(e.target.checked));
-                parent.appendChild(div);
-                return div;
-            }
-
-            function addTextInput(parent, id, label, value, maxLength, onChange) {
-                const div = document.createElement('div');
-                div.classList.add(CSS.SETTINGS.LABEL);
-                div.innerHTML = `
-                    <label class="${CSS.SETTINGS.LABEL}" for="${id}">${label}</label>
-                    <input type="text" id="${id}" value="${value}" maxlength="${maxLength}"
-                           style="width: 2em;" class="${CSS.SETTINGS.INPUT}">
-                `;
-                div.querySelector('input').addEventListener('change', e => onChange(e.target.value));
-                parent.appendChild(div);
-                return div;
-            }
-
-            function addTextAreaInput(parent, id, label, value, onChange) {
-                const div = document.createElement('div');
-                div.classList.add(CSS.SETTINGS.LABEL);
-                div.innerHTML = `
-                    <label class="${CSS.SETTINGS.LABEL}" for="${id}">${label}</label>
-                    <input type="text" id="${id}" value="${value}" style="width: 100%;" class="${CSS.SETTINGS.INPUT}">
-                `;
-                div.querySelector('input').addEventListener('change', e => onChange(e.target.value));
-                parent.appendChild(div);
-                return div;
-            }
-
-            function addNumberInput(parent, id, label, value, min, max, step, onChange) {
-                const div = document.createElement('div');
-                div.classList.add(CSS.SETTINGS.LABEL);
-                div.innerHTML = `
-                    <label for="${id}">${label}</label>
-                    <input type="number" id="${id}" value="${value}" min="${min}" max="${max}"
-                           step="${step}" class="${CSS.SETTINGS.INPUT}">
-                `;
-                div.querySelector('input').addEventListener('change', e => onChange(parseFloat(e.target.value)));
-                parent.appendChild(div);
-                return div;
-            }
+            // Append the jQuery object $overlay to the body
+            $('body').append($overlay);
         },
 
         showSettings: () => {
@@ -1346,8 +1415,8 @@
     // Gallery Module
     // ====================================================
 
-    let galleryOverlay = null;
-
+    let galleryOverlay = null; 
+    
     const Gallery = {
         _preloadedImageCache: {},
         _preloadingInProgress: {},
@@ -1356,53 +1425,62 @@
             for (const index in Gallery._preloadedImageCache) {
                 const cachedItem = Gallery._preloadedImageCache[index];
                 if (typeof cachedItem === 'string' && cachedItem.startsWith('blob:')) {
-                    try {
-                        URL.revokeObjectURL(cachedItem);
-                    } catch (e) {
-                        /* Silent error */
-                    }
+                    try { URL.revokeObjectURL(cachedItem); } catch (e) { /* silent */ }
                 }
             }
             Gallery._preloadedImageCache = {};
             Gallery._preloadingInProgress = {};
+
+            // Also revoke blob URLs from the global loadedBlobUrls map
+            for (const blobUrl of loadedBlobUrls.values()) {
+                if (typeof blobUrl === 'string' && blobUrl.startsWith('blob:')) {
+                    try { URL.revokeObjectURL(blobUrl); } catch (e) { /* silent */ }
+                }
+            }
+            loadedBlobUrls.clear(); // Clear the map after revoking
+            loadedBlobs.clear();    // Clear the blobs map
         },
 
         _fetchAndCacheImage: async function(indexToPreload) {
-            if (indexToPreload < 0 || indexToPreload >= state.fullSizeImageSrcs.length) {
-                return;
-            }
-            if (Gallery._preloadedImageCache[indexToPreload] || Gallery._preloadingInProgress[indexToPreload]) {
-                return;
-            }
+            if (indexToPreload < 0 || indexToPreload >= state.originalImageSrcs.length) return;
+            if (Gallery._preloadedImageCache[indexToPreload] || Gallery._preloadingInProgress[indexToPreload]) return;
 
-            const imageUrl = state.fullSizeImageSrcs[indexToPreload];
-            if (!imageUrl) {
-                return;
-            }
+            const originalImageUrl = state.originalImageSrcs[indexToPreload];
+            if (!originalImageUrl) return;
 
             Gallery._preloadingInProgress[indexToPreload] = true;
+            let blobToCache = null;
+            let loadedFromPersistentCache = false;
 
             try {
-                await new Promise((resolve, reject) => {
-                    GM.xmlHttpRequest({
-                        method: 'GET',
-                        url: imageUrl,
-                        responseType: 'blob',
-                        onload: function(response) {
-                            if (response.status === 200 || response.status === 206) {
-                                const blobUrl = URL.createObjectURL(response.response);
-                                Gallery._preloadedImageCache[indexToPreload] = blobUrl;
-                                resolve();
-                            } else {
-                                reject(new Error(`HTTP ${response.status}`));
-                            }
-                        },
-                        onerror: (error) => {
-                            reject(error);
-                        }
+                if (state.enablePersistentCaching && db) {
+                    const cachedBlob = await getImageFromDexie(originalImageUrl);
+                    if (cachedBlob) {
+                        blobToCache = cachedBlob;
+                        loadedFromPersistentCache = true;
+                    }
+                }
+
+                if (!blobToCache) {
+                    blobToCache = await new Promise((resolve, reject) => {
+                        GM.xmlHttpRequest({
+                            method: 'GET', url: originalImageUrl, responseType: 'blob',
+                            onload: r => (r.status === 200 || r.status === 206) ? resolve(r.response) : reject(new Error(`HTTP ${r.status}`)),
+                            onerror: reject
+                        });
                     });
-                });
+                    if (blobToCache && state.enablePersistentCaching && db) {
+                        await storeImageInDexie(originalImageUrl, blobToCache);
+                    }
+                }
+
+                if (blobToCache) {
+                    Gallery._preloadedImageCache[indexToPreload] = URL.createObjectURL(blobToCache);
+                } else {
+                    Gallery._preloadedImageCache[indexToPreload] = 'failed_preload';
+                }
             } catch (error) {
+                console.error(`Ultra Galleries: Error preloading image ${originalImageUrl}:`, error);
                 Gallery._preloadedImageCache[indexToPreload] = 'failed_preload';
             } finally {
                 delete Gallery._preloadingInProgress[indexToPreload];
@@ -1414,200 +1492,111 @@
             Gallery._fetchAndCacheImage(currentIndex - 1);
         },
 
-        // --- Private Helper Methods for UI Creation ---
         _createGalleryOverlayAndContainer: function() {
-            galleryOverlay = document.createElement('div');
-            galleryOverlay.id = 'gallery-overlay';
-            galleryOverlay.classList.add(CSS.GALLERY.OVERLAY);
-
-            const container = document.createElement('div');
-            container.classList.add(CSS.GALLERY.CONTAINER);
-            galleryOverlay.appendChild(container);
-            return container;
+            // Ensure galleryOverlay is initialized as a jQuery object
+            galleryOverlay = $('<div>').attr('id', 'gallery-overlay').addClass(CSS.GALLERY.OVERLAY);
+            const $container = $('<div>').addClass(CSS.GALLERY.CONTAINER).appendTo(galleryOverlay);
+            return $container;
         },
 
-        _createBaseViews: function(galleryContentContainer) {
-            const gridView = document.createElement('div');
-            gridView.classList.add(CSS.GALLERY.GRID_VIEW);
-            galleryContentContainer.appendChild(gridView);
-
-            const expandedView = document.createElement('div');
-            expandedView.classList.add(CSS.GALLERY.EXPANDED_VIEW, CSS.GALLERY.HIDE);
-            galleryContentContainer.appendChild(expandedView);
-            return { gridView, expandedView };
+        _createBaseViews: function($galleryContentContainer) {
+            const $gridView = $('<div>').addClass(CSS.GALLERY.GRID_VIEW).appendTo($galleryContentContainer);
+            const $expandedView = $('<div>').addClass(CSS.GALLERY.EXPANDED_VIEW).addClass(CSS.GALLERY.HIDE).appendTo($galleryContentContainer);
+            return { $gridView, $expandedView };
         },
 
-        _createGridViewContent: function(gridViewElement) {
-            const thumbnailGrid = document.createElement('div');
-            thumbnailGrid.classList.add(CSS.GALLERY.THUMBNAIL_GRID);
-            gridViewElement.appendChild(thumbnailGrid);
-
-            const gridCloseButton = document.createElement('button');
-            gridCloseButton.textContent = BUTTONS.CLOSE;
-            gridCloseButton.classList.add(CSS.GALLERY.GRID_CLOSE);
-            gridCloseButton.addEventListener('click', Gallery.closeGallery);
-            gridCloseButton.setAttribute('aria-label', 'Close Gallery');
-            gridViewElement.appendChild(gridCloseButton);
-            return thumbnailGrid;
+        _createGridViewContent: function($gridViewElement) {
+            const $thumbnailGrid = $('<div>').addClass(CSS.GALLERY.THUMBNAIL_GRID).appendTo($gridViewElement);
+            $('<button>')
+                .text(BUTTONS.CLOSE).addClass(CSS.GALLERY.GRID_CLOSE)
+                .attr('aria-label', 'Close Gallery').on('click', Gallery.closeGallery)
+                .appendTo($gridViewElement);
+            return $thumbnailGrid;
         },
 
-        _createExpandedViewToolbar: function(expandedViewElement) {
-            const toolbar = document.createElement('div');
-            toolbar.classList.add(CSS.GALLERY.TOOLBAR);
-            toolbar.addEventListener('mousedown', e => e.stopPropagation());
-            expandedViewElement.appendChild(toolbar);
+        _createExpandedViewToolbar: function($expandedViewElement) {
+            const $toolbar = $('<div>').addClass(CSS.GALLERY.TOOLBAR).on('mousedown', e => e.stopPropagation());
+            $('<button>').addClass(CSS.GALLERY.TOOLBAR_BTN).text(BUTTONS.CLOSE)
+                .attr('aria-label', 'Close Expanded View').on('click', Gallery.showGridView)
+                .appendTo($toolbar);
 
-            const closeBtn = document.createElement('button');
-            closeBtn.classList.add(CSS.GALLERY.TOOLBAR_BTN);
-            closeBtn.textContent = BUTTONS.CLOSE;
-            closeBtn.addEventListener('click', Gallery.showGridView);
-            closeBtn.setAttribute('aria-label', 'Close Expanded View');
-            toolbar.appendChild(closeBtn);
+            const $zoomControls = $('<div>').addClass('zoom-controls').appendTo($toolbar);
+            $('<button>').attr({id: 'zoom-out-btn', title: 'Zoom Out'}).addClass(CSS.GALLERY.TOOLBAR_BTN)
+                .html('<img src="https://www.svgrepo.com/show/263638/zoom-out-search.svg" alt="Zoom Out" style="filter: invert(100%); pointer-events: none;">')
+                .on('click', () => Zoom.zoom(-CONFIG.ZOOM_STEP)).appendTo($zoomControls);
+            $('<span>').attr('id', 'zoom-level').addClass('zoom-level').text('100%').appendTo($zoomControls);
+            $('<button>').attr({id: 'zoom-in-btn', title: 'Zoom In'}).addClass(CSS.GALLERY.TOOLBAR_BTN)
+                .html('<img src="https://www.svgrepo.com/show/263635/zoom-in.svg" alt="Zoom In" style="filter: invert(100%); pointer-events: none;">')
+                .on('click', () => Zoom.zoom(CONFIG.ZOOM_STEP)).appendTo($zoomControls);
+            $('<button>').attr({id: 'reset-btn', title: 'Reset Zoom & Position'}).addClass(CSS.GALLERY.TOOLBAR_BTN)
+                .text('Reset').on('click', Zoom.resetZoom).appendTo($zoomControls);
 
-            const zoomControls = document.createElement('div');
-            zoomControls.classList.add('zoom-controls');
-            toolbar.appendChild(zoomControls);
-
-            const zoomOutBtn = document.createElement('button');
-            zoomOutBtn.id = 'zoom-out-btn';
-            zoomOutBtn.title = 'Zoom Out';
-            zoomOutBtn.classList.add(CSS.GALLERY.TOOLBAR_BTN);
-            zoomOutBtn.innerHTML = '<img src="https://www.svgrepo.com/show/263638/zoom-out-search.svg" alt="Zoom Out" style="filter: invert(100%);">';
-            zoomOutBtn.addEventListener('click', () => Zoom.zoom(-CONFIG.ZOOM_STEP));
-            zoomControls.appendChild(zoomOutBtn);
-
-            const zoomLevelDisplay = document.createElement('span');
-            zoomLevelDisplay.id = 'zoom-level';
-            zoomLevelDisplay.classList.add('zoom-level');
-            zoomLevelDisplay.textContent = '100%';
-            zoomControls.appendChild(zoomLevelDisplay);
-
-            const zoomInBtn = document.createElement('button');
-            zoomInBtn.id = 'zoom-in-btn';
-            zoomInBtn.title = 'Zoom In';
-            zoomInBtn.classList.add(CSS.GALLERY.TOOLBAR_BTN);
-            zoomInBtn.innerHTML = '<img src="https://www.svgrepo.com/show/263635/zoom-in.svg" alt="Zoom In" style="filter: invert(100%);">';
-            zoomInBtn.addEventListener('click', () => Zoom.zoom(CONFIG.ZOOM_STEP));
-            zoomControls.appendChild(zoomInBtn);
-
-            const resetZoomBtn = document.createElement('button');
-            resetZoomBtn.id = 'reset-btn';
-            resetZoomBtn.title = 'Reset Zoom & Position';
-            resetZoomBtn.classList.add(CSS.GALLERY.TOOLBAR_BTN);
-            resetZoomBtn.textContent = 'Reset';
-            resetZoomBtn.addEventListener('click', Zoom.resetZoom);
-            zoomControls.appendChild(resetZoomBtn);
-
-            const fullscreenButton = document.createElement('button');
-            fullscreenButton.textContent = BUTTONS.FULLSCREEN;
-            fullscreenButton.classList.add(CSS.GALLERY.FULLSCREEN, CSS.GALLERY.TOOLBAR_BTN);
-            fullscreenButton.addEventListener('click', Gallery.toggleFullscreen);
-            fullscreenButton.setAttribute('aria-label', 'Toggle Fullscreen');
-            toolbar.appendChild(fullscreenButton);
+            $('<button>').text(BUTTONS.FULLSCREEN).addClass(CSS.GALLERY.FULLSCREEN).addClass(CSS.GALLERY.TOOLBAR_BTN)
+                .attr('aria-label', 'Toggle Fullscreen').on('click', Gallery.toggleFullscreen)
+                .appendTo($toolbar);
+            $expandedViewElement.append($toolbar);
         },
 
-        _createExpandedViewMainImageArea: function(expandedViewElement) {
-            const zoomContainer = document.createElement('div');
-            zoomContainer.classList.add(CSS.GALLERY.ZOOM_CONTAINER);
-            expandedViewElement.appendChild(zoomContainer);
-
-            const mainImageContainer = document.createElement('div');
-            mainImageContainer.classList.add(CSS.GALLERY.MAIN_IMG_CONTAINER, 'image-container');
-            zoomContainer.appendChild(mainImageContainer);
-
-            const panIndicator = document.createElement('div');
-            panIndicator.className = 'pan-indicator';
-            Object.assign(panIndicator.style, {
-                position: 'absolute', top: '15px', left: '15px', zIndex: '10',
-                opacity: '0', transition: 'opacity 0.3s ease'
-            });
-            panIndicator.innerHTML = `
-                <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="white" opacity="0.7">
-                    <path d="M10 9h4V6h3l-5-5-5 5h3v3zm-1 1H6V7l-5 5 5 5v-3h3v-4zm14 2l-5-5v3h-3v4h3v3l5-5zm-9 3h-4v3H7l5 5 5-5h-3v-3z"/>
-                </svg>`;
-            mainImageContainer.appendChild(panIndicator);
-
-            const mainImage = document.createElement('img');
-            mainImage.classList.add(CSS.GALLERY.MAIN_IMG, 'gallery-image');
-            mainImageContainer.appendChild(mainImage);
-            return { mainImageContainer, mainImage };
+        _createExpandedViewMainImageArea: function($expandedViewElement) {
+            const $zoomContainer = $('<div>').addClass(CSS.GALLERY.ZOOM_CONTAINER).appendTo($expandedViewElement);
+            const $mainImageContainer = $('<div>').addClass(CSS.GALLERY.MAIN_IMG_CONTAINER).addClass('image-container').appendTo($zoomContainer);
+            $('<div>').addClass('pan-indicator')
+                .css({position:'absolute',top:'15px',left:'15px',zIndex:'10',opacity:'0',transition:'opacity 0.3s ease',pointerEvents:'none'})
+                .html(`<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="white" opacity="0.7"><path d="M10 9h4V6h3l-5-5-5 5h3v3zm-1 1H6V7l-5 5 5 5v-3h3v-4zm14 2l-5-5v3h-3v4h3v3l5-5zm-9 3h-4v3H7l5 5 5-5h-3v-3z"/></svg>`)
+                .appendTo($mainImageContainer);
+            const $mainImage = $('<img>').addClass(CSS.GALLERY.MAIN_IMG).addClass('gallery-image').appendTo($mainImageContainer);
+            return { $mainImageContainer, $mainImage };
         },
 
-        _createExpandedViewNavigationAndCounter: function(expandedViewElement) {
-            const navContainer = document.createElement('div');
-            navContainer.classList.add(CSS.GALLERY.NAV_CONTAINER);
-            navContainer.addEventListener('mousedown', e => e.stopPropagation());
-            expandedViewElement.appendChild(navContainer);
-
+        _createExpandedViewNavigationAndCounter: function($expandedViewElement) {
+            const $navContainer = $('<div>').addClass(CSS.GALLERY.NAV_CONTAINER).on('mousedown', e => e.stopPropagation());
             if (!state.hideNavArrows) {
-                const prevButton = UI.createNavigationButton('prev');
-                navContainer.appendChild(prevButton);
-                const nextButton = UI.createNavigationButton('next');
-                navContainer.appendChild(nextButton);
+                $navContainer.append(UI.createNavigationButton('prev'), UI.createNavigationButton('next'));
             }
-
-            const counter = document.createElement('div');
-            counter.classList.add(CSS.GALLERY.COUNTER, CSS.GALLERY.HIDE);
-            expandedViewElement.appendChild(counter);
+            $expandedViewElement.append($navContainer);
+            $('<div>').addClass(CSS.GALLERY.COUNTER).addClass(CSS.GALLERY.HIDE).appendTo($expandedViewElement);
         },
 
-        _createExpandedViewThumbnailStrip: function(expandedViewElement) {
-            const thumbnailStripContainer = document.createElement('div');
-            thumbnailStripContainer.classList.add(CSS.GALLERY.STRIP_CONTAINER);
-            thumbnailStripContainer.style.display = state.bottomStripeVisible ? 'flex' : 'none';
-            thumbnailStripContainer.addEventListener('mousedown', e => e.stopPropagation());
-            expandedViewElement.appendChild(thumbnailStripContainer);
-
-            const thumbnailStrip = document.createElement('div');
-            thumbnailStrip.classList.add(CSS.GALLERY.THUMBNAIL_STRIP);
-            thumbnailStripContainer.appendChild(thumbnailStrip);
-            return thumbnailStrip;
+        _createExpandedViewThumbnailStrip: function($expandedViewElement) {
+            const $thumbnailStripContainer = $('<div>').addClass(CSS.GALLERY.STRIP_CONTAINER)
+                .css('display', state.bottomStripeVisible ? 'flex' : 'none')
+                .on('mousedown', e => e.stopPropagation()).appendTo($expandedViewElement);
+            const $thumbnailStrip = $('<div>').addClass(CSS.GALLERY.THUMBNAIL_STRIP).appendTo($thumbnailStripContainer);
+            return $thumbnailStrip;
         },
 
-        _populateAllThumbnails: function(gridThumbnailsContainer, stripThumbnailsContainer) {
+        _populateAllThumbnails: function($gridThumbnailsContainer, $stripThumbnailsContainer) {
+            // Populate gallery with unique images from state.fullSizeImageSrcs
             state.fullSizeImageSrcs.forEach((src, index) => {
-                if (src) {
-                    const gridThumbContainer = document.createElement('div');
-                    gridThumbContainer.classList.add(CSS.GALLERY.THUMBNAIL_CONTAINER);
-                    const gridThumbnail = document.createElement('img');
-                    gridThumbnail.src = src; // Initially use the fullSizeImageSrc, could be blob from ImageLoader
-                    gridThumbnail.classList.add(CSS.GALLERY.THUMBNAIL);
-                    gridThumbnail.dataset.index = index;
-                    gridThumbnail.addEventListener('click', () => Gallery.showExpandedView(index));
-                    gridThumbnail.setAttribute('aria-label', `Open image ${index + 1}`);
-                    gridThumbContainer.appendChild(gridThumbnail);
-                    gridThumbnailsContainer.appendChild(gridThumbContainer);
+                if (src) { // Only add if source exists (not null from failed loads)
+                    const $gridThumbImg = $('<img>').attr('src', src).addClass(CSS.GALLERY.THUMBNAIL)
+                        .data('index', index).on('click', () => Gallery.showExpandedView(index))
+                        .attr('aria-label', `Open image ${index + 1}`);
+                    $('<div>').addClass(CSS.GALLERY.THUMBNAIL_CONTAINER).append($gridThumbImg).appendTo($gridThumbnailsContainer);
 
-                    const stripThumbnail = document.createElement('img');
-                    stripThumbnail.src = src; // Initially use the fullSizeImageSrc
-                    stripThumbnail.classList.add(CSS.GALLERY.THUMBNAIL_ITEM);
-                    stripThumbnail.dataset.index = index;
-                    stripThumbnail.setAttribute('aria-label', `Thumbnail ${index + 1}`);
-                    stripThumbnail.addEventListener('click', () => Gallery.showExpandedView(index));
-                    stripThumbnailsContainer.appendChild(stripThumbnail);
+                    $('<img>').attr('src', src).addClass(CSS.GALLERY.THUMBNAIL_ITEM)
+                        .data('index', index).on('click', () => Gallery.showExpandedView(index))
+                        .attr('aria-label', `Thumbnail ${index + 1}`).appendTo($stripThumbnailsContainer);
                 }
             });
         },
 
-        _setupGalleryInteractions: function(expandedViewElement, mainImageContainerElement) {
-            mainImageContainerElement.addEventListener('wheel', Zoom.handleWheelZoom, { passive: false });
+        _setupGalleryInteractions: function($expandedViewElement, $mainImageContainerElement) {
+            $mainImageContainerElement.on('wheel', Zoom.handleWheelZoom);
 
-            expandedViewElement.addEventListener('mousedown', e => {
-                if (e.target.closest(`.${CSS.GALLERY.TOOLBAR}`) ||
-                    e.target.closest(`.${CSS.GALLERY.NAV_CONTAINER}`) ||
-                    e.target.closest(`.${CSS.GALLERY.STRIP_CONTAINER}`) ||
-                    e.button === 2) {
+            $expandedViewElement.on('mousedown', e => {
+                if ($(e.target).closest(`.${CSS.GALLERY.TOOLBAR}, .${CSS.GALLERY.NAV_CONTAINER}, .${CSS.GALLERY.STRIP_CONTAINER}`).length || e.button === 2) {
                     return;
                 }
                 Zoom.startDrag(e);
             });
 
-            mainImageContainerElement.addEventListener('dblclick', e => {
+            $mainImageContainerElement.on('dblclick', e => {
                 if (e.button !== 0) return;
                 if (state.zoomScale > 1) {
                     Zoom.resetZoom();
                 } else {
-                    const rect = mainImageContainerElement.getBoundingClientRect();
+                    const rect = $mainImageContainerElement[0].getBoundingClientRect();
                     const clickX = e.clientX - rect.left;
                     const clickY = e.clientY - rect.top;
                     state.zoomOrigin = { x: clickX, y: clickY };
@@ -1616,20 +1605,21 @@
                     const imageY = (clickY - state.imageOffset.y) / state.zoomScale;
                     const newOffsetX = clickX - (imageX * newScale);
                     const newOffsetY = clickY - (imageY * newScale);
-                    const mainImage = mainImageContainerElement.querySelector(`.${CSS.GALLERY.MAIN_IMG}`);
-                    if (!mainImage) return;
-                    const boundedOffset = Zoom.enforceBoundaries(newOffsetX, newOffsetY, newScale, rect, mainImage);
+                    const mainImageDOM = $mainImageContainerElement.find(`.${CSS.GALLERY.MAIN_IMG}`)[0];
+                    if (!mainImageDOM) return;
+                    const boundedOffset = Zoom.enforceBoundaries(newOffsetX, newOffsetY, newScale, rect, mainImageDOM);
 
-                    mainImageContainerElement.style.transition = 'transform 0.3s ease-out';
+                    $mainImageContainerElement.css('transition', 'transform 0.3s ease-out');
                     state.imageOffset.x = boundedOffset.x;
                     state.imageOffset.y = boundedOffset.y;
                     state.zoomScale = newScale;
-                    setTimeout(() => mainImageContainerElement.style.transition = '', 300);
+                    Zoom.applyZoom();
+                    setTimeout(() => $mainImageContainerElement.css('transition', ''), 300);
                 }
             });
 
             let controlsTimeout;
-            expandedViewElement.addEventListener('mousemove', () => {
+            $expandedViewElement.on('mousemove', () => {
                 state.controlsVisible = true;
                 clearTimeout(controlsTimeout);
                 controlsTimeout = setTimeout(() => {
@@ -1642,145 +1632,132 @@
                 if (!state.isDragging && !state.pinchZoomActive) state.controlsVisible = false;
             }, 3000);
 
+
             Zoom.setupTouchEvents();
 
-            document.addEventListener('mousemove', Zoom.dragImage);
-            document.addEventListener('mouseup', Zoom.endDrag);
+            $(document).on('mousemove.galleryDrag', Zoom.dragImage);
+            $(document).on('mouseup.galleryDrag', Zoom.endDrag);
         },
 
-        // --- Public Gallery Methods ---
         createGallery: function() {
-            if (galleryOverlay) return;
+            if (galleryOverlay && galleryOverlay.length) {
+                // If gallery already exists, just show grid view or toggle
+                Gallery.showGridView();
+                state.isGalleryMode = true;
+                return;
+            }
 
-            const galleryContentContainer = Gallery._createGalleryOverlayAndContainer();
-            const { gridView, expandedView } = Gallery._createBaseViews(galleryContentContainer);
-            const gridThumbnailsContainer = Gallery._createGridViewContent(gridView);
+            const $galleryContentContainer = Gallery._createGalleryOverlayAndContainer();
+            const { $gridView, $expandedView } = Gallery._createBaseViews($galleryContentContainer);
+            const $gridThumbnailsContainer = Gallery._createGridViewContent($gridView);
 
-            Gallery._createExpandedViewToolbar(expandedView);
-            const { mainImageContainer } = Gallery._createExpandedViewMainImageArea(expandedView);
-            Gallery._createExpandedViewNavigationAndCounter(expandedView);
-            const stripThumbnailsContainer = Gallery._createExpandedViewThumbnailStrip(expandedView);
+            Gallery._createExpandedViewToolbar($expandedView);
+            const { $mainImageContainer, $mainImage } = Gallery._createExpandedViewMainImageArea($expandedView);
+            Gallery._createExpandedViewNavigationAndCounter($expandedView);
+            const $stripThumbnailsContainer = Gallery._createExpandedViewThumbnailStrip($expandedView);
 
-            document.body.appendChild(galleryOverlay);
+            $('body').append(galleryOverlay);
 
-            Gallery._populateAllThumbnails(gridThumbnailsContainer, stripThumbnailsContainer);
-            Gallery._setupGalleryInteractions(expandedView, mainImageContainer);
+            Gallery._populateAllThumbnails($gridThumbnailsContainer, $stripThumbnailsContainer);
+            Gallery._setupGalleryInteractions($expandedView, $mainImageContainer);
 
             Gallery.showGridView();
+            state.isGalleryMode = true;
         },
 
         showGridView: function() {
-            if (!galleryOverlay) return;
-            const gridView = galleryOverlay.querySelector(`.${CSS.GALLERY.GRID_VIEW}`);
-            const expandedView = galleryOverlay.querySelector(`.${CSS.GALLERY.EXPANDED_VIEW}`);
-            if (gridView) gridView.classList.remove(CSS.GALLERY.HIDE);
-            if (expandedView) expandedView.classList.add(CSS.GALLERY.HIDE);
+            if (!galleryOverlay || !galleryOverlay.length) return;
+            galleryOverlay.find(`.${CSS.GALLERY.GRID_VIEW}`).removeClass(CSS.GALLERY.HIDE);
+            galleryOverlay.find(`.${CSS.GALLERY.EXPANDED_VIEW}`).addClass(CSS.GALLERY.HIDE);
             Zoom.resetZoom();
             state.isZoomed = false;
             state.controlsVisible = true;
         },
 
         showExpandedView: function(index) {
-            if (!galleryOverlay) return;
+            if (!galleryOverlay || !galleryOverlay.length) return;
 
-            const mainImage = galleryOverlay.querySelector(`.${CSS.GALLERY.MAIN_IMG}`);
-            const mainImageContainer = galleryOverlay.querySelector(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
-            const counter = galleryOverlay.querySelector(`.${CSS.GALLERY.COUNTER}`);
-            const prevButton = galleryOverlay.querySelector(`.${CSS.GALLERY.PREV}`);
-            const nextButton = galleryOverlay.querySelector(`.${CSS.GALLERY.NEXT}`);
-            const thumbnailStrip = galleryOverlay.querySelector(`.${CSS.GALLERY.THUMBNAIL_STRIP}`);
+            const $mainImage = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG}`);
+            const $mainImageContainer = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
+            const $counter = galleryOverlay.find(`.${CSS.GALLERY.COUNTER}`);
+            const $prevButton = galleryOverlay.find(`.${CSS.GALLERY.PREV}`);
+            const $nextButton = galleryOverlay.find(`.${CSS.GALLERY.NEXT}`);
+            const $thumbnailStrip = galleryOverlay.find(`.${CSS.GALLERY.THUMBNAIL_STRIP}`);
 
-            if (!mainImage || !mainImageContainer || !counter) {
-                console.error("Gallery.showExpandedView: Essential elements not found.");
-                return;
-            }
-            if (index < 0 || index >= state.fullSizeImageSrcs.length) {
-                console.error("Gallery.showExpandedView: Invalid image index:", index);
-                return;
-            }
+            if (!$mainImage.length || !$mainImageContainer.length || !$counter.length) return;
+            if (index < 0 || index >= state.fullSizeImageSrcs.length) return;
 
-            let imageUrlToLoad = state.fullSizeImageSrcs[index];
-            let usingPreloaded = false;
+            state.currentGalleryIndex = index;
+            let imageUrlToLoad = null;
+            let usingPreloadedMemoryCache = false;
+            const originalHttpUrl = state.originalImageSrcs[index];
 
             if (Gallery._preloadedImageCache[index] && Gallery._preloadedImageCache[index] !== 'failed_preload') {
                 imageUrlToLoad = Gallery._preloadedImageCache[index];
-                usingPreloaded = true;
+                usingPreloadedMemoryCache = true;
+            } else if (state.fullSizeImageSrcs[index] && state.fullSizeImageSrcs[index] !== 'failed_preload') {
+                imageUrlToLoad = state.fullSizeImageSrcs[index];
+            } else {
+                imageUrlToLoad = originalHttpUrl;
+                if (!imageUrlToLoad) {
+                    $mainImage.attr({src: '', alt: "Image not available"});
+                    $counter.text(`${index + 1} / ${state.fullSizeImageSrcs.length}`);
+                    Gallery._preloadAdjacentImages(index);
+                    return;
+                }
             }
 
-            if (!imageUrlToLoad) {
-                console.error("Gallery.showExpandedView: No image URL for index:", index);
-                mainImage.src = '';
-                mainImage.alt = "Image not available";
-                Gallery._preloadAdjacentImages(index);
-                return;
-            }
-
-            mainImage.classList.add('loading');
+            $mainImage.addClass('loading').removeClass('error');
             Zoom.resetZoom();
-            Object.assign(mainImageContainer.style, {
-                width: '100%', height: '100%', display: 'flex',
-                justifyContent: 'center', alignItems: 'center', overflow: 'hidden'
-            });
-            Object.assign(mainImage.style, {
-                maxWidth: '100%', maxHeight: '100%', objectFit: 'contain',
-                position: 'relative'
-            });
-
-            mainImage.onload = () => {
-                mainImage.classList.remove('loading');
-                Zoom.initializeImage(mainImage, mainImageContainer);
+            $mainImageContainer.css({width:'100%',height:'100%',display:'flex',justifyContent:'center',alignItems:'center',overflow:'hidden'});
+            $mainImage.css({maxWidth:'100%',maxHeight:'100%',objectFit:'contain',position:'relative'});
+            $mainImage.off('load error').on('load', () => {
+                $mainImage.removeClass('loading');
+                Zoom.initializeImage($mainImage[0], $mainImageContainer[0]);
                 Gallery._preloadAdjacentImages(index);
-            };
-            mainImage.onerror = () => {
-                console.error("Error loading image in expanded view:", usingPreloaded ? "(preloaded)" : state.fullSizeImageSrcs[index]);
-                mainImage.src = '';
-                mainImage.alt = "Error loading image";
-                mainImage.classList.remove('loading');
-                mainImage.classList.add('error');
-                if (usingPreloaded && Gallery._preloadedImageCache[index]) {
-                    if(Gallery._preloadedImageCache[index].startsWith('blob:')) URL.revokeObjectURL(Gallery._preloadedImageCache[index]);
+            }).on('error', () => {
+                $mainImage.removeClass('loading').addClass('error').attr({src:'', alt:"Error loading image"});
+                if (usingPreloadedMemoryCache && imageUrlToLoad.startsWith('blob:') && Gallery._preloadedImageCache[index]) {
+                    try { URL.revokeObjectURL(imageUrlToLoad); } catch (e) { /* silent */ }
                     delete Gallery._preloadedImageCache[index];
                 }
                 Gallery._preloadAdjacentImages(index);
-            };
+            });
+            $mainImage.attr({src: imageUrlToLoad, alt: `Image ${index + 1} of ${state.fullSizeImageSrcs.length}`});
+            $counter.text(`${index + 1} / ${state.fullSizeImageSrcs.length}`);
 
-            mainImage.src = imageUrlToLoad;
-            mainImage.alt = `Image ${index + 1} of ${state.fullSizeImageSrcs.length}`;
-            counter.textContent = `${index + 1} / ${state.fullSizeImageSrcs.length}`;
-            state.currentGalleryIndex = index;
+            galleryOverlay.find(`.${CSS.GALLERY.GRID_VIEW}`).addClass(CSS.GALLERY.HIDE);
+            galleryOverlay.find(`.${CSS.GALLERY.EXPANDED_VIEW}`).removeClass(CSS.GALLERY.HIDE);
+            $counter.removeClass(CSS.GALLERY.HIDE);
 
-            galleryOverlay.querySelector(`.${CSS.GALLERY.GRID_VIEW}`).classList.add(CSS.GALLERY.HIDE);
-            galleryOverlay.querySelector(`.${CSS.GALLERY.EXPANDED_VIEW}`).classList.remove(CSS.GALLERY.HIDE);
-            counter.classList.remove(CSS.GALLERY.HIDE);
-
-            const currentThumbInStrip = thumbnailStrip?.querySelector(`.${CSS.GALLERY.THUMBNAIL_ITEM}[data-index="${index}"]`);
-            if (currentThumbInStrip && thumbnailStrip) {
-                const stripWidth = thumbnailStrip.offsetWidth;
-                const thumbOffsetLeft = currentThumbInStrip.offsetLeft;
-                const thumbWidth = currentThumbInStrip.offsetWidth;
-                thumbnailStrip.scrollLeft = thumbOffsetLeft - (stripWidth / 2) + (thumbWidth / 2);
+            if ($thumbnailStrip.length) {
+                $thumbnailStrip.find(`.${CSS.GALLERY.THUMBNAIL_ITEM}.selected`).removeClass('selected');
+                const $currentThumbInStrip = $thumbnailStrip.find(`.${CSS.GALLERY.THUMBNAIL_ITEM}[data-index="${index}"]`);
+                if ($currentThumbInStrip.length) {
+                    $currentThumbInStrip.addClass('selected');
+                    const stripWidth = $thumbnailStrip.width();
+                    const thumbOffsetLeft = $currentThumbInStrip[0].offsetLeft;
+                    const thumbWidth = $currentThumbInStrip.outerWidth();
+                    $thumbnailStrip.scrollLeft(thumbOffsetLeft - (stripWidth / 2) + (thumbWidth / 2));
+                }
             }
 
-            galleryOverlay.querySelectorAll(`.${CSS.GALLERY.THUMBNAIL_ITEM}`).forEach(thumb => thumb.classList.remove('selected'));
-            if (currentThumbInStrip) currentThumbInStrip.classList.add('selected');
-
-            if (!state.hideNavArrows && prevButton && nextButton) {
-                prevButton.classList.toggle(CSS.GALLERY.HIDE, index === 0);
-                nextButton.classList.toggle(CSS.GALLERY.HIDE, index === state.fullSizeImageSrcs.length - 1);
+            if (!state.hideNavArrows && $prevButton.length && $nextButton.length) {
+                $prevButton.toggleClass(CSS.GALLERY.HIDE, index === 0);
+                $nextButton.toggleClass(CSS.GALLERY.HIDE, index === state.fullSizeImageSrcs.length - 1);
             }
             state.controlsVisible = true;
         },
 
         closeGallery: function() {
-            if (!galleryOverlay) return;
+            if (!galleryOverlay || !galleryOverlay.length) return;
             Gallery._clearPreloadCache();
-            document.body.removeChild(galleryOverlay);
+            galleryOverlay.remove();
             galleryOverlay = null;
-            document.body.classList.remove('ug-fullscreen');
+            $(document.body).removeClass('ug-fullscreen');
             state.isGalleryMode = false;
             state.isFullscreen = false;
-            document.removeEventListener('mousemove', Zoom.dragImage);
-            document.removeEventListener('mouseup', Zoom.endDrag);
+            $(document).off('.galleryDrag'); // Remove namespaced events
         },
 
         toggleGallery: function() {
@@ -1789,13 +1766,10 @@
             } else {
                 if (state.galleryReady && state.fullSizeImageSrcs.length > 0) {
                     Gallery.createGallery();
-                    state.isGalleryMode = true;
                 } else if (!state.galleryReady) {
-                    state.notification = "Gallery is still loading images.";
-                    state.notificationType = "info";
+                    state.notification = "Gallery is still loading images."; state.notificationType = "info";
                 } else {
-                    state.notification = "No images to display in gallery.";
-                    state.notificationType = "info";
+                    state.notification = "No images to display in gallery."; state.notificationType = "info";
                 }
             }
         },
@@ -1816,7 +1790,7 @@
             Gallery.showExpandedView(newIndex);
         },
 
-        createVirtualGallery: function() {
+        createVirtualGallery: function() { // This was mostly vanilla, should be fine
             Gallery.cleanupVirtualGallery();
             elements.virtualGalleryContainer = document.createElement('div');
             elements.virtualGalleryContainer.style.display = 'none';
@@ -1831,7 +1805,7 @@
             document.body.appendChild(elements.virtualGalleryContainer);
         },
 
-        cleanupVirtualGallery: function() {
+        cleanupVirtualGallery: function() { // This was vanilla, should be fine
             if (elements.virtualGalleryContainer) {
                 elements.virtualGalleryContainer.remove();
                 elements.virtualGalleryContainer = null;
@@ -1842,6 +1816,10 @@
     // ====================================================
     // Image Loading Module
     // ====================================================
+
+    let loadedBlobUrls = new Map(); 
+    let loadedBlobs = new Map();
+
 
     const ImageLoader = {
         imageActions: {
@@ -1871,7 +1849,7 @@
                     });
                 });
                 images.forEach(img => observer.observe(img));
-                setTimeout(resolve, 2000); // Fallback timeout
+                setTimeout(resolve, 2000); // Fallback timeout in case images are not intersecting
             });
         },
 
@@ -1899,90 +1877,97 @@
             }
         },
 
-        loadImage: async (dataSourceElement, index, preResolvedSrc) => {
-            try {
-                const mediaSrc = preResolvedSrc;
+        // New helper function to handle loading/applying a single image to a page element
+        loadImageAndApplyToPage: async (linkElement, galleryIndex, originalHref, isUniqueForGallery) => {
+            const imgElement = linkElement.querySelector('img.post__image');
+            if (!imgElement) {
+                console.warn(`ImageLoader: No img.post__image found for linkElement:`, linkElement);
+                // Still increment loadedImages for the counter to be accurate for page elements
+                state.loadedImages++;
+                return;
+            }
 
-                if (!mediaSrc) {
-                    console.warn(`Skipping media at index ${index} due to missing preResolvedSrc.`);
-                    state.loadedImages++;
-                    state.mediaLoaded[index] = true;
-                    state.virtualGallery[index] = null;
-                    state.fullSizeImageSrcs[index] = null;
-                    return;
-                }
+            let blobUrlToUse = loadedBlobUrls.get(originalHref);
+            let blobToStore = loadedBlobs.get(originalHref);
+            let loadedFromCache = false;
 
-                let pageImgToUpdate = null;
-                if (dataSourceElement) {
-                    if (dataSourceElement.tagName === 'IMG') { // Main thumbnail case
-                        pageImgToUpdate = dataSourceElement;
-                    } else if (typeof dataSourceElement.querySelector === 'function') { // <a> link case
-                        pageImgToUpdate = dataSourceElement.querySelector('img');
+            if (!blobUrlToUse) { // If not already in our in-memory cache (meaning it's a new unique URL or first encounter)
+                try {
+                    // 1. Try to get from Dexie cache
+                    if (state.enablePersistentCaching && db) {
+                        const cachedBlob = await getImageFromDexie(originalHref);
+                        if (cachedBlob) {
+                            blobToStore = cachedBlob;
+                            loadedFromCache = true;
+                        }
                     }
-                }
 
-                state.virtualGallery[index] = mediaSrc;
-                state.fullSizeImageSrcs[index] = mediaSrc; // Initial src, may be blob later
-
-                if (pageImgToUpdate) { // Only proceed if we found an <img> on the page to update
-                    await ImageLoader.retryWithBackoff(async () => {
-                        return new Promise((resolve, reject) => {
-                            GM.xmlHttpRequest({
-                                method: 'GET',
-                                url: mediaSrc,
-                                responseType: 'blob',
-                                onload: function(response) {
-                                    if (response.status === 200 || response.status === 206) {
-                                        const blobUrl = URL.createObjectURL(response.response);
-                                        pageImgToUpdate.src = blobUrl;
-                                        pageImgToUpdate.dataset.originalSrc = mediaSrc;
-                                        // NO AUTOMATIC STYLE CHANGES APPLIED HERE
-                                        state.fullSizeImageSrcs[index] = blobUrl; // Update gallery array with blob
-
-                                        if (dataSourceElement && dataSourceElement.tagName !== 'IMG' && dataSourceElement.classList) {
-                                            dataSourceElement.classList.add(CSS.NO_CLICK);
+                    // 2. If not in Dexie, fetch via GM.xmlHttpRequest
+                    if (!blobToStore) {
+                        blobToStore = await ImageLoader.retryWithBackoff(async () => {
+                            return new Promise((resolve, reject) => {
+                                GM.xmlHttpRequest({
+                                    method: 'GET',
+                                    url: originalHref,
+                                    responseType: 'blob',
+                                    onload: function(response) {
+                                        if (response.status === 200 || response.status === 206) {
+                                            resolve(response.response);
+                                        } else {
+                                            ImageLoader.handleImageFetchError(originalHref, response.status, reject);
                                         }
-                                        resolve();
-                                    } else {
-                                        ImageLoader.handleImageFetchError(mediaSrc, response.status, reject);
-                                    }
-                                },
-                                onerror: (error) => {
-                                    ImageLoader.handleImageFetchError(mediaSrc, 'Network Error', reject, error);
-                                },
+                                    },
+                                    onerror: (error) => {
+                                        ImageLoader.handleImageFetchError(originalHref, 'Network Error', reject, error);
+                                    },
+                                });
                             });
-                        });
-                    }, CONFIG.MAX_RETRIES, CONFIG.RETRY_DELAY, mediaSrc);
+                        }, CONFIG.MAX_RETRIES, CONFIG.RETRY_DELAY, originalHref);
+
+                        // 3. If fetched successfully, store in Dexie
+                        if (blobToStore && state.enablePersistentCaching && db) {
+                            await storeImageInDexie(originalHref, blobToStore);
+                        }
+                    }
+
+                    if (blobToStore) {
+                        blobUrlToUse = URL.createObjectURL(blobToStore);
+                        loadedBlobUrls.set(originalHref, blobUrlToUse); // Store in our in-memory cache
+                        loadedBlobs.set(originalHref, blobToStore);
+                        if (loadedFromCache) console.log(`Ultra Galleries: Image ${originalHref} loaded from persistent cache for page display.`);
+                    } else {
+                        throw new Error("Blob could not be obtained for " + originalHref);
+                    }
+                } catch (error) {
+                    console.error(`Ultra Galleries: Failed to load media for page display: ${originalHref}`, error);
+                    state.errorCount++;
+                    // If loading fails, keep original thumbnail src, don't prevent click
+                    imgElement.src = imgElement.dataset.src || originalHref; // Fallback to thumbnail or original
+                    linkElement.classList.remove(CSS.NO_CLICK);
+                    state.loadedImages++; // Still count as processed for total progress
+                    return; // Exit this function, don't update gallery arrays below
                 }
-                state.loadedImages++;
-                state.mediaLoaded[index] = true;
+            }
 
-            } catch (error) {
-                if (index >= 0 && index < state.virtualGallery.length) {
-                    state.virtualGallery[index] = null;
-                    state.fullSizeImageSrcs[index] = null;
+            // Apply the loaded blob URL to the image element on the page
+            imgElement.src = blobUrlToUse;
+            imgElement.dataset.originalSrc = originalHref; // Keep original HTTP src for reference
+            linkElement.classList.add(CSS.NO_CLICK); // Add no-click to the parent link
+
+            // If this is a unique item for the gallery, populate gallery arrays
+            if (isUniqueForGallery) {
+                // Ensure the gallery arrays are large enough for the unique index
+                if (galleryIndex >= state.fullSizeImageSrcs.length) {
+                    state.fullSizeImageSrcs.length = galleryIndex + 1;
+                    state.originalImageSrcs.length = galleryIndex + 1;
+                    state.virtualGallery.length = galleryIndex + 1;
                 }
-                console.error(`Ultimately failed to load media: ${preResolvedSrc} at index ${index}`, error);
-                state.loadedImages++;
-                state.errorCount++;
-                state.mediaLoaded[index] = true;
+                state.fullSizeImageSrcs[galleryIndex] = blobUrlToUse;
+                state.originalImageSrcs[galleryIndex] = originalHref;
+                state.virtualGallery[galleryIndex] = blobUrlToUse;
             }
-        },
-
-        loadMainThumbnail: async () => {
-            try {
-                const mainThumbnailPostElement = document.querySelector(SELECTORS.MAIN_THUMBNAIL);
-                if (!mainThumbnailPostElement) return { src: null, pageImgElement: null };
-
-                const thumbnailImgTag = mainThumbnailPostElement.querySelector('img');
-                if (!thumbnailImgTag || !thumbnailImgTag.src) return { src: null, pageImgElement: null };
-
-                // Initial styling for the main thumbnail is handled in PostActions.initPostActions
-                return { src: thumbnailImgTag.src, pageImgElement: thumbnailImgTag };
-            } catch (error) {
-                console.error('Error processing main thumbnail on page:', error);
-                return { src: null, pageImgElement: null };
-            }
+            state.loadedImages++; // Increment for each page element successfully processed
+            state.mediaLoaded[galleryIndex] = true; // This tracks unique items for gallery, fine as is
         },
 
         loadImages: async () => {
@@ -1992,42 +1977,25 @@
                 state.isLoading = true;
                 state.loadingMessage = 'Loading Media...';
 
-                // These arrays are now guaranteed to be empty or freshly initialized
-                // if cleanupPostActions ran correctly before this for a new post.
-                state.fullSizeImageSrcs = []; // Explicitly reset here too for safety
-                state.virtualGallery = [];   // Explicitly reset here too for safety
+                // Clear previous session's in-memory caches and state
+                loadedBlobUrls.clear();
+                loadedBlobs.clear();
+                state.fullSizeImageSrcs = []; // Gallery unique items
+                state.originalImageSrcs = []; // Gallery unique items
+                state.virtualGallery = [];    // Gallery unique items
                 state.loadedImages = 0;
                 state.mediaLoaded = {};
                 state.errorCount = 0;
 
-                const itemsForGalleryProcessing = [];
-                const processedFullImageUrls = new Set();
+                const allPageImageLinks = []; // Store all <a> elements that are image links on the page
+                const uniqueGalleryUrls = new Set(); // Track unique URLs for the gallery itself
 
-                const mainThumbnailContainer = document.querySelector(SELECTORS.MAIN_THUMBNAIL);
-                if (mainThumbnailContainer) {
-                    const linkForMainThumbnail = mainThumbnailContainer.matches(SELECTORS.IMAGE_LINK) ?
-                                                mainThumbnailContainer :
-                                                mainThumbnailContainer.querySelector(SELECTORS.IMAGE_LINK);
-                    if (linkForMainThumbnail) {
-                        const fullUrl = Utils.handleMediaSrc(linkForMainThumbnail);
-                        if (fullUrl && !processedFullImageUrls.has(fullUrl)) {
-                            itemsForGalleryProcessing.push({
-                                fullSrc: fullUrl,
-                                dataSourceElement: linkForMainThumbnail
-                            });
-                            processedFullImageUrls.add(fullUrl);
-                        }
-                    }
-                }
-
+                // Collect all image links on the page (including duplicates)
                 document.querySelectorAll(SELECTORS.IMAGE_LINK).forEach(linkElement => {
                     const fullUrl = Utils.handleMediaSrc(linkElement);
-                    if (fullUrl && !processedFullImageUrls.has(fullUrl)) {
-                        itemsForGalleryProcessing.push({
-                            fullSrc: fullUrl,
-                            dataSourceElement: linkElement
-                        });
-                        processedFullImageUrls.add(fullUrl);
+                    if (fullUrl) {
+                        allPageImageLinks.push({ linkElement: linkElement, originalUrl: fullUrl });
+                        uniqueGalleryUrls.add(fullUrl); // Add to unique set for gallery
                     }
                 });
 
@@ -2036,71 +2004,64 @@
                     const fileName = linkElement.getAttribute('download') || attachmentUrl || "";
                     const isLikelyImage = /\.(jpe?g|png|gif|webp)$/i.test(fileName);
 
-                    if (attachmentUrl && isLikelyImage && !processedFullImageUrls.has(attachmentUrl)) {
-                        itemsForGalleryProcessing.push({
-                            fullSrc: attachmentUrl,
-                            dataSourceElement: linkElement
-                        });
-                        processedFullImageUrls.add(attachmentUrl);
+                    if (attachmentUrl && isLikelyImage) {
+                        allPageImageLinks.push({ linkElement: linkElement, originalUrl: attachmentUrl });
+                        uniqueGalleryUrls.add(attachmentUrl); // Add to unique set for gallery
                     }
                 });
 
-                state.totalImages = itemsForGalleryProcessing.length; // Set total based on actual items found
+                document.querySelectorAll(SELECTORS.VIDEO_LINK).forEach(videoLink => {
+                    const video = videoLink.querySelector('video');
+                    if (video && video.hasAttribute('poster')) {
+                        const posterSrc = video.getAttribute('poster');
+                        if (posterSrc) {
+                            allPageImageLinks.push({ linkElement: videoLink, originalUrl: posterSrc });
+                            uniqueGalleryUrls.add(posterSrc); // Add to unique set for gallery
+                        }
+                    }
+                });
+
+                // Set totalImages to the count of ALL image elements on the page for the counter.
+                state.totalImages = allPageImageLinks.length;
                 state.hasImages = state.totalImages > 0;
 
-                // Initialize arrays with correct length after counting
-                state.fullSizeImageSrcs = Array(state.totalImages).fill(null);
-                state.virtualGallery = Array(state.totalImages).fill(null);
+                // Pre-fill gallery arrays with nulls, to be populated only by unique images
+                // The size of gallery arrays is based on unique URLs.
+                state.fullSizeImageSrcs = Array(uniqueGalleryUrls.size).fill(null);
+                state.originalImageSrcs = Array(uniqueGalleryUrls.size).fill(null);
+                state.virtualGallery = Array(uniqueGalleryUrls.size).fill(null);
 
+                // Ensure thumbnails exist and apply initial styles (if needed)
                 await ImageLoader.simulateScrollDown();
                 Utils.ensureThumbnailsExist();
 
-                const batchSize = CONFIG.BATCH_SIZE;
-                for (let i = 0; i < itemsForGalleryProcessing.length; i += batchSize) {
-                    const batchPromises = [];
-                    for (let j = 0; j < batchSize && (i + j) < itemsForGalleryProcessing.length; j++) {
-                        const galleryIndex = i + j;
-                        const item = itemsForGalleryProcessing[galleryIndex];
-                        batchPromises.push(
-                            ImageLoader.loadImage(item.dataSourceElement, galleryIndex, item.fullSrc)
-                        );
-                    }
-                    await Promise.all(batchPromises);
+                // Create an ordered array of unique URLs to map them to gallery indices
+                const orderedUniqueGalleryUrls = Array.from(uniqueGalleryUrls);
+
+                // Process all image links on the page in batches
+                const processingPromises = [];
+                for (let i = 0; i < allPageImageLinks.length; i++) {
+                    const item = allPageImageLinks[i];
+                    // Determine if this specific item's URL is unique for the gallery.
+                    // If it is, get its index in the ordered unique list.
+                    const isUniqueForGallery = uniqueGalleryUrls.has(item.originalUrl);
+                    const galleryIndex = isUniqueForGallery ? orderedUniqueGalleryUrls.indexOf(item.originalUrl) : -1;
+
+                    processingPromises.push(
+                        ImageLoader.loadImageAndApplyToPage(item.linkElement, galleryIndex, item.originalUrl, isUniqueForGallery)
+                    );
                 }
 
-                const videoLinks = document.querySelectorAll(SELECTORS.VIDEO_LINK);
-                if (videoLinks.length > 0) {
-                    let newVideosAddedToGallery = 0;
-                    videoLinks.forEach(videoLink => {
-                        const video = videoLink.querySelector('video');
-                        if (video && video.hasAttribute('poster')) {
-                            const posterSrc = video.getAttribute('poster');
-                            if (posterSrc && !processedFullImageUrls.has(posterSrc)) {
-                                const videoGalleryIndex = state.totalImages + newVideosAddedToGallery;
-                                
-                                if(videoGalleryIndex >= state.fullSizeImageSrcs.length) {
-                                    state.fullSizeImageSrcs.length = videoGalleryIndex + 1;
-                                    state.virtualGallery.length = videoGalleryIndex + 1;
-                                }
-                                
-                                state.fullSizeImageSrcs[videoGalleryIndex] = posterSrc;
-                                state.virtualGallery[videoGalleryIndex] = posterSrc;
-                                state.mediaLoaded[videoGalleryIndex] = true;
-                                state.loadedImages++;
-                                processedFullImageUrls.add(posterSrc);
-                                newVideosAddedToGallery++;
-                            }
-                        }
-                    });
-                    if (newVideosAddedToGallery > 0) {
-                        state.totalImages += newVideosAddedToGallery; // Update total if videos are added
-                    }
-                }
+                // Execute all loading/applying promises concurrently.
+                // The loadImageAndApplyToPage function already increments state.loadedImages.
+                await Promise.all(processingPromises);
 
+                // After all processing, update notification status
                 if (state.loadedImages === state.totalImages && state.totalImages > 0 && state.errorCount === 0) {
-                    // Notification handled by state callbacks
+                    state.notification = `Images Done Loading! Total: ${state.totalImages}`;
+                    state.notificationType = 'success';
                 } else if (state.errorCount > 0) {
-                    state.notification = `Gallery: ${state.errorCount} error(s). (${state.loadedImages}/${state.totalImages} items).`;
+                    state.notification = `Gallery: ${state.errorCount} error(s). Loaded: ${state.loadedImages}/${state.totalImages} items.`;
                     state.notificationType = 'warning';
                 } else if (state.loadedImages < state.totalImages && state.totalImages > 0) {
                     state.notification = `Gallery: Partially loaded (${state.loadedImages}/${state.totalImages} items).`;
@@ -2109,6 +2070,11 @@
                     state.notification = 'No images found for gallery.';
                     state.notificationType = 'info';
                 }
+
+                // Filter out nulls from gallery arrays if some unique items failed to load
+                state.fullSizeImageSrcs = state.fullSizeImageSrcs.filter(src => src !== null);
+                state.originalImageSrcs = state.originalImageSrcs.filter(src => src !== null);
+                state.virtualGallery = state.virtualGallery.filter(src => src !== null);
 
                 state.galleryReady = true;
                 state.isLoading = false;
@@ -2249,6 +2215,15 @@
         processFileForZip: async (zip, url, originalName, itemType, itemIndex,
                                     sanitizedPostTitle, sanitizedPostArtistName) => {
             try {
+                // Ensure UPNG is loaded if optimization is enabled and it hasn't been loaded yet
+                if (state.optimizePngInZip && !loadedUPNG) {
+                    loadedUPNG = await loadResourceScript('upngJsRaw', 'UPNG');
+                    if (!loadedUPNG) {
+                        console.warn('Ultra Galleries: UPNG.js could not be loaded. PNG optimization will be skipped.');
+                        // Optionally notify user or disable setting state.optimizePngInZip = false;
+                    }
+                }
+
                 await DownloadManager.retryWithBackoff(async () => {
                     return new Promise((resolve, reject) => {
                         GM.xmlHttpRequest({
@@ -2256,21 +2231,43 @@
                             url: url,
                             headers: { referer: `https://${window.location.hostname.split('.')[0]}.su/` },
                             responseType: 'blob',
-                            onload: function(response) {
+                            onload: async function(response) { // Make this onload async for UPNG processing
                                 if (response.status === 200 || response.status === 206) {
+                                    let fileBlob = response.response;
+                                    const contentTypeHeader = response.responseHeaders.match(/content-type:\s*([^;]+)/i);
+                                    const contentType = contentTypeHeader ? contentTypeHeader[1].trim().toLowerCase() : (fileBlob.type || '').toLowerCase();
+
                                     let baseName = Utils.sanitizeFileName(originalName.replace(/\.[^/.]+$/, ""));
                                     let ext = Utils.getExtension(originalName);
 
-                                    if (!ext || ['tmp', 'file', ''].includes(ext)) {
-                                        const contentType = response.responseHeaders.match(/content-type:\s*([^;]*)/i)?.[1];
+                                    if (!ext || ['tmp', 'file', ''].includes(ext.toLowerCase())) {
                                         if (contentType && contentType.startsWith('image/')) {
                                             const imageExt = contentType.split('/')[1].replace('jpeg', 'jpg');
-                                            if (imageExt && !['octet-stream', 'x-icon'].includes(imageExt)) {
+                                            if (imageExt && !['octet-stream', 'x-icon'].includes(imageExt.toLowerCase())) {
                                                 ext = imageExt;
                                             }
                                         }
                                     }
                                     ext = ext || 'bin';
+
+                                    // PNG Optimization Step
+                                    if (state.optimizePngInZip && loadedUPNG && (contentType === 'image/png' || ext.toLowerCase() === 'png')) {
+                                        try {
+                                            console.log(`Ultra Galleries: Optimizing PNG: ${originalName}`);
+                                            const arrayBuffer = await fileBlob.arrayBuffer();
+                                            const decodedPng = loadedUPNG.decode(arrayBuffer);
+                                            // UPNG.encode(frames, w, h, cnum, dels)
+                                            // For single frame PNGs, frames is an array with one element: decodedPng.data
+                                            // cnum = 0 aims for lossless compression, choosing smallest representation
+                                            const optimizedPngArrayBuffer = loadedUPNG.encode([decodedPng.data], decodedPng.width, decodedPng.height, 0);
+                                            fileBlob = new Blob([optimizedPngArrayBuffer], { type: 'image/png' });
+                                            console.log(`Ultra Galleries: PNG optimized: ${originalName}. Original: ${arrayBuffer.byteLength}, Optimized: ${optimizedPngArrayBuffer.byteLength}`);
+                                        } catch (upngError) {
+                                            console.error(`Ultra Galleries: Error optimizing PNG ${originalName}:`, upngError);
+                                            // Proceed with the original blob if optimization fails
+                                        }
+                                    }
+
 
                                     const imageFileNameFormat = GM_getValue('imageFileNameFormat', '{title}-{artistName}-{fileName}-{index}');
                                     let pathInZip = imageFileNameFormat
@@ -2279,33 +2276,33 @@
                                         .replace("{fileName}", baseName)
                                         .replace("{index}", itemIndex + 1)
                                         .replace("{ext}", ext);
-                                    
+
                                     if (!pathInZip.toLowerCase().endsWith(`.${ext.toLowerCase()}`)) {
                                         pathInZip = `${pathInZip}.${ext}`;
                                     }
-                                    
+
                                     pathInZip = pathInZip.replace(/^\/+|\/+$/g, '').replace(/\/{2,}/g, '/');
                                     if (pathInZip.startsWith('../') || pathInZip.startsWith('/')) {
                                         pathInZip = pathInZip.replace(/^(\.\.\/)+|^\/+/g, '');
                                     }
 
-                                    zip.file(pathInZip, response.response);
+                                    zip.file(pathInZip, fileBlob); // Use the (potentially optimized) fileBlob
                                     state.downloadedCount++;
                                     resolve();
                                 } else {
-                                    console.error('Error downloading file for zip:', response.status, originalName);
+                                    console.error('Ultra Galleries: Error downloading file for zip:', response.status, originalName);
                                     reject(new Error(`Failed to fetch ${originalName}: ${response.status}`));
                                 }
                             },
                             onerror: function(error) {
-                                console.error('Network error downloading file for zip:', error, originalName);
+                                console.error('Ultra Galleries: Network error downloading file for zip:', error, originalName);
                                 reject(error);
                             }
                         });
                     });
                 }, CONFIG.MAX_RETRIES, CONFIG.RETRY_DELAY, url);
             } catch (error) {
-                console.error(`Failed to process ${originalName} for zip after retries:`, error);
+                console.error(`Ultra Galleries: Failed to process ${originalName} for zip after retries:`, error);
             }
         },
 
@@ -2391,7 +2388,6 @@
             try {
                 state.postActionsInitialized = true;
                 if (!Utils.isPostPage() || state.currentPostUrl === window.location.href) {
-                    // If not a post page, or same URL and already initialized, do nothing or minimal refresh
                     if (state.currentPostUrl === window.location.href && elements.postActions) {
                         // Potentially just re-check if global buttons are there if some other script removed them
                     } else {
@@ -2399,7 +2395,7 @@
                     }
                 } else {
                     // URL has changed to a new post page, or first time initialization on a post page
-                    PostActions.cleanupPostActions(); // Clean up UI from previous post
+                    PostActions.cleanupPostActions();
                 }
 
 
@@ -2425,50 +2421,46 @@
                         elements.postActions.appendChild(container);
                     }
                     // Check if global buttons are already present to avoid duplicates on minor re-runs
-                    if (!elements.postActions.querySelector('a.ug-button[data-action="gallery"]')) { // Use a data-attribute to check
+                    if (!elements.postActions.querySelector('a.ug-button[data-action="gallery"]')) {
                         const heightButton = UI.createToggleButton(BUTTONS.HEIGHT, () => PostActions.resizeAllImages('height'));
                         const widthButton  = UI.createToggleButton(BUTTONS.WIDTH,  () => PostActions.resizeAllImages('width'));
                         const fullButton   = UI.createToggleButton(BUTTONS.FULL,   () => PostActions.resizeAllImages('full'));
                         const downloadAllButton = UI.createToggleButton(BUTTONS.DOWNLOAD_ALL, DownloadManager.downloadAllImages);
                         const galleryButton = UI.createToggleButton('Loading Gallery...', Gallery.toggleGallery, true);
-                        galleryButton.dataset.action = "gallery"; // For checking existence
+                        galleryButton.dataset.action = "gallery";
                         elements.galleryButton = galleryButton;
                         elements.postActions.append(heightButton, widthButton, fullButton, downloadAllButton, galleryButton);
                     }
-                    if (elements.galleryButton) elements.galleryButton.style.display = 'inline-block'; // Ensure visible
+                    if (elements.galleryButton) elements.galleryButton.style.display = 'inline-block';
                 }
 
 
                 if (!elements.settingsButton) {
                     const settingsButton = document.createElement('button');
                     settingsButton.textContent = BUTTONS.SETTINGS;
-                    settingsButton.className = `${CSS.SETTINGS_BTN} ${CSS.BTN}`; // Add common button class for styling if needed
+                    settingsButton.className = `${CSS.SETTINGS_BTN} ${CSS.BTN}`;
                     settingsButton.addEventListener('click', () => { state.settingsOpen = !state.settingsOpen; });
-                    document.body.appendChild(settingsButton); // Consider appending to a more specific script container
+                    document.body.appendChild(settingsButton);
                     elements.settingsButton = settingsButton;
                 }
 
                 // Setup per-image buttons
-                const filesArea = document.querySelector('div.post__files'); // The container for all file thumbnails
+                const filesArea = document.querySelector('div.post__files');
                 if (filesArea) {
-                    // Get all actual <img> elements that are part of an image link
-                    // This assumes SELECTORS.IMAGE_LINK targets the <a> tag, and it has an <img> child.
                     const imageElementsOnPage = Array.from(filesArea.querySelectorAll(SELECTORS.IMAGE_LINK + ' > img.post__image'));
-                    state.displayedImages = imageElementsOnPage; // Update our reference
+                    state.displayedImages = imageElementsOnPage;
 
                     imageElementsOnPage.forEach((imgElement, loopIndex) => {
                         if (!imgElement) return;
 
-                        // CRITICAL: Apply initial default style to the image on the page
                         ImageLoader.imageActions.height(imgElement);
 
-                        const thumbnailDiv = imgElement.closest(SELECTORS.THUMBNAIL); // e.g., .post__thumbnail
+                        const thumbnailDiv = imgElement.closest(SELECTORS.THUMBNAIL);
                         if (!thumbnailDiv) {
                             console.warn('PostActions: Could not find thumbnailDiv for imgElement:', imgElement);
                             return;
                         }
 
-                        // Remove any existing button container for this thumbnail to ensure a fresh one
                         if (thumbnailDiv.previousElementSibling && thumbnailDiv.previousElementSibling.classList.contains(CSS.BTN_CONTAINER)) {
                             thumbnailDiv.previousElementSibling.remove();
                         }
@@ -2481,14 +2473,13 @@
                             { text: BUTTONS.DOWNLOAD, action: () => {
                                 // Find index based on what ImageLoader.loadImage stored
                                 const originalSrcForDownload = imgElement.dataset.originalSrc || Utils.handleMediaSrc(imgElement.closest(SELECTORS.IMAGE_LINK));
-                                const downloadIndex = state.fullSizeImageSrcs.findIndex(src => src === originalSrcForDownload);
+                                const downloadIndex = state.fullSizeImageSrcs.findIndex(src => state.originalImageSrcs[state.fullSizeImageSrcs.indexOf(src)] === originalSrcForDownload); // Find index based on original URL
                                 if (downloadIndex > -1) {
                                     DownloadManager.downloadImageByIndex(downloadIndex);
                                 } else {
-                                    console.error("Download (per-image): Could not find image index for src:", originalSrcForDownload, "Available:", state.fullSizeImageSrcs);
+                                    console.error("Download (per-image): Could not find image index for src:", originalSrcForDownload, "Available:", state.originalImageSrcs);
                                 }
                             }, name: 'DOWNLOAD'},
-                            // { text: BUTTONS.REMOVE, action: (evt) => { /* your remove logic */ }, name: 'REMOVE'} // Add remove if needed
                         ];
 
                         const buttonGroupElement = UI.createButtonGroup(buttonGroupConfig);
@@ -2496,9 +2487,6 @@
                         if (buttonGroupElement.childElementCount > 0 && thumbnailDiv.parentNode) {
                             thumbnailDiv.parentNode.insertBefore(buttonGroupElement, thumbnailDiv);
                         }
-
-                        // Add click handler to image for gallery (if not already handled by delegation)
-                        // imgElement.addEventListener('click', e => { /* gallery toggle */ }); // Consider if delegation is sufficient
                     });
 
                     // Add delegated click handler to the parent of all file thumbnails
@@ -2527,8 +2515,12 @@
             const filesArea = document.querySelector('div.post__files');
             if (filesArea) {
                 filesArea.removeEventListener('click', PostActions.delegatedImageClickHandler);
-                filesArea.removeAttribute('data-ug-clickHandlerAttached');
+                filesArea.removeAttribute('data-ug-click-handler-attached');
                 filesArea.querySelectorAll(`.${CSS.BTN_CONTAINER}`).forEach(bc => bc.remove());
+                // Remove CSS.NO_CLICK from any remaining image links
+                filesArea.querySelectorAll(SELECTORS.IMAGE_LINK).forEach(link => {
+                    link.classList.remove(CSS.NO_CLICK);
+                });
             }
 
             if (elements.statusContainer && elements.statusContainer.parentNode) {
@@ -2538,6 +2530,14 @@
             }
             elements.postActions = null;
 
+            for (const blobUrl of loadedBlobUrls.values()) {
+                if (typeof blobUrl === 'string' && blobUrl.startsWith('blob:')) {
+                    try { URL.revokeObjectURL(blobUrl); } catch (e) { /* silent */ }
+                }
+            }
+            loadedBlobUrls.clear();
+            loadedBlobs.clear();
+
             if (Array.isArray(state.fullSizeImageSrcs)) {
                 state.fullSizeImageSrcs.forEach(src => {
                     if (typeof src === 'string' && src.startsWith('blob:')) {
@@ -2545,7 +2545,10 @@
                     }
                 });
             }
+
+
             state.fullSizeImageSrcs = [];
+            state.originalImageSrcs = [];
             state.virtualGallery = [];
 
             state.currentPostUrl = null;
@@ -2557,7 +2560,7 @@
             state.postActionsInitialized = false;
         },
 
-        clickAllImageButtons: actionKey => { // e.g., 'HEIGHT', 'WIDTH', 'FULL'
+        clickAllImageButtons: actionKey => {
             const targetButtonText = BUTTONS[actionKey.toUpperCase()];
             if (!targetButtonText) {
                 console.error("clickAllImageButtons: Invalid actionKey", actionKey);
@@ -2621,13 +2624,29 @@
 
         delegatedImageClickHandler: event => {
             if (event.button === 2) return;
+            const clickedImageLink = event.target.closest(SELECTORS.IMAGE_LINK);
 
-            const clickedImage = event.target.closest(SELECTORS.IMAGE_LINK + ' > img.post__image');
-            if (clickedImage) {
-                if (event.target.tagName === 'A' && event.target.matches(SELECTORS.IMAGE_LINK)) {
+            if (clickedImageLink) {
+                event.preventDefault(); // ALWAYS prevent default navigation on image link click
 
+                if (state.galleryReady) {
+                    // Determine which image was clicked to open the gallery at that index
+                    const originalSrcElement = clickedImageLink.querySelector('img.post__image');
+                    const originalSrcClicked = originalSrcElement ? originalSrcElement.dataset.originalSrc : Utils.handleMediaSrc(clickedImageLink);
+
+                    const galleryIndex = state.originalImageSrcs.indexOf(originalSrcClicked); // Find index in unique gallery array
+
+                    if (galleryIndex !== -1) {
+                        Gallery.createGallery(); // Ensure gallery structure exists
+                        Gallery.showExpandedView(galleryIndex); // Open at the clicked image's index
+                    } else {
+                        console.warn("Ultra Galleries: Clicked image not found in gallery index, opening gallery to grid view.");
+                        Gallery.toggleGallery(); // Fallback to just opening the gallery (grid view)
+                    }
+                } else {
+                    state.notification = "Gallery content is still loading or not available.";
+                    state.notificationType = "info";
                 }
-                Gallery.toggleGallery();
             }
         },
     };
@@ -2638,62 +2657,74 @@
 
     const EventHandlers = {
         handleGalleryKey: event => {
-            if (!Utils.isPostPage()) return;
+            if (!Utils.isPostPage()) return; // Only on post pages
 
-            if (event.key === state.galleryKey && state.galleryReady) {
-                Gallery.toggleGallery();
-                return;
+            // Toggle gallery with configured key
+            if (event.key.toLowerCase() === state.galleryKey.toLowerCase() && !event.altKey && !event.ctrlKey && !event.metaKey) {
+                if (state.galleryReady) {
+                    event.preventDefault();
+                    Gallery.toggleGallery();
+                    return; // Exclusive action for gallery toggle
+                } else if (Utils.isPostPage() && !state.isGalleryMode) {
+                    // If on a post page, gallery not ready, and not in gallery mode, notify user
+                    state.notification = "Gallery content is still loading or not available.";
+                    state.notificationType = "info";
+                    return;
+                }
             }
 
-            // Handle keys only if the gallery is currently active
-            if (state.isGalleryMode && galleryOverlay) {
-                const gridView = galleryOverlay.querySelector(`.${CSS.GALLERY.GRID_VIEW}`);
-                const expandedView = galleryOverlay.querySelector(`.${CSS.GALLERY.EXPANDED_VIEW}`);
+            if (state.isGalleryMode && galleryOverlay && galleryOverlay.length) {
+                const $gridView = galleryOverlay.find(`.${CSS.GALLERY.GRID_VIEW}`);
+                const $expandedView = galleryOverlay.find(`.${CSS.GALLERY.EXPANDED_VIEW}`);
 
-                if (!gridView || !expandedView) return; 
-
-                // --- Escape Key Logic ---
-                if (event.key === 'Escape') {
-                    event.preventDefault(); 
-                    if (!expandedView.classList.contains(CSS.GALLERY.HIDE)) {
-                        Gallery.showGridView();
-                    } else if (!gridView.classList.contains(CSS.GALLERY.HIDE)) {
-                        Gallery.closeGallery();
-                    }
+                if (!$gridView.length || !$expandedView.length) {
+                    // This might happen if the gallery structure is unexpectedly missing these elements
+                    console.warn("Ultra Galleries: handleGalleryKey - Grid or Expanded view not found in galleryOverlay.");
                     return;
                 }
 
-                // --- Other Key Logic (Navigation, Zoom) - Only in Expanded View ---
-                if (gridView.classList.contains(CSS.GALLERY.HIDE)) {
-                    const relevantKeys = [
-                        state.prevImageKey, state.nextImageKey,
-                        'ArrowLeft', 'ArrowRight', 'k', 'l',
-                        '+', '-', '0'
-                    ];
+                // --- Escape Key Logic ---
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    if (!$expandedView.hasClass(CSS.GALLERY.HIDE)) {
+                        Gallery.showGridView();
+                    } else if (!$gridView.hasClass(CSS.GALLERY.HIDE)) { 
+                        Gallery.closeGallery();
+                    }
+                    return; // Escape key action is exclusive
+                }
 
-                    if (relevantKeys.includes(event.key)) {
-                        event.preventDefault();
-                        switch (event.key) {
-                            case state.prevImageKey:
-                            case 'k':                
-                            case 'ArrowLeft':
-                                Gallery.prevImage();
-                                break;
-                            case state.nextImageKey: 
-                            case 'l':                
-                            case 'ArrowRight':
-                                Gallery.nextImage();
-                                break;
-                            case '+':
-                                Zoom.zoom(CONFIG.ZOOM_STEP);
-                                break;
-                            case '-':
-                                Zoom.zoom(-CONFIG.ZOOM_STEP);
-                                break;
-                            case '0':
-                                Zoom.resetZoom();
-                                break;
-                        }
+                // --- Other Key Logic (Navigation, Zoom) - Only in Expanded View ---
+                if ($gridView.hasClass(CSS.GALLERY.HIDE) && !$expandedView.hasClass(CSS.GALLERY.HIDE)) {
+                    const keyLower = event.key.toLowerCase();
+                    let actionTaken = false;
+
+                    // Define relevant keys for expanded view actions
+                    const prevKeys = [state.prevImageKey.toLowerCase(), 'arrowleft', 'k'];
+                    const nextKeys = [state.nextImageKey.toLowerCase(), 'arrowright', 'l'];
+                    const zoomInKeys = ['+', '='];
+                    const zoomOutKeys = ['-'];
+                    const resetZoomKeys = ['0'];
+
+                    if (prevKeys.includes(keyLower)) {
+                        Gallery.prevImage();
+                        actionTaken = true;
+                    } else if (nextKeys.includes(keyLower)) {
+                        Gallery.nextImage();
+                        actionTaken = true;
+                    } else if (zoomInKeys.includes(keyLower)) {
+                        Zoom.zoom(CONFIG.ZOOM_STEP);
+                        actionTaken = true;
+                    } else if (zoomOutKeys.includes(keyLower)) {
+                        Zoom.zoom(-CONFIG.ZOOM_STEP);
+                        actionTaken = true;
+                    } else if (resetZoomKeys.includes(keyLower)) {
+                        Zoom.resetZoom();
+                        actionTaken = true;
+                    }
+
+                    if (actionTaken) {
+                        event.preventDefault(); // Prevent default browser action if a script action was taken
                     }
                 }
             }
@@ -2705,18 +2736,29 @@
         },
 
         handleWindowResize: Utils.debounce(() => {
-            if (!galleryOverlay) return;
-            const container = galleryOverlay.querySelector(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
-            if (!container) return;
+            if (!galleryOverlay || !galleryOverlay.length || !state.isGalleryMode) return;
 
-            const newWidth = container.offsetWidth;
-            const newHeight = container.offsetHeight;
+            const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
+            if (!$container.length) return; // Ensure container was found
+
+            const newWidth = $container.width(); 
+            const newHeight = $container.height(); 
 
             if (newWidth !== state.lastWidth || newHeight !== state.lastHeight) {
                 state.lastWidth = newWidth;
                 state.lastHeight = newHeight;
-                Zoom.resetZoom();
-                Zoom.applyZoom();
+
+                const $expandedView = galleryOverlay.find(`.${CSS.GALLERY.EXPANDED_VIEW}`);
+                const $mainImage = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG}`); // Find within overlay
+
+                // Check if in expanded view and an image is loaded
+                if ($expandedView.length && !$expandedView.hasClass(CSS.GALLERY.HIDE) &&
+                    $mainImage.length && $mainImage.attr('src')) {
+                    // Zoom.initializeImage expects DOM elements
+                    Zoom.initializeImage($mainImage[0], $container[0]);
+                } else {
+                    Zoom.resetZoom(); // Fallback reset
+                }
             }
         }, CONFIG.DEBOUNCE_DELAY),
 
@@ -2843,7 +2885,7 @@
     // Initialization
     // ====================================================
 
-    const init = () => {
+    const init = async () => {
         try {
             // Load CSS
             GM.xmlHttpRequest({
@@ -2860,6 +2902,19 @@
                     console.error('Error loading CSS:', error);
                 },
             });
+
+            if (!loadedPako) {
+                loadedPako = await loadResourceScript('pakoJsRaw', 'pako');
+                if (loadedPako) {
+                    console.log("Ultra Galleries: Pako.js loaded and available.");
+                } else {
+                    console.warn("Ultra Galleries: Pako.js could not be loaded.");
+                }
+            }
+
+            if (state.enablePersistentCaching) {
+                initDexie();
+            }
 
             // Load saved settings
             CONFIG.MAX_SCALE = GM_getValue('maxZoomScale', CONFIG.MAX_SCALE);
