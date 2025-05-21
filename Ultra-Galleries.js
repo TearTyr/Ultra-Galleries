@@ -453,11 +453,6 @@
                 UI.updateLoadingOverlayText(value);
             }
         },
-        hasImages: (value) => {
-            if (elements.galleryButton) {
-                elements.galleryButton.style.display = value ? 'inline-block' : 'none';
-            }
-        },
         notification: (value) => {
             if (value) {
                 UI.showNotification(value, state.notificationType);
@@ -1096,7 +1091,7 @@
             closeBtn.id = CSS.NOTIF_CLOSE;
             closeBtn.textContent = '×';
             closeBtn.addEventListener('click', () => {
-                state.notification = null;
+                state.notification = null; // Clicking 'x' dismisses notification
             });
             container.appendChild(closeBtn);
 
@@ -1111,10 +1106,13 @@
             return container;
         },
 
-        showNotification: (message, type = 'info') => {
-            if (!state.notificationsEnabled && type !== 'error') return;
-            let area = document.getElementById(CSS.NOTIF_AREA);
+        // A timeout ID for auto-hiding notifications
+        _notificationTimeoutId: null,
 
+        showNotification: (message, type = 'info') => {
+            if (!state.notificationsEnabled && type !== 'error') return; // Do not show non-error notifications if disabled
+
+            let area = document.getElementById(CSS.NOTIF_AREA);
             if (!area) area = UI.createNotificationArea();
             let container = area.querySelector(`.${CSS.NOTIF_CONTAINER}`);
             if (!container) container = UI.createNotification();
@@ -1134,11 +1132,30 @@
                 container.classList.remove('ug-slide-in', 'ug-slide-out');
             }
             container.style.display = 'flex';
+
+            // Clear any existing auto-hide timeout
+            if (UI._notificationTimeoutId) {
+                clearTimeout(UI._notificationTimeoutId);
+                UI._notificationTimeoutId = null;
+            }
+
+            // Auto-hide after a delay for 'info' and 'success' notifications
+            if (type === 'info' || type === 'success') {
+                UI._notificationTimeoutId = setTimeout(() => {
+                    state.notification = null; // This will trigger hideNotification via state proxy
+                }, 5000); // Hide after 5 seconds
+            }
         },
 
         hideNotification: () => {
             const container = document.getElementById(CSS.NOTIF_CONTAINER);
             if (!container) return;
+
+            // Clear any pending auto-hide timeout if manually hidden
+            if (UI._notificationTimeoutId) {
+                clearTimeout(UI._notificationTimeoutId);
+                UI._notificationTimeoutId = null;
+            }
 
             if (state.animationsEnabled) {
                 container.classList.add('ug-slide-out');
@@ -1174,7 +1191,7 @@
                 const $section = $('<div>').addClass(CSS.SETTINGS.SECTION);
                 $section.append($('<h3>').addClass(CSS.SETTINGS.SECTION_HEADER).text(title));
                 $parent.append($section);
-                return $section; // Return the jQuery object for the section
+                return $section;
             }
 
             function addCheckbox($parent, id, label, checked, onChange) {
@@ -1222,7 +1239,6 @@
                 return $div;
             }
 
-            // Create sections (using jQuery objects for sections)
             const sections = {
                 general: createSection($body, 'General Settings'),
                 keys: createSection($body, 'Keyboard Shortcuts'),
@@ -1233,48 +1249,44 @@
                 panZoom: createSection($body, 'Pan & Zoom Settings')
             };
 
-            // --- General Settings ---
             addCheckbox(sections.general, 'dynamicResizingToggle', 'Dynamic Resizing',
                     state.dynamicResizing, val => {
-                state.dynamicResizing = val;
-                GM_setValue('dynamicResizing', val);
-            });
+                    state.dynamicResizing = val;
+                    GM_setValue('dynamicResizing', val);
+                });
 
             addCheckbox(sections.general, 'animationsToggle', 'Enable Animations',
                     state.animationsEnabled, val => {
-                state.animationsEnabled = val;
-                GM_setValue('animationsEnabled', val);
-            });
+                    state.animationsEnabled = val;
+                    GM_setValue('animationsEnabled', val);
+                });
 
             addCheckbox(sections.general, 'bottomStripeToggle', 'Show Thumbnail Strip',
                     state.bottomStripeVisible, val => {
-                state.bottomStripeVisible = val;
-                GM_setValue('bottomStripeVisible', val);
-            });
+                    state.bottomStripeVisible = val;
+                    GM_setValue('bottomStripeVisible', val);
+                });
 
-            // --- Pan & Zoom Settings ---
             addCheckbox(sections.panZoom, 'zoomEnabledToggle', 'Enable Zoom & Pan',
                     state.zoomEnabled, val => {
-                state.zoomEnabled = val;
-                GM_setValue('zoomEnabled', val);
-            });
+                    state.zoomEnabled = val;
+                    GM_setValue('zoomEnabled', val);
+                });
 
             addCheckbox(sections.panZoom, 'inertiaEnabledToggle', 'Enable Smooth Pan Inertia',
                     state.inertiaEnabled, val => {
-                state.inertiaEnabled = val;
-                GM_setValue('inertiaEnabled', val);
-            });
+                    state.inertiaEnabled = val;
+                    GM_setValue('inertiaEnabled', val);
+                });
 
             addNumberInput(sections.panZoom, 'maxZoomInput', 'Maximum Zoom Level:',
-                        CONFIG.MAX_SCALE, 2, 10, 0.5, val => {
-                if (val >= 2 && val <= 10) {
-                    CONFIG.MAX_SCALE = val;
-                    GM_setValue('maxZoomScale', val);
-                }
-            });
+                            CONFIG.MAX_SCALE, 2, 10, 0.5, val => {
+                    if (val >= 2 && val <= 10) {
+                        CONFIG.MAX_SCALE = val;
+                        GM_setValue('maxZoomScale', val);
+                    }
+                });
 
-            // --- Button Visibility ---
-            // Helper for creating button visibility toggles
             const addButtonVisibility = (id, label, prop) => {
                 addCheckbox(sections.buttonVisibility, id, label, state[prop], val => {
                     state[prop] = val;
@@ -1293,41 +1305,38 @@
             addButtonVisibility('hideWidthBtn', 'Hide Fill Width Button', 'hideWidthButton');
             addButtonVisibility('hideNavArrows', 'Hide Navigation Arrows', 'hideNavArrows');
 
-            // --- Keyboard Shortcuts ---
             addTextInput(sections.keys, 'galleryKeyInput', 'Gallery Key:',
-                        state.galleryKey, 1, val => {
-                state.galleryKey = val;
-                GM_setValue('galleryKey', val);
-            });
+                            state.galleryKey, 1, val => {
+                    state.galleryKey = val;
+                    GM_setValue('galleryKey', val);
+                });
 
             addTextInput(sections.keys, 'prevImageKeyInput', 'Previous Image Key:',
-                        state.prevImageKey, 1, val => {
-                state.prevImageKey = val;
-                GM_setValue('prevImageKey', val);
-            });
+                            state.prevImageKey, 1, val => {
+                    state.prevImageKey = val;
+                    GM_setValue('prevImageKey', val);
+                });
 
             addTextInput(sections.keys, 'nextImageKeyInput', 'Next Image Key:',
-                        state.nextImageKey, 1, val => {
-                state.nextImageKey = val;
-                GM_setValue('nextImageKey', val);
-            });
+                            state.nextImageKey, 1, val => {
+                    state.nextImageKey = val;
+                    GM_setValue('nextImageKey', val);
+                });
 
-            // --- Notifications Settings ---
             addCheckbox(sections.notifications, 'notificationsEnabledToggle', 'Enable Notifications',
                     state.notificationsEnabled, val => {
-                state.notificationsEnabled = val;
-                GM_setValue('notificationsEnabled', val);
-            });
+                    state.notificationsEnabled = val;
+                    GM_setValue('notificationsEnabled', val);
+                });
 
             addCheckbox(sections.notifications, 'notificationAreaVisibleToggle', 'Show Notification Area',
                     state.notificationAreaVisible, val => {
-                state.notificationAreaVisible = val;
-                GM_setValue('notificationAreaVisible', val);
-                const area = document.getElementById(CSS.NOTIF_AREA);
-                if (area) area.style.display = val ? 'flex' : 'none';
-            });
+                    state.notificationAreaVisible = val;
+                    GM_setValue('notificationAreaVisible', val);
+                    const area = document.getElementById(CSS.NOTIF_AREA);
+                    if (area) area.style.display = val ? 'flex' : 'none';
+                });
 
-            // Add dropdown for notification position
             const $posDiv = $('<div>').addClass(CSS.SETTINGS.LABEL).html(`
                 <label class="${CSS.SETTINGS.LABEL}">Notification Position:</label>
                 <select id="notificationPosition" class="${CSS.SETTINGS.INPUT}">
@@ -1340,20 +1349,18 @@
             });
             sections.notifications.append($posDiv);
 
-            // --- Download Optimizations Settings ---
             addCheckbox(sections.optimizations, 'optimizePngToggle', 'Optimize PNGs in ZIP (Smaller files, Slower zipping)',
-                    state.optimizePngInZip, val => {
-                state.optimizePngInZip = val;
-            });
+                        state.optimizePngInZip, val => {
+                    state.optimizePngInZip = val;
+                });
             addCheckbox(sections.optimizations, 'persistentCachingToggle', 'Enable Persistent Image Caching (Faster revisit load times)',
-                state.enablePersistentCaching, val => {
-            state.enablePersistentCaching = val;
-            });
+                    state.enablePersistentCaching, val => {
+                    state.enablePersistentCaching = val;
+                });
 
-            // Create and append the Clear Cache Button here, within the 'optimizations' section
             const $clearCacheButton = $('<button class="ug-button ug-settings-input" style="margin-top: 10px; display: block;">Clear Persistent Cache</button>');
             $clearCacheButton.on('click', async () => {
-                if (!db && state.enablePersistentCaching) { // Attempt to init Dexie if not already
+                if (!db && state.enablePersistentCaching) {
                     initDexie();
                 }
                 if (!db) {
@@ -1369,25 +1376,23 @@
                     cancelButtonText: 'No, cancel'
                 });
                 if (result.isConfirmed) {
-                    clearDexieCache(); // This function shows its own notification
+                    clearDexieCache();
                 }
             });
             sections.optimizations.append($clearCacheButton);
 
-            // --- File Formatting Settings ---
             addTextAreaInput(sections.formatting, 'zipFileNameFormatInput', 'Zip File Name Format:',
-                        state.zipFileNameFormat, val => {
-                state.zipFileNameFormat = val;
-                GM_setValue('zipFileNameFormat', val);
-            });
+                            state.zipFileNameFormat, val => {
+                    state.zipFileNameFormat = val;
+                    GM_setValue('zipFileNameFormat', val);
+                });
 
             addTextAreaInput(sections.formatting, 'imageFileNameFormatInput', 'Image File Name Format:',
-                        state.imageFileNameFormat, val => {
-                state.imageFileNameFormat = val;
-                GM_setValue('imageFileNameFormat', val);
-            });
+                            state.imageFileNameFormat, val => {
+                    state.imageFileNameFormat = val;
+                    GM_setValue('imageFileNameFormat', val);
+                });
 
-            // Append the jQuery object $overlay to the body
             $('body').append($overlay);
         },
 
@@ -1416,7 +1421,7 @@
     // ====================================================
 
     let galleryOverlay = null; 
-    
+
     const Gallery = {
         _preloadedImageCache: {},
         _preloadingInProgress: {},
@@ -2431,7 +2436,6 @@
                         elements.galleryButton = galleryButton;
                         elements.postActions.append(heightButton, widthButton, fullButton, downloadAllButton, galleryButton);
                     }
-                    if (elements.galleryButton) elements.galleryButton.style.display = 'inline-block';
                 }
 
 
