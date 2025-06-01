@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Ultra Galleries
-// @namespace    https://sleazyfork.org/en/users/1027300-ntf
+// @namespace    https://sleazyfork.org/en/users/1477603-%E3%83%A1%E3%83%AA%E3%83%BC // https://sleazyfork.org/en/users/1027300-ntf
 // @version      3.1.3 
 // @description  Modern image gallery with enhanced browsing, fullscreen, and download features
 // @author       ntf (original), Meri/TearTyr (maintained and improved)
@@ -695,7 +695,7 @@
         if (!$image.length || !$container.length) return;
 
         const containerDOM = $container[0];
-        // const imageDOM = $image[0]; // Not directly used for naturalWidth/Height here
+        // const imageDOM = $image[0];
         const rect = containerDOM.getBoundingClientRect();
         const originalEvent = event.originalEvent || event; // Get original DOM event for deltaY
 
