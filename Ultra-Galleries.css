@@ -645,6 +645,11 @@
     opacity: 0.8;
 }
 
+/* -- DIM FIX -- */
+.post__files .fileThumb {
+    opacity: 1 !important;
+}
+
 /* ------------------- NOTIFICATIONS ------------------- */
 .ug-notification-area {
     position: fixed;
