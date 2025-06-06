@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1477603-%E3%83%A1%E3%83%AA%E3%83%BC
-// @version      3.2.4
+// @version      3.2.0
 // @description  Modern image gallery with enhanced browsing, fullscreen, and download features
 // @author       ntf (original), Meri/TearTyr (maintained and improved)
 // @match        *://kemono.su/*
@@ -1210,124 +1210,111 @@
         },
 
         createSettingsUI: () => {
-            const $overlay = $('<div>').attr('id', 'ug-settings-overlay').addClass(CSS.SETTINGS.OVERLAY);
+            const $overlay = $('<div>').attr('id', 'ug-settings-overlay').addClass('ug-settings-overlay');
             const $container = $('<div>').addClass('ug-settings-container').appendTo($overlay);
 
             // --- Sidebar ---
             const $sidebar = $('<div>').addClass('ug-settings-sidebar').appendTo($container);
-            const $sidebarHeader = $('<div>').addClass('ug-sidebar-header').text('Settings').appendTo($sidebar);
+            $('<div>').addClass('ug-sidebar-header').text('Settings').appendTo($sidebar);
 
             // --- Content ---
             const $content = $('<div>').addClass('ug-settings-content').appendTo($container);
             const $header = $('<div>').addClass('ug-settings-header').appendTo($content);
             const $headerText = $('<h2>').appendTo($header);
-            const $closeBtn = $('<button>').addClass(CSS.SETTINGS.CLOSE_BTN).text(BUTTONS.CLOSE).on('click', () => state.settingsOpen = false).appendTo($header);
+            const $closeBtn = $('<button>').addClass('ug-settings-close-btn').text(BUTTONS.CLOSE).on('click', () => state.settingsOpen = false).appendTo($header);
             const $body = $('<div>').addClass('ug-settings-body').appendTo($content);
 
             const sections = {
                 general: { title: 'General', el: $('<div>').addClass('ug-settings-section') },
+                panZoom: { title: 'Pan & Zoom', el: $('<div>').addClass('ug-settings-section') },
+                buttonVisibility: { title: 'Buttons', el: $('<div>').addClass('ug-settings-section') },
                 keys: { title: 'Keyboard', el: $('<div>').addClass('ug-settings-section') },
                 notifications: { title: 'Notifications', el: $('<div>').addClass('ug-settings-section') },
-                formatting: { title: 'File Formatting', el: $('<div>').addClass('ug-settings-section') },
                 optimizations: { title: 'Downloads', el: $('<div>').addClass('ug-settings-section') },
-                buttonVisibility: { title: 'Buttons', el: $('<div>').addClass('ug-settings-section') },
-                panZoom: { title: 'Pan & Zoom', el: $('<div>').addClass('ug-settings-section') }
+                formatting: { title: 'File Formatting', el: $('<div>').addClass('ug-settings-section') },
             };
 
-            function createSection(key, title) {
+            function createSectionContent(key) {
                 const section = sections[key];
                 $body.append(section.el);
                 return section.el;
             }
 
             function addCheckbox($parent, id, label, checked, onChange) {
-                const $div = $('<div>').addClass(CSS.SETTINGS.CHECKBOX_LABEL);
-                const $input = $('<input type="checkbox">').attr('id', id).prop('checked', checked)
-                    .on('change', e => onChange($(e.target).prop('checked')));
+                const $div = $('<div>').addClass('ug-settings-checkbox-label');
+                const $input = $('<input type="checkbox">').attr('id', id).prop('checked', checked).on('change', e => onChange($(e.target).prop('checked')));
                 const $label = $('<label>').attr('for', id).text(label);
                 $div.append($input, $label);
                 $parent.append($div);
-                return $div;
             }
 
             function addTextInput($parent, id, label, value, maxLength, onChange) {
-                const $div = $('<div>').addClass('ug-settings-text-input-container');
-                $div.html(`<label class="${CSS.SETTINGS.LABEL}" for="${id}">${label}</label>`);
-                const $input = $(`<input type="text" id="${id}" value="${value}" maxlength="${maxLength}">`).addClass(CSS.SETTINGS.INPUT)
-                    .on('change', e => onChange($(e.target).val()));
+                const $div = $('<div>').css('margin-bottom', '15px');
+                $div.append($(`<label class="ug-settings-label" for="${id}">${label}</label>`));
+                const $input = $(`<input type="text" id="${id}" value="${value}" maxlength="${maxLength}">`).addClass('ug-settings-input').on('change', e => onChange($(e.target).val()));
                 $div.append($input);
                 $parent.append($div);
-                return $div;
             }
 
             function addTextAreaInput($parent, id, label, value, onChange) {
-                const $div = $('<div>').addClass('ug-settings-text-input-container');
-                $div.html(`<label class="${CSS.SETTINGS.LABEL}" for="${id}">${label}</label>`);
-                const $input = $(`<input type="text" id="${id}" value="${value}">`).addClass(CSS.SETTINGS.INPUT)
-                    .on('change', e => onChange($(e.target).val()));
+                const $div = $('<div>').css('margin-bottom', '15px');
+                $div.append($(`<label class="ug-settings-label" for="${id}">${label}</label>`));
+                const $input = $(`<input type="text" id="${id}" value="${value}">`).addClass('ug-settings-input').css('width', '100%').on('change', e => onChange($(e.target).val()));
                 $div.append($input);
                 $parent.append($div);
-                return $div;
             }
 
             function addSelect($parent, id, label, options, selectedValue, onChange) {
-                const $div = $('<div>').addClass('ug-settings-select-container');
-                $div.html(`<label class="${CSS.SETTINGS.LABEL}" for="${id}">${label}</label>`);
-                const $select = $(`<select id="${id}">`).addClass(CSS.SETTINGS.INPUT)
-                    .on('change', e => onChange(e.target.value));
+                const $div = $('<div>').css('margin-bottom', '15px');
+                $div.append($(`<label class="ug-settings-label" for="${id}">${label}</label>`));
+                const $select = $(`<select id="${id}">`).addClass('ug-settings-input').on('change', e => onChange(e.target.value));
                 options.forEach(opt => {
                     $select.append($(`<option value="${opt.value}">${opt.text}</option>`));
                 });
                 $select.val(selectedValue);
                 $div.append($select);
                 $parent.append($div);
-                return $div;
             }
 
-            // Populate sections with settings
-            const generalSection = createSection('general', 'General Settings');
+            // --- Populate Sections ---
+            const generalSection = createSectionContent('general');
             addCheckbox(generalSection, 'rightClickToOpenToggle', 'Right-click on post images to open in new tab', state.rightClickToOpen, val => { state.rightClickToOpen = val; });
-            addCheckbox(generalSection, 'animationsToggle', 'Enable Animations', state.animationsEnabled, val => { GM_setValue('animationsEnabled', val); });
-            addCheckbox(generalSection, 'bottomStripeToggle', 'Show Thumbnail Strip', state.bottomStripeVisible, val => { GM_setValue('bottomStripeVisible', val); });
+            addCheckbox(generalSection, 'animationsToggle', 'Enable Animations', state.animationsEnabled, val => { state.animationsEnabled = val; GM_setValue('animationsEnabled', val); });
+            addCheckbox(generalSection, 'bottomStripeToggle', 'Show Thumbnail Strip', state.bottomStripeVisible, val => { state.bottomStripeVisible = val; GM_setValue('bottomStripeVisible', val); });
 
-            const panZoomSection = createSection('panZoom', 'Pan & Zoom Settings');
-            addCheckbox(panZoomSection, 'zoomEnabledToggle', 'Enable Zoom & Pan', state.zoomEnabled, val => { GM_setValue('zoomEnabled', val); });
-            addCheckbox(panZoomSection, 'inertiaEnabledToggle', 'Enable Smooth Pan Inertia', state.inertiaEnabled, val => { GM_setValue('inertiaEnabled', val); });
+            const panZoomSection = createSectionContent('panZoom');
+            addCheckbox(panZoomSection, 'zoomEnabledToggle', 'Enable Zoom & Pan', state.zoomEnabled, val => { state.zoomEnabled = val; GM_setValue('zoomEnabled', val); });
+            addCheckbox(panZoomSection, 'inertiaEnabledToggle', 'Enable Smooth Pan Inertia', state.inertiaEnabled, val => { state.inertiaEnabled = val; GM_setValue('inertiaEnabled', val); });
 
-            const buttonVisibilitySection = createSection('buttonVisibility', 'Button Visibility');
-            const addButtonVisibility = (id, label, prop) => {
-                addCheckbox(buttonVisibilitySection, id, label, state[prop], val => {
-                    state[prop] = val;
-                    GM_setValue(prop, val);
-                    if (galleryOverlay) { Gallery.closeGallery(); Gallery.createGallery(); }
-                });
-            };
-            addButtonVisibility('hideRemoveBtn', 'Hide Remove Button', 'hideRemoveButton');
-            addButtonVisibility('hideFullBtn', 'Hide Full Size Button', 'hideFullButton');
-            addButtonVisibility('hideDownloadBtn', 'Hide Download Button', 'hideDownloadButton');
-            addButtonVisibility('hideHeightBtn', 'Hide Fill Height Button', 'hideHeightButton');
-            addButtonVisibility('hideWidthBtn', 'Hide Fill Width Button', 'hideWidthButton');
-            addButtonVisibility('hideNavArrows', 'Hide Navigation Arrows', 'hideNavArrows');
+            const buttonVisibilitySection = createSectionContent('buttonVisibility');
+            addCheckbox(buttonVisibilitySection, 'hideRemoveBtn', 'Hide Remove Button', state.hideRemoveButton, val => { state.hideRemoveButton = val; GM_setValue('hideRemoveButton', val); });
+            addCheckbox(buttonVisibilitySection, 'hideFullBtn', 'Hide Full Size Button', state.hideFullButton, val => { state.hideFullButton = val; GM_setValue('hideFullButton', val); });
+            addCheckbox(buttonVisibilitySection, 'hideDownloadBtn', 'Hide Download Button', state.hideDownloadButton, val => { state.hideDownloadButton = val; GM_setValue('hideDownloadButton', val); });
+            addCheckbox(buttonVisibilitySection, 'hideHeightBtn', 'Hide Fill Height Button', state.hideHeightButton, val => { state.hideHeightButton = val; GM_setValue('hideHeightButton', val); });
+            addCheckbox(buttonVisibilitySection, 'hideWidthBtn', 'Hide Fill Width Button', state.hideWidthButton, val => { state.hideWidthButton = val; GM_setValue('hideWidthButton', val); });
+            addCheckbox(buttonVisibilitySection, 'hideNavArrows', 'Hide Navigation Arrows', state.hideNavArrows, val => { state.hideNavArrows = val; GM_setValue('hideNavArrows', val); });
 
-            const keysSection = createSection('keys', 'Keyboard Shortcuts');
-            addTextInput(keysSection, 'galleryKeyInput', 'Gallery Key:', state.galleryKey, 1, val => { GM_setValue('galleryKey', val); });
-            addTextInput(keysSection, 'prevImageKeyInput', 'Previous Image Key:', state.prevImageKey, 1, val => { GM_setValue('prevImageKey', val); });
-            addTextInput(keysSection, 'nextImageKeyInput', 'Next Image Key:', state.nextImageKey, 1, val => { GM_setValue('nextImageKey', val); });
+            const keysSection = createSectionContent('keys');
+            addTextInput(keysSection, 'galleryKeyInput', 'Gallery Key:', state.galleryKey, 1, val => { state.galleryKey = val; GM_setValue('galleryKey', val); });
+            addTextInput(keysSection, 'prevImageKeyInput', 'Previous Image Key:', state.prevImageKey, 1, val => { state.prevImageKey = val; GM_setValue('prevImageKey', val); });
+            addTextInput(keysSection, 'nextImageKeyInput', 'Next Image Key:', state.nextImageKey, 1, val => { state.nextImageKey = val; GM_setValue('nextImageKey', val); });
 
-            const notificationsSection = createSection('notifications', 'Notifications');
-            addCheckbox(notificationsSection, 'notificationsEnabledToggle', 'Enable Notifications', state.notificationsEnabled, val => { GM_setValue('notificationsEnabled', val); });
-            addCheckbox(notificationsSection, 'notificationAreaVisibleToggle', 'Show Notification Area', state.notificationAreaVisible, val => { GM_setValue('notificationAreaVisible', val); });
+            const notificationsSection = createSectionContent('notifications');
+            addCheckbox(notificationsSection, 'notificationsEnabledToggle', 'Enable Notifications', state.notificationsEnabled, val => { state.notificationsEnabled = val; GM_setValue('notificationsEnabled', val); });
+            addCheckbox(notificationsSection, 'notificationAreaVisibleToggle', 'Show Notification Area', state.notificationAreaVisible, val => { state.notificationAreaVisible = val; });
             addSelect(notificationsSection, 'notificationPosition', 'Notification Position:', [{value: 'top', text: 'Top'}, {value: 'bottom', text: 'Bottom'}], state.notificationPosition, val => { state.notificationPosition = val; });
 
-            const optimizationsSection = createSection('optimizations', 'Download Optimizations');
+            const optimizationsSection = createSectionContent('optimizations');
             addCheckbox(optimizationsSection, 'optimizePngToggle', 'Optimize PNGs in ZIP (Slower)', state.optimizePngInZip, val => { state.optimizePngInZip = val; });
             addCheckbox(optimizationsSection, 'persistentCachingToggle', 'Enable Persistent Image Caching', state.enablePersistentCaching, val => { state.enablePersistentCaching = val; });
+            const $clearCacheButton = $('<button class="ug-button ug-settings-input" style="margin-top: 10px; display: block;">Clear Persistent Cache</button>').on('click', clearDexieCache);
+            optimizationsSection.append($clearCacheButton);
 
-            const formattingSection = createSection('formatting', 'File Formatting');
+            const formattingSection = createSectionContent('formatting');
             addTextAreaInput(formattingSection, 'zipFileNameFormatInput', 'Zip File Name Format:', state.zipFileNameFormat, val => { GM_setValue('zipFileNameFormat', val); });
             addTextAreaInput(formattingSection, 'imageFileNameFormatInput', 'Image File Name Format:', state.imageFileNameFormat, val => { GM_setValue('imageFileNameFormat', val); });
 
-            // Sidebar navigation logic
+            // --- Sidebar Navigation Logic ---
             Object.keys(sections).forEach(key => {
                 const section = sections[key];
                 const $button = $('<button>').addClass('ug-sidebar-button').text(section.title).data('section-key', key)
@@ -2613,7 +2600,7 @@
         },
 
         delegatedImageRightClickHandler: event => {
-            if (!state.rightClickToOpen) return;
+            if (!state.rightClickToOpen) return; // Check if the setting is enabled
 
             // Check if the right-clicked element is one of our managed images
             const imageElement = event.target.closest('img.post__image');
@@ -2621,7 +2608,9 @@
                 // Find the parent anchor tag to get the original URL
                 const linkElement = imageElement.closest(SELECTORS.IMAGE_LINK);
                 if (linkElement && linkElement.href) {
+                    // Prevent the default context menu
                     event.preventDefault();
+                    // Open the original image URL in a new tab
                     window.open(linkElement.href, '_blank');
                 }
             }

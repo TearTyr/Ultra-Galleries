@@ -1,5 +1,5 @@
 /* ====================================================
-   Ultra Galleries
+   Ultra Galleries - Original Styles
    ==================================================== */
 
 /* ------------------- VARIABLES ------------------- */
@@ -28,10 +28,6 @@
     --ug-settings-text-color: #ddd;
     --ug-settings-header-color: #eee;
     --ug-settings-ribbon-active-color: #4d90fe;
-    --ug-settings-sidebar-bg: rgba(20, 21, 23, 0.9);
-    --ug-settings-active-bg: #33373d;
-    --ug-settings-hover-bg: rgba(255, 255, 255, 0.07);
-    --ug-settings-accent-color: #5892e4;
 
     /* Dimensions */
     --ug-fullscreen-nav-size: 50px;
@@ -649,254 +645,6 @@
     opacity: 0.8;
 }
 
-/* ------------------- SETTINGS BUTTON (Original) ------------------- */
-.settings-button {
-    background-color: var(--ug-button-bg-color);
-    color: var(--ug-text-color);
-    border: none !important;
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    font-size: 1.5em;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    opacity: 0.8;
-    transition: background-color var(--ug-transition-duration), opacity var(--ug-transition-duration), transform var(--ug-transition-duration), box-shadow var(--ug-transition-duration);
-    box-shadow: none !important;
-}
-
-.settings-button:hover {
-    opacity: 1;
-    background-color: var(--ug-button-hover-bg-color);
-    transform: scale(1.1);
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4) !important;
-}
-
-/* ------------------- SWAL STYLES (Original) ------------------- */
-.swal2-popup {
-    background: var(--ug-settings-bg-color) !important;
-    color: var(--ug-settings-text-color) !important;
-    font-size: 18px !important;
-    border-radius: 8px !important;
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1) !important;
-}
-
-.swal2-title,
-.swal2-html-container {
-    color: var(--ug-settings-text-color) !important;
-}
-
-.swal2-content {
-    padding: 0 !important;
-}
-
-.swal2-input {
-    background-color: var(--ug-settings-input-bg-color) !important;
-    color: var(--ug-settings-text-color) !important;
-    border: 1px solid var(--ug-settings-input-border-color) !important;
-    font-size: 18px !important;
-    padding: 0.5em !important;
-}
-
-.swal2-confirm {
-    background-color: #4CAF50 !important;
-}
-
-.swal2-cancel {
-    background-color: #f44336 !important;
-}
-
-/* ------------------- SETTINGS PANEL (Original) ------------------- */
-.ug-settings-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 10001;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    background-color: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-}
-
-.ug-settings-container {
-    display: flex;
-    flex-direction: column;
-    max-width: 550px;
-    max-height: 85vh;
-    width: 95vw;
-    background-color: rgba(30, 32, 35, 0.95);
-    border-radius: 12px;
-    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
-    transform: scale(0.95);
-    opacity: 0;
-    transition: transform 0.3s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.3s cubic-bezier(0.19, 1, 0.22, 1);
-    padding: 0;
-    overflow: hidden;
-    color: #eaeaea;
-}
-
-.ug-settings-overlay.opening .ug-settings-container {
-    transform: scale(1);
-    opacity: 1;
-}
-
-.ug-settings-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 20px 24px;
-    background: linear-gradient(to bottom, rgba(60, 63, 68, 0.8), rgba(35, 37, 40, 0.8));
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.ug-settings-header h2 {
-    margin: 0;
-    color: #ffffff;
-    font-size: 1.4em;
-    font-weight: 600;
-    letter-spacing: 0.3px;
-}
-
-.ug-settings-close-btn {
-    background: rgba(255, 255, 255, 0.05);
-    border: none;
-    color: #eaeaea;
-    font-size: 1.2em;
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    border-radius: 50%;
-    transition: all 0.2s ease;
-}
-
-.ug-settings-close-btn:hover {
-    background-color: rgba(255, 255, 255, 0.15);
-    transform: scale(1.05);
-}
-
-.ug-settings-body {
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-    padding: 24px;
-    overflow-y: auto;
-    max-height: calc(85vh - 80px);
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
-}
-
-.ug-settings-body::-webkit-scrollbar {
-    width: 6px;
-}
-
-.ug-settings-body::-webkit-scrollbar-thumb {
-    background-color: rgba(255, 255, 255, 0.2);
-    border-radius: 6px;
-}
-
-.ug-settings-body::-webkit-scrollbar-track {
-    background-color: transparent;
-    margin: 4px;
-}
-
-.ug-settings-section {
-    background-color: rgba(40, 42, 46, 0.6);
-    border-radius: 10px;
-    padding: 20px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.ug-settings-section:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-}
-
-.ug-settings-section-header {
-    color: #ffffff;
-    font-size: 1.15em;
-    margin-bottom: 16px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    font-weight: 500;
-    letter-spacing: 0.5px;
-}
-
-.ug-settings-label {
-    display: block;
-    margin-bottom: 3px;
-    font-weight: normal;
-    font-size: 0.95em;
-    color: #ccc;
-}
-
-.ug-settings-checkbox-label {
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-    margin-bottom: 3px;
-}
-
-.ug-settings-checkbox-label input[type="checkbox"] {
-    margin-right: 8px;
-    appearance: none;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    width: 16px;
-    height: 16px;
-    border: 1px solid var(--ug-settings-input-border-color);
-    background-color: var(--ug-settings-input-bg-color);
-    border-radius: 3px;
-    position: relative;
-    cursor: pointer;
-}
-
-.ug-settings-checkbox-label input[type="checkbox"]:checked::before {
-    content: '✓';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--ug-settings-ribbon-active-color);
-    font-size: 14px;
-}
-
-.ug-settings-checkbox-label input[type="checkbox"]:focus {
-    outline: none;
-    box-shadow: 0 0 0 2px rgba(160, 160, 160, 0.5);
-}
-
-.ug-settings-input {
-    background-color: var(--ug-settings-input-bg-color) !important;
-    color: var(--ug-settings-text-color) !important;
-    border: 1px solid var(--ug-settings-input-border-color) !important;
-    border-radius: 3px;
-    padding: 6px;
-    font-size: 0.95em;
-    width: calc(100% - 16px);
-    box-sizing: border-box;
-    margin-bottom: 8px;
-}
-
-.ug-settings-input:focus {
-    outline-color: var(--ug-settings-ribbon-active-color);
-    box-shadow: 0 0 0 2px rgba(160, 160, 160, 0.5);
-}
-
 /* ------------------- NOTIFICATIONS ------------------- */
 .ug-notification-area {
     position: fixed;
@@ -1061,6 +809,239 @@
     box-shadow: none !important;
 }
 
+/* =================== NEW SETTINGS UI STYLES (APPENDED) =================== */
+
+.settings-button-wrapper {
+    position: fixed;
+    bottom: 25px;
+    right: 25px;
+    z-index: 10000;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle, rgba(120, 120, 200, 0.4) 0%, rgba(120, 120, 200, 0) 70%);
+    transition: transform 0.3s ease;
+}
+.settings-button-wrapper:hover {
+    transform: scale(1.1);
+}
+.settings-button {
+    background-color: rgba(30, 30, 30, 0.8);
+    color: var(--ug-text-color);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    font-size: 1.5em;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+.settings-button:hover {
+    transform: rotate(45deg);
+    background-color: rgba(50, 50, 50, 0.9);
+}
+
+.ug-settings-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10001;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+.ug-settings-container {
+    display: flex;
+    max-width: 800px;
+    width: 90vw;
+    height: 80vh;
+    max-height: 650px;
+    background-color: var(--ug-settings-bg-color);
+    border-radius: 12px;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+    color: var(--ug-text-color);
+    transform: scale(0.95);
+    opacity: 0;
+    transition: transform var(--ug-transition-medium), opacity var(--ug-transition-medium);
+}
+.ug-settings-overlay.opening .ug-settings-container {
+    transform: scale(1);
+    opacity: 1;
+}
+
+.ug-settings-sidebar {
+    width: 200px;
+    background-color: var(--ug-settings-sidebar-bg);
+    padding: 16px 8px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--ug-border-color);
+    display: flex;
+    flex-direction: column;
+}
+.ug-sidebar-header {
+    padding: 0 12px 16px 12px;
+    font-size: 1.3em;
+    font-weight: 600;
+    color: #fff;
+    border-bottom: 1px solid var(--ug-border-color);
+    margin-bottom: 12px;
+}
+.ug-sidebar-button {
+    background: none;
+    border: none;
+    color: var(--ug-text-secondary-color);
+    width: 100%;
+    text-align: left;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 1em;
+    cursor: pointer;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: background-color var(--ug-transition-fast), color var(--ug-transition-fast);
+}
+.ug-sidebar-button:hover {
+    background-color: var(--ug-settings-hover-bg);
+    color: #fff;
+}
+.ug-sidebar-button.active {
+    background-color: var(--ug-settings-active-bg);
+    color: #fff;
+    font-weight: 500;
+}
+
+.ug-settings-content {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.ug-settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    background-color: var(--ug-settings-header-bg);
+    border-bottom: 1px solid var(--ug-border-color);
+    flex-shrink: 0;
+}
+.ug-settings-header h2 {
+    margin: 0;
+    color: #fff;
+    font-size: 1.2em;
+    font-weight: 600;
+}
+.ug-settings-close-btn {
+    background: none;
+    border: none;
+    color: var(--ug-text-secondary-color);
+    font-size: 1.5em;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 50%;
+    transition: all var(--ug-transition-fast);
+}
+.ug-settings-close-btn:hover {
+    background-color: var(--ug-settings-hover-bg);
+    color: #fff;
+}
+
+.ug-settings-body {
+    padding: 24px;
+    overflow-y: auto;
+    flex-grow: 1;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+.ug-settings-section {
+    display: none;
+}
+.ug-settings-section.active {
+    display: block;
+}
+
+.ug-settings-label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 0.9em;
+    color: var(--ug-text-secondary-color);
+}
+.ug-settings-checkbox-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 4px;
+    margin: 4px 0;
+    transition: background-color var(--ug-transition-fast);
+}
+.ug-settings-checkbox-label:hover {
+    background-color: var(--ug-settings-hover-bg);
+}
+.ug-settings-checkbox-label input[type="checkbox"] {
+    margin-right: 12px;
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--ug-input-border);
+    border-radius: 4px;
+    background-color: var(--ug-input-bg);
+    cursor: pointer;
+    position: relative;
+    transition: all var(--ug-transition-fast);
+}
+.ug-settings-checkbox-label input[type="checkbox"]:checked {
+    background-color: var(--ug-settings-accent-color);
+    border-color: var(--ug-settings-accent-color);
+}
+.ug-settings-checkbox-label input[type="checkbox"]:checked::before {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #fff;
+    font-size: 14px;
+    font-weight: bold;
+}
+.ug-settings-input {
+    background-color: var(--ug-input-bg) !important;
+    color: var(--ug-text-color) !important;
+    border: 1px solid var(--ug-input-border) !important;
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-size: 1em;
+    width: 100%;
+    box-sizing: border-box;
+    margin-bottom: 12px;
+    transition: border-color var(--ug-transition-fast), box-shadow var(--ug-transition-fast);
+}
+.ug-settings-input:focus {
+    outline: none;
+    border-color: var(--ug-input-focus-border) !important;
+    box-shadow: 0 0 0 2px rgba(88, 146, 228, 0.3);
+}
+
 /* ------------------- RESPONSIVE ADJUSTMENTS ------------------- */
 @media (max-width: 768px) {
     .ug-gallery-container {
@@ -1091,27 +1072,26 @@
     .ug-gallery-counter {
         font-size: 0.9em;
     }
-    .zoom-controls {
-        gap: 2px;
-    }
-    .zoom-level {
-        min-width: 40px;
-        font-size: 12px;
-    }
-    .zoom-controls button img {
-        width: 18px;
-        height: 18px;
-    }
     .ug-settings-container {
-        width: 100%;
-        max-width: 100%;
-        height: 100%;
-        max-height: 100%;
-        border-radius: 0;
+        flex-direction: column;
+        height: 90vh;
+        max-height: 90vh;
+        width: 95vw;
     }
-    .ug-notification-container {
-        font-size: 14px;
-        padding: 10px 15px;
+    .ug-settings-sidebar {
+        width: 100%;
+        flex-direction: row;
+        overflow-x: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--ug-border-color);
+        padding: 8px;
+    }
+    .ug-sidebar-header {
+        display: none;
+    }
+    .ug-sidebar-button {
+        flex-shrink: 0;
+        justify-content: center;
     }
     .settings-button-wrapper {
         bottom: 15px;
@@ -1122,10 +1102,6 @@
         height: 36px;
         font-size: 1.3em;
     }
-    .ug-button {
-        padding: 5px 10px;
-        font-size: 0.85em;
-    }
 }
 
 @media (max-width: 480px) {
@@ -1133,9 +1109,5 @@
         grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
         grid-gap: 5px;
         padding: 10px;
-    }
-    .zoom-controls button img {
-        width: 16px;
-        height: 16px;
     }
 }
