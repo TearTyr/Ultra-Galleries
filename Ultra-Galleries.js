@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Galleries
-// @namespace    https://sleazyfork.org/en/users/1477603-%E3%83%A1%E3%83%AA%E3%83%BC // https://sleazyfork.org/en/users/1027300-ntf
-// @version      3.1.3 
+// @namespace    https://sleazyfork.org/en/users/1477603-%E3%83%A1%E3%83%AA%E3%83%BC
+// @version      3.2.4
 // @description  Modern image gallery with enhanced browsing, fullscreen, and download features
 // @author       ntf (original), Meri/TearTyr (maintained and improved)
 // @match        *://kemono.su/*
@@ -16,7 +16,8 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_getResourceText
-// @require      https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js 
+// @grant        window.open
+// @require      https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js
 // @require      https://unpkg.com/jszip@3.9.1/dist/jszip.min.js
 // @require      https://cdn.jsdelivr.net/npm/file-saver@1.3.2/FileSaver.min.js
 // @require      https://cdn.jsdelivr.net/npm/sweetalert2@11
@@ -41,6 +42,7 @@
         DEBOUNCE_DELAY: 250,
         PAN_RESISTANCE: 0.8,
         DOUBLE_TAP_THRESHOLD: 300,
+        CACHE_EVICTION_COUNT: 10, // Number of items to evict when cache is full
     };
 
     const BUTTONS = {
@@ -353,6 +355,7 @@
         notificationAreaVisible: GM_getValue('notificationAreaVisible', true),
         notificationPosition: GM_getValue('notificationPosition', 'bottom'),
         animationsEnabled: GM_getValue('animationsEnabled', true),
+        rightClickToOpen: GM_getValue('rightClickToOpen', true), // NEW SETTING
 
         // Download settings
         optimizePngInZip: GM_getValue('optimizePngInZip', false),
@@ -499,23 +502,23 @@
                 const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
                 if ($container.length) {
                     $container.toggleClass(CSS.GALLERY.ZOOMED, value > 1);
-                    $container.css('cursor', value > 1 ? 'grab' : 'default'); 
+                    $container.css('cursor', value > 1 ? 'grab' : 'default');
                 }
 
                 // Show instructions tooltip first time
                 if (value > 1 && oldValue === 1 && state.zoomIndicatorVisible) {
                     const tooltip = Utils.createTooltip('Click and drag to pan image');
-                    galleryOverlay.append(tooltip); 
-                    state.zoomIndicatorVisible = false; 
+                    galleryOverlay.append(tooltip);
+                    state.zoomIndicatorVisible = false;
                 }
             }
         },
         imageOffset: () => Zoom.applyZoom(),
         isDragging: (value) => {
-           
+
             if (galleryOverlay && galleryOverlay.length) {
                 const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
-                if ($container.length) { 
+                if ($container.length) {
                     $container.toggleClass(CSS.GALLERY.GRABBING, value);
 
                     if (value && state.inertiaActive) {
@@ -538,7 +541,7 @@
             }
         },
 
-        enablePersistentCaching: (value) => { 
+        enablePersistentCaching: (value) => {
             GM_setValue('enablePersistentCaching', value);
             if (value && !db) { // Initialize Dexie if enabled and not already done
                 initDexie();
@@ -548,8 +551,11 @@
                 console.log("Ultra Galleries: Persistent caching disabled. Existing cache remains but won't be used.");
             }
         },
-        optimizePngInZip: (value) => { 
+        optimizePngInZip: (value) => {
         GM_setValue('optimizePngInZip', value);
+        },
+        rightClickToOpen: (value) => {
+            GM_setValue('rightClickToOpen', value);
         },
     });
 
@@ -558,6 +564,7 @@
     // ====================================================
     let loadedUPNG = null;
     let loadedPako = null;
+    let upngLoadAttemptedAndFailed = false; // For single notification on UPNG load failure
 
     async function loadResourceScript(resourceName, globalVarName, onWindow = true) {
         try {
@@ -575,7 +582,7 @@
             // check if a common global for the library exists after eval
             if (resourceName === 'upngJsRaw' && typeof UPNG !== 'undefined') return UPNG;
             if (resourceName === 'pakoJsRaw' && typeof pako !== 'undefined') return pako;
-            
+
             console.log(`Ultra Galleries: Loading resource ${resourceName} into global scope...`);
             // Indirect eval to run in global scope
             (0, eval)(scriptText);
@@ -621,6 +628,23 @@
         return true;
     }
 
+    async function evictOldestCacheItems(count) {
+        if (!db) return 0;
+        try {
+            // Get the keys (URLs) of the oldest items
+            const oldestItemKeys = await db.imageCache.orderBy('cachedAt').limit(count).primaryKeys();
+            if (oldestItemKeys && oldestItemKeys.length > 0) {
+                await db.imageCache.bulkDelete(oldestItemKeys);
+                console.log(`Ultra Galleries: Evicted ${oldestItemKeys.length} items from Dexie cache.`);
+                return oldestItemKeys.length;
+            }
+            return 0;
+        } catch (e) {
+            console.error("Ultra Galleries: Error evicting oldest cache items:", e);
+            return 0;
+        }
+    }
+
     async function storeImageInDexie(url, blob) {
         if (!db || !state.enablePersistentCaching) return;
         try {
@@ -628,10 +652,28 @@
             // console.log(`Ultra Galleries: Cached image in Dexie: ${url}`);
         } catch (e) {
             console.error(`Ultra Galleries: Error caching image ${url} in Dexie:`, e);
-            // Handle QuotaExceededError or other errors if necessary
             if (e.name === 'QuotaExceededError') {
-                console.warn("Ultra Galleries: Dexie cache quota exceeded. Consider clearing cache or increasing quota.");
-                // Potentially implement a cache cleanup strategy here (e.g., remove oldest items)
+                console.warn("Ultra Galleries: Dexie cache quota exceeded. Attempting to clear some old items...");
+                state.notification = "Cache full. Attempting to clear space...";
+                state.notificationType = "warning";
+                try {
+                    const evictedCount = await evictOldestCacheItems(CONFIG.CACHE_EVICTION_COUNT);
+                    if (evictedCount > 0) {
+                        console.log(`Ultra Galleries: Evicted ${evictedCount} old cache items. Retrying save for ${url}.`);
+                        state.notification = `Cleared ${evictedCount} old items from cache. Retrying save.`;
+                        state.notificationType = "info";
+                        await db.imageCache.put({ url: url, blob: blob, cachedAt: Date.now() }); // Retry
+                        console.log(`Ultra Galleries: Successfully cached ${url} after eviction.`);
+                    } else {
+                        console.warn(`Ultra Galleries: Eviction attempt failed or no items to evict for ${url}. Save might still fail or already failed.`);
+                        state.notification = "Cache full. Could not clear enough space automatically.";
+                        state.notificationType = "error";
+                    }
+                } catch (retrySaveError) {
+                    console.error(`Ultra Galleries: Error during cache eviction or retry for ${url}:`, retrySaveError);
+                    state.notification = "Error during cache auto-cleanup. Cache might be full.";
+                    state.notificationType = "error";
+                }
             }
         }
     }
@@ -684,10 +726,10 @@
             $container.toggleClass(CSS.GALLERY.ZOOMED, state.zoomScale !== 1);
         },
 
-    handleWheelZoom: (event) => { 
+    handleWheelZoom: (event) => {
         if (!state.zoomEnabled || !galleryOverlay || !galleryOverlay.length) return;
-        
-        event.preventDefault(); 
+
+        event.preventDefault();
         event.stopPropagation();
 
         const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
@@ -695,7 +737,7 @@
         if (!$image.length || !$container.length) return;
 
         const containerDOM = $container[0];
-        // const imageDOM = $image[0];
+        // const imageDOM = $image[0]; // Not directly used for naturalWidth/Height here
         const rect = containerDOM.getBoundingClientRect();
         const originalEvent = event.originalEvent || event; // Get original DOM event for deltaY
 
@@ -743,7 +785,7 @@
             return { x: offsetX, y: offsetY };
         },
 
-        startDrag: (event) => { 
+        startDrag: (event) => {
             if (!galleryOverlay || !galleryOverlay.length) return;
             if (event.button === 2 && event.type === 'mousedown') return; // Allow context menu on actual mousedown
 
@@ -802,7 +844,7 @@
         initializeImage: (imageDOM, containerDOM) => {
             if (!imageDOM || !containerDOM) return;
 
-            $(imageDOM).css({width: '', height: '', maxWidth: '100%', maxHeight: '100%'}); 
+            $(imageDOM).css({width: '', height: '', maxWidth: '100%', maxHeight: '100%'});
 
             const containerWidth = containerDOM.offsetWidth;
             const containerHeight = containerDOM.offsetHeight;
@@ -1122,7 +1164,7 @@
             const text = container.querySelector(`#${CSS.NOTIF_TEXT}`);
             text.textContent = message;
 
-            container.classList.remove('info', 'success', 'error');
+            container.classList.remove('info', 'success', 'error', 'warning');
             container.classList.add(type);
 
             if (state.animationsEnabled) {
@@ -1169,135 +1211,97 @@
 
         createSettingsUI: () => {
             const $overlay = $('<div>').attr('id', 'ug-settings-overlay').addClass(CSS.SETTINGS.OVERLAY);
+            const $container = $('<div>').addClass('ug-settings-container').appendTo($overlay);
 
-            const $container = $('<div>').addClass(CSS.SETTINGS.CONTAINER);
-            $overlay.append($container);
+            // --- Sidebar ---
+            const $sidebar = $('<div>').addClass('ug-settings-sidebar').appendTo($container);
+            const $sidebarHeader = $('<div>').addClass('ug-sidebar-header').text('Settings').appendTo($sidebar);
 
-            const $header = $('<div>').addClass(CSS.SETTINGS.HEADER);
-            $container.append($header);
+            // --- Content ---
+            const $content = $('<div>').addClass('ug-settings-content').appendTo($container);
+            const $header = $('<div>').addClass('ug-settings-header').appendTo($content);
+            const $headerText = $('<h2>').appendTo($header);
+            const $closeBtn = $('<button>').addClass(CSS.SETTINGS.CLOSE_BTN).text(BUTTONS.CLOSE).on('click', () => state.settingsOpen = false).appendTo($header);
+            const $body = $('<div>').addClass('ug-settings-body').appendTo($content);
 
-            const $headerText = $('<h2>').text('Ultra Galleries Settings');
-            $header.append($headerText);
+            const sections = {
+                general: { title: 'General', el: $('<div>').addClass('ug-settings-section') },
+                keys: { title: 'Keyboard', el: $('<div>').addClass('ug-settings-section') },
+                notifications: { title: 'Notifications', el: $('<div>').addClass('ug-settings-section') },
+                formatting: { title: 'File Formatting', el: $('<div>').addClass('ug-settings-section') },
+                optimizations: { title: 'Downloads', el: $('<div>').addClass('ug-settings-section') },
+                buttonVisibility: { title: 'Buttons', el: $('<div>').addClass('ug-settings-section') },
+                panZoom: { title: 'Pan & Zoom', el: $('<div>').addClass('ug-settings-section') }
+            };
 
-            const $closeBtn = $('<button>').addClass(CSS.SETTINGS.CLOSE_BTN)
-                .text(BUTTONS.CLOSE)
-                .on('click', () => state.settingsOpen = false);
-            $header.append($closeBtn);
-
-            const $body = $('<div>').addClass(CSS.SETTINGS.BODY);
-            $container.append($body);
-
-            function createSection($parent, title) {
-                const $section = $('<div>').addClass(CSS.SETTINGS.SECTION);
-                $section.append($('<h3>').addClass(CSS.SETTINGS.SECTION_HEADER).text(title));
-                $parent.append($section);
-                return $section;
+            function createSection(key, title) {
+                const section = sections[key];
+                $body.append(section.el);
+                return section.el;
             }
 
             function addCheckbox($parent, id, label, checked, onChange) {
                 const $div = $('<div>').addClass(CSS.SETTINGS.CHECKBOX_LABEL);
-                const $input = $('<input type="checkbox">').attr('id', id).prop('checked', checked).addClass(CSS.SETTINGS.INPUT)
+                const $input = $('<input type="checkbox">').attr('id', id).prop('checked', checked)
                     .on('change', e => onChange($(e.target).prop('checked')));
-                const $label = $('<label>').attr('for', id).text(label).addClass(CSS.SETTINGS.LABEL);
+                const $label = $('<label>').attr('for', id).text(label);
                 $div.append($input, $label);
                 $parent.append($div);
                 return $div;
             }
 
             function addTextInput($parent, id, label, value, maxLength, onChange) {
-                const $div = $('<div>').addClass(CSS.SETTINGS.LABEL);
-                $div.html(`
-                    <label class="${CSS.SETTINGS.LABEL}" for="${id}">${label}</label>
-                    <input type="text" id="${id}" value="${value}" maxlength="${maxLength}"
-                        style="width: 2em;" class="${CSS.SETTINGS.INPUT}">
-                `);
-                $div.find('input').on('change', e => onChange($(e.target).val()));
+                const $div = $('<div>').addClass('ug-settings-text-input-container');
+                $div.html(`<label class="${CSS.SETTINGS.LABEL}" for="${id}">${label}</label>`);
+                const $input = $(`<input type="text" id="${id}" value="${value}" maxlength="${maxLength}">`).addClass(CSS.SETTINGS.INPUT)
+                    .on('change', e => onChange($(e.target).val()));
+                $div.append($input);
                 $parent.append($div);
                 return $div;
             }
 
             function addTextAreaInput($parent, id, label, value, onChange) {
-                const $div = $('<div>').addClass(CSS.SETTINGS.LABEL);
-                $div.html(`
-                    <label class="${CSS.SETTINGS.LABEL}" for="${id}">${label}</label>
-                    <input type="text" id="${id}" value="${value}" style="width: 100%;" class="${CSS.SETTINGS.INPUT}">
-                `);
-                $div.find('input').on('change', e => onChange($(e.target).val()));
+                const $div = $('<div>').addClass('ug-settings-text-input-container');
+                $div.html(`<label class="${CSS.SETTINGS.LABEL}" for="${id}">${label}</label>`);
+                const $input = $(`<input type="text" id="${id}" value="${value}">`).addClass(CSS.SETTINGS.INPUT)
+                    .on('change', e => onChange($(e.target).val()));
+                $div.append($input);
                 $parent.append($div);
                 return $div;
             }
 
-            function addNumberInput($parent, id, label, value, min, max, step, onChange) {
-                const $div = $('<div>').addClass(CSS.SETTINGS.LABEL);
-                $div.html(`
-                    <label for="${id}">${label}</label>
-                    <input type="number" id="${id}" value="${value}" min="${min}" max="${max}"
-                        step="${step}" class="${CSS.SETTINGS.INPUT}">
-                `);
-                $div.find('input').on('change', e => onChange(parseFloat($(e.target).val())));
+            function addSelect($parent, id, label, options, selectedValue, onChange) {
+                const $div = $('<div>').addClass('ug-settings-select-container');
+                $div.html(`<label class="${CSS.SETTINGS.LABEL}" for="${id}">${label}</label>`);
+                const $select = $(`<select id="${id}">`).addClass(CSS.SETTINGS.INPUT)
+                    .on('change', e => onChange(e.target.value));
+                options.forEach(opt => {
+                    $select.append($(`<option value="${opt.value}">${opt.text}</option>`));
+                });
+                $select.val(selectedValue);
+                $div.append($select);
                 $parent.append($div);
                 return $div;
             }
 
-            const sections = {
-                general: createSection($body, 'General Settings'),
-                keys: createSection($body, 'Keyboard Shortcuts'),
-                notifications: createSection($body, 'Notifications'),
-                formatting: createSection($body, 'File Formatting'),
-                optimizations: createSection($body, 'Download Optimizations'),
-                buttonVisibility: createSection($body, 'Button Visibility'),
-                panZoom: createSection($body, 'Pan & Zoom Settings')
-            };
+            // Populate sections with settings
+            const generalSection = createSection('general', 'General Settings');
+            addCheckbox(generalSection, 'rightClickToOpenToggle', 'Right-click on post images to open in new tab', state.rightClickToOpen, val => { state.rightClickToOpen = val; });
+            addCheckbox(generalSection, 'animationsToggle', 'Enable Animations', state.animationsEnabled, val => { GM_setValue('animationsEnabled', val); });
+            addCheckbox(generalSection, 'bottomStripeToggle', 'Show Thumbnail Strip', state.bottomStripeVisible, val => { GM_setValue('bottomStripeVisible', val); });
 
-            addCheckbox(sections.general, 'dynamicResizingToggle', 'Dynamic Resizing',
-                    state.dynamicResizing, val => {
-                    state.dynamicResizing = val;
-                    GM_setValue('dynamicResizing', val);
-                });
+            const panZoomSection = createSection('panZoom', 'Pan & Zoom Settings');
+            addCheckbox(panZoomSection, 'zoomEnabledToggle', 'Enable Zoom & Pan', state.zoomEnabled, val => { GM_setValue('zoomEnabled', val); });
+            addCheckbox(panZoomSection, 'inertiaEnabledToggle', 'Enable Smooth Pan Inertia', state.inertiaEnabled, val => { GM_setValue('inertiaEnabled', val); });
 
-            addCheckbox(sections.general, 'animationsToggle', 'Enable Animations',
-                    state.animationsEnabled, val => {
-                    state.animationsEnabled = val;
-                    GM_setValue('animationsEnabled', val);
-                });
-
-            addCheckbox(sections.general, 'bottomStripeToggle', 'Show Thumbnail Strip',
-                    state.bottomStripeVisible, val => {
-                    state.bottomStripeVisible = val;
-                    GM_setValue('bottomStripeVisible', val);
-                });
-
-            addCheckbox(sections.panZoom, 'zoomEnabledToggle', 'Enable Zoom & Pan',
-                    state.zoomEnabled, val => {
-                    state.zoomEnabled = val;
-                    GM_setValue('zoomEnabled', val);
-                });
-
-            addCheckbox(sections.panZoom, 'inertiaEnabledToggle', 'Enable Smooth Pan Inertia',
-                    state.inertiaEnabled, val => {
-                    state.inertiaEnabled = val;
-                    GM_setValue('inertiaEnabled', val);
-                });
-
-            addNumberInput(sections.panZoom, 'maxZoomInput', 'Maximum Zoom Level:',
-                            CONFIG.MAX_SCALE, 2, 10, 0.5, val => {
-                    if (val >= 2 && val <= 10) {
-                        CONFIG.MAX_SCALE = val;
-                        GM_setValue('maxZoomScale', val);
-                    }
-                });
-
+            const buttonVisibilitySection = createSection('buttonVisibility', 'Button Visibility');
             const addButtonVisibility = (id, label, prop) => {
-                addCheckbox(sections.buttonVisibility, id, label, state[prop], val => {
+                addCheckbox(buttonVisibilitySection, id, label, state[prop], val => {
                     state[prop] = val;
                     GM_setValue(prop, val);
-                    if (galleryOverlay) {
-                        Gallery.closeGallery();
-                        Gallery.createGallery();
-                    }
+                    if (galleryOverlay) { Gallery.closeGallery(); Gallery.createGallery(); }
                 });
             };
-
             addButtonVisibility('hideRemoveBtn', 'Hide Remove Button', 'hideRemoveButton');
             addButtonVisibility('hideFullBtn', 'Hide Full Size Button', 'hideFullButton');
             addButtonVisibility('hideDownloadBtn', 'Hide Download Button', 'hideDownloadButton');
@@ -1305,93 +1309,41 @@
             addButtonVisibility('hideWidthBtn', 'Hide Fill Width Button', 'hideWidthButton');
             addButtonVisibility('hideNavArrows', 'Hide Navigation Arrows', 'hideNavArrows');
 
-            addTextInput(sections.keys, 'galleryKeyInput', 'Gallery Key:',
-                            state.galleryKey, 1, val => {
-                    state.galleryKey = val;
-                    GM_setValue('galleryKey', val);
-                });
+            const keysSection = createSection('keys', 'Keyboard Shortcuts');
+            addTextInput(keysSection, 'galleryKeyInput', 'Gallery Key:', state.galleryKey, 1, val => { GM_setValue('galleryKey', val); });
+            addTextInput(keysSection, 'prevImageKeyInput', 'Previous Image Key:', state.prevImageKey, 1, val => { GM_setValue('prevImageKey', val); });
+            addTextInput(keysSection, 'nextImageKeyInput', 'Next Image Key:', state.nextImageKey, 1, val => { GM_setValue('nextImageKey', val); });
 
-            addTextInput(sections.keys, 'prevImageKeyInput', 'Previous Image Key:',
-                            state.prevImageKey, 1, val => {
-                    state.prevImageKey = val;
-                    GM_setValue('prevImageKey', val);
-                });
+            const notificationsSection = createSection('notifications', 'Notifications');
+            addCheckbox(notificationsSection, 'notificationsEnabledToggle', 'Enable Notifications', state.notificationsEnabled, val => { GM_setValue('notificationsEnabled', val); });
+            addCheckbox(notificationsSection, 'notificationAreaVisibleToggle', 'Show Notification Area', state.notificationAreaVisible, val => { GM_setValue('notificationAreaVisible', val); });
+            addSelect(notificationsSection, 'notificationPosition', 'Notification Position:', [{value: 'top', text: 'Top'}, {value: 'bottom', text: 'Bottom'}], state.notificationPosition, val => { state.notificationPosition = val; });
 
-            addTextInput(sections.keys, 'nextImageKeyInput', 'Next Image Key:',
-                            state.nextImageKey, 1, val => {
-                    state.nextImageKey = val;
-                    GM_setValue('nextImageKey', val);
-                });
+            const optimizationsSection = createSection('optimizations', 'Download Optimizations');
+            addCheckbox(optimizationsSection, 'optimizePngToggle', 'Optimize PNGs in ZIP (Slower)', state.optimizePngInZip, val => { state.optimizePngInZip = val; });
+            addCheckbox(optimizationsSection, 'persistentCachingToggle', 'Enable Persistent Image Caching', state.enablePersistentCaching, val => { state.enablePersistentCaching = val; });
 
-            addCheckbox(sections.notifications, 'notificationsEnabledToggle', 'Enable Notifications',
-                    state.notificationsEnabled, val => {
-                    state.notificationsEnabled = val;
-                    GM_setValue('notificationsEnabled', val);
-                });
+            const formattingSection = createSection('formatting', 'File Formatting');
+            addTextAreaInput(formattingSection, 'zipFileNameFormatInput', 'Zip File Name Format:', state.zipFileNameFormat, val => { GM_setValue('zipFileNameFormat', val); });
+            addTextAreaInput(formattingSection, 'imageFileNameFormatInput', 'Image File Name Format:', state.imageFileNameFormat, val => { GM_setValue('imageFileNameFormat', val); });
 
-            addCheckbox(sections.notifications, 'notificationAreaVisibleToggle', 'Show Notification Area',
-                    state.notificationAreaVisible, val => {
-                    state.notificationAreaVisible = val;
-                    GM_setValue('notificationAreaVisible', val);
-                    const area = document.getElementById(CSS.NOTIF_AREA);
-                    if (area) area.style.display = val ? 'flex' : 'none';
-                });
-
-            const $posDiv = $('<div>').addClass(CSS.SETTINGS.LABEL).html(`
-                <label class="${CSS.SETTINGS.LABEL}">Notification Position:</label>
-                <select id="notificationPosition" class="${CSS.SETTINGS.INPUT}">
-                    <option value="top" ${state.notificationPosition === 'top' ? 'selected' : ''}>Top</option>
-                    <option value="bottom" ${state.notificationPosition === 'bottom' ? 'selected' : ''}>Bottom</option>
-                </select>
-            `);
-            $posDiv.find('select').on('change', e => {
-                state.notificationPosition = e.target.value;
+            // Sidebar navigation logic
+            Object.keys(sections).forEach(key => {
+                const section = sections[key];
+                const $button = $('<button>').addClass('ug-sidebar-button').text(section.title).data('section-key', key)
+                    .on('click', function() {
+                        const $this = $(this);
+                        $('.ug-sidebar-button').removeClass('active');
+                        $this.addClass('active');
+                        $('.ug-settings-section').removeClass('active');
+                        section.el.addClass('active');
+                        $headerText.text(section.title);
+                    });
+                $sidebar.append($button);
             });
-            sections.notifications.append($posDiv);
 
-            addCheckbox(sections.optimizations, 'optimizePngToggle', 'Optimize PNGs in ZIP (Smaller files, Slower zipping)',
-                        state.optimizePngInZip, val => {
-                    state.optimizePngInZip = val;
-                });
-            addCheckbox(sections.optimizations, 'persistentCachingToggle', 'Enable Persistent Image Caching (Faster revisit load times)',
-                    state.enablePersistentCaching, val => {
-                    state.enablePersistentCaching = val;
-                });
-
-            const $clearCacheButton = $('<button class="ug-button ug-settings-input" style="margin-top: 10px; display: block;">Clear Persistent Cache</button>');
-            $clearCacheButton.on('click', async () => {
-                if (!db && state.enablePersistentCaching) {
-                    initDexie();
-                }
-                if (!db) {
-                    Swal.fire('Cache Not Ready', 'The persistent cache system is not currently active.', 'info');
-                    return;
-                }
-                const result = await Swal.fire({
-                    title: 'Clear Cache?',
-                    text: "This will remove all persistently cached images. Are you sure?",
-                    icon: 'warning',
-                    showCancelButton: true,
-                    confirmButtonText: 'Yes, clear it!',
-                    cancelButtonText: 'No, cancel'
-                });
-                if (result.isConfirmed) {
-                    clearDexieCache();
-                }
-            });
-            sections.optimizations.append($clearCacheButton);
-
-            addTextAreaInput(sections.formatting, 'zipFileNameFormatInput', 'Zip File Name Format:',
-                            state.zipFileNameFormat, val => {
-                    state.zipFileNameFormat = val;
-                    GM_setValue('zipFileNameFormat', val);
-                });
-
-            addTextAreaInput(sections.formatting, 'imageFileNameFormatInput', 'Image File Name Format:',
-                            state.imageFileNameFormat, val => {
-                    state.imageFileNameFormat = val;
-                    GM_setValue('imageFileNameFormat', val);
-                });
+            // Set default view
+            $sidebar.find('.ug-sidebar-button').first().trigger('click');
 
             $('body').append($overlay);
         },
@@ -1400,17 +1352,14 @@
             UI.createSettingsUI();
             const overlay = document.getElementById('ug-settings-overlay');
             if (overlay) {
-                overlay.classList.remove('closing');
                 overlay.classList.add('opening');
-                overlay.style.width = '100%';
-                overlay.style.height = '100%';
             }
         },
 
         closeSettings: () => {
             const overlay = document.getElementById('ug-settings-overlay');
             if (overlay) {
-                overlay.classList.add('closing');
+                overlay.classList.remove('opening');
                 setTimeout(() => overlay.remove(), 300);
             }
         }
@@ -1420,7 +1369,7 @@
     // Gallery Module
     // ====================================================
 
-    let galleryOverlay = null; 
+    let galleryOverlay = null;
 
     const Gallery = {
         _preloadedImageCache: {},
@@ -1822,7 +1771,7 @@
     // Image Loading Module
     // ====================================================
 
-    let loadedBlobUrls = new Map(); 
+    let loadedBlobUrls = new Map();
     let loadedBlobs = new Map();
 
 
@@ -2221,11 +2170,14 @@
                                     sanitizedPostTitle, sanitizedPostArtistName) => {
             try {
                 // Ensure UPNG is loaded if optimization is enabled and it hasn't been loaded yet
-                if (state.optimizePngInZip && !loadedUPNG) {
+                // and we haven't already tried and failed to load it.
+                if (state.optimizePngInZip && !loadedUPNG && !upngLoadAttemptedAndFailed) {
                     loadedUPNG = await loadResourceScript('upngJsRaw', 'UPNG');
                     if (!loadedUPNG) {
-                        console.warn('Ultra Galleries: UPNG.js could not be loaded. PNG optimization will be skipped.');
-                        // Optionally notify user or disable setting state.optimizePngInZip = false;
+                        console.warn('Ultra Galleries: UPNG.js could not be loaded. PNG optimization will be skipped for this session.');
+                        state.notification = "PNG optimization library (UPNG.js) failed to load. Optimization will be skipped for this session.";
+                        state.notificationType = "warning";
+                        upngLoadAttemptedAndFailed = true; // Set flag to prevent repeated notifications
                     }
                 }
 
@@ -2442,10 +2394,14 @@
                 if (!elements.settingsButton) {
                     const settingsButton = document.createElement('button');
                     settingsButton.textContent = BUTTONS.SETTINGS;
-                    settingsButton.className = `${CSS.SETTINGS_BTN} ${CSS.BTN}`;
+                    settingsButton.className = 'settings-button';
                     settingsButton.addEventListener('click', () => { state.settingsOpen = !state.settingsOpen; });
-                    document.body.appendChild(settingsButton);
-                    elements.settingsButton = settingsButton;
+
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'settings-button-wrapper';
+                    wrapper.appendChild(settingsButton);
+                    document.body.appendChild(wrapper);
+                    elements.settingsButton = wrapper;
                 }
 
                 // Setup per-image buttons
@@ -2496,6 +2452,7 @@
                     // Add delegated click handler to the parent of all file thumbnails
                     if (!filesArea.dataset.ugClickHandlerAttached) {
                         filesArea.addEventListener('click', PostActions.delegatedImageClickHandler);
+                        filesArea.addEventListener('contextmenu', PostActions.delegatedImageRightClickHandler); // NEW: Right-click handler
                         filesArea.dataset.ugClickHandlerAttached = "true";
                     }
                 }
@@ -2519,6 +2476,7 @@
             const filesArea = document.querySelector('div.post__files');
             if (filesArea) {
                 filesArea.removeEventListener('click', PostActions.delegatedImageClickHandler);
+                filesArea.removeEventListener('contextmenu', PostActions.delegatedImageRightClickHandler); // NEW: Cleanup right-click handler
                 filesArea.removeAttribute('data-ug-click-handler-attached');
                 filesArea.querySelectorAll(`.${CSS.BTN_CONTAINER}`).forEach(bc => bc.remove());
                 // Remove CSS.NO_CLICK from any remaining image links
@@ -2653,6 +2611,22 @@
                 }
             }
         },
+
+        delegatedImageRightClickHandler: event => {
+            if (!state.rightClickToOpen) return;
+
+            // Check if the right-clicked element is one of our managed images
+            const imageElement = event.target.closest('img.post__image');
+            if (imageElement) {
+                // Find the parent anchor tag to get the original URL
+                const linkElement = imageElement.closest(SELECTORS.IMAGE_LINK);
+                if (linkElement && linkElement.href) {
+                    event.preventDefault();
+                    window.open(linkElement.href, '_blank');
+                }
+            }
+            // If it's not our image, the default context menu will appear as normal.
+        },
     };
 
     // ====================================================
@@ -2692,7 +2666,7 @@
                     event.preventDefault();
                     if (!$expandedView.hasClass(CSS.GALLERY.HIDE)) {
                         Gallery.showGridView();
-                    } else if (!$gridView.hasClass(CSS.GALLERY.HIDE)) { 
+                    } else if (!$gridView.hasClass(CSS.GALLERY.HIDE)) {
                         Gallery.closeGallery();
                     }
                     return; // Escape key action is exclusive
@@ -2745,8 +2719,8 @@
             const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
             if (!$container.length) return; // Ensure container was found
 
-            const newWidth = $container.width(); 
-            const newHeight = $container.height(); 
+            const newWidth = $container.width();
+            const newHeight = $container.height();
 
             if (newWidth !== state.lastWidth || newHeight !== state.lastHeight) {
                 state.lastWidth = newWidth;
