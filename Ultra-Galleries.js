@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1477603-%E3%83%A1%E3%83%AA%E3%83%BC
-// @version      3.2.0
+// @version      3.2.1
 // @description  Modern image gallery with enhanced browsing, fullscreen, and download features
 // @author       ntf (original), Meri/TearTyr (maintained and improved)
 // @match        *://kemono.su/*
@@ -24,6 +24,7 @@
 // @require      https://unpkg.com/dexie@3.2.7/dist/dexie.min.js
 // @resource     upngJsRaw https://unpkg.com/upng-js@2.1.0/UPNG.js
 // @resource     pakoJsRaw https://unpkg.com/pako@2.1.0/dist/pako.min.js
+// @resource     mainCSS https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/main/Ultra-Galleries.css
 // ==/UserScript==
 (function() {
     'use strict';
@@ -63,7 +64,6 @@
         BTN: 'ug-button',
         BTN_CONTAINER: 'ug-button-container',
         LOADING: 'loading-overlay',
-        NO_CLICK: 'ug-no-click',
         NOTIF_AREA: 'ug-notification-area',
         NOTIF_CONTAINER: 'ug-notification-container',
         NOTIF_TEXT: 'ug-notification-text',
@@ -71,7 +71,7 @@
         NOTIF_REPORT: 'ug-notification-report',
         SETTINGS_BTN: 'settings-button',
         VIRTUAL_IMAGE: 'virtual-image',
-        LONG_PRESS: 'long-press',
+        LONG_PRESS: 'ug-long-press',
 
         // Gallery classes
         GALLERY: {
@@ -102,6 +102,8 @@
             CONTROLS_HIDDEN: 'ug-controls-hidden',
             GRABBING: 'ug-grabbing',
             ZOOMED: 'zoomed',
+            IS_TRANSITIONING: 'is-transitioning',
+            IMAGE_ERROR_MSG: 'ug-image-error-message',
         },
 
         // Settings classes
@@ -355,7 +357,6 @@
         notificationAreaVisible: GM_getValue('notificationAreaVisible', true),
         notificationPosition: GM_getValue('notificationPosition', 'bottom'),
         animationsEnabled: GM_getValue('animationsEnabled', true),
-        rightClickToOpen: GM_getValue('rightClickToOpen', true), // NEW SETTING
 
         // Download settings
         optimizePngInZip: GM_getValue('optimizePngInZip', false),
@@ -554,9 +555,6 @@
         optimizePngInZip: (value) => {
         GM_setValue('optimizePngInZip', value);
         },
-        rightClickToOpen: (value) => {
-            GM_setValue('rightClickToOpen', value);
-        },
     });
 
     // ====================================================
@@ -566,48 +564,43 @@
     let loadedPako = null;
     let upngLoadAttemptedAndFailed = false; // For single notification on UPNG load failure
 
-    async function loadResourceScript(resourceName, globalVarName, onWindow = true) {
+    async function loadResourceScript(resourceName, expectedGlobal) {
+        if (window[expectedGlobal]) {
+            return window[expectedGlobal];
+        }
+
         try {
             const scriptText = GM_getResourceText(resourceName);
             if (!scriptText) {
-                console.error(`Ultra Galleries: Resource ${resourceName} not found or empty.`);
+                console.error(`Ultra Galleries: Resource ${resourceName} is empty or not found.`);
                 return null;
             }
 
-            if (onWindow && typeof window[globalVarName] !== 'undefined') {
-                console.log(`Ultra Galleries: ${globalVarName} already on window.`);
-                return window[globalVarName];
-            }
-
-            // check if a common global for the library exists after eval
-            if (resourceName === 'upngJsRaw' && typeof UPNG !== 'undefined') return UPNG;
-            if (resourceName === 'pakoJsRaw' && typeof pako !== 'undefined') return pako;
-
-            console.log(`Ultra Galleries: Loading resource ${resourceName} into global scope...`);
-            // Indirect eval to run in global scope
+            // Indirect eval to run in the global scope
             (0, eval)(scriptText);
 
-
-            if (onWindow && typeof window[globalVarName] !== 'undefined') {
-                console.log(`Ultra Galleries: ${globalVarName} loaded from resource ${resourceName}.`);
-                return window[globalVarName];
-            } else if (resourceName === 'upngJsRaw' && typeof UPNG !== 'undefined') {
-                 console.log(`Ultra Galleries: UPNG loaded from resource ${resourceName}.`);
-                 window.UPNG = UPNG; // Ensure it's explicitly on window if needed elsewhere by this name
-                 return UPNG;
-            } else if (resourceName === 'pakoJsRaw' && typeof pako !== 'undefined') {
-                console.log(`Ultra Galleries: pako loaded from resource ${resourceName}.`);
-                window.pako = pako; // Ensure it's explicitly on window
-                return pako;
-            } else {
-                console.warn(`Ultra Galleries: Resource ${resourceName} evaluated, but expected global '${globalVarName}' not found. The library might use a different name or be an ESM module not directly exposing a global via eval.`);
-                return null;
+            // Check if the expected global variable is now available
+            if (window[expectedGlobal]) {
+                console.log(`Ultra Galleries: ${expectedGlobal} loaded from resource.`);
+                return window[expectedGlobal];
             }
+
+            // Fallback for libraries with different global names (like UPNG.js)
+            const globalNameMap = { 'upngJsRaw': 'UPNG', 'pakoJsRaw': 'pako' };
+            const actualGlobal = globalNameMap[resourceName];
+            if (actualGlobal && window[actualGlobal]) {
+                console.log(`Ultra Galleries: ${actualGlobal} loaded from resource ${resourceName}.`);
+                return window[actualGlobal];
+            }
+
+            console.warn(`Ultra Galleries: Resource ${resourceName} loaded, but expected global '${expectedGlobal}' was not found.`);
+            return null;
         } catch (e) {
             console.error(`Ultra Galleries: Error loading resource ${resourceName}:`, e);
             return null;
         }
     }
+
 
     // ====================================================
     // Dexie Database Initialization
@@ -712,6 +705,14 @@
     // ====================================================
 
     const Zoom = {
+        _applyTransition: function($element, action) {
+            $element.addClass(CSS.GALLERY.IS_TRANSITIONING);
+            action();
+            $element.one('transitionend', () => {
+                $element.removeClass(CSS.GALLERY.IS_TRANSITIONING);
+            });
+        },
+
         applyZoom: () => {
             if (!galleryOverlay || !galleryOverlay.length) return;
             const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
@@ -780,6 +781,7 @@
                 const maxY = (imgHeight - containerHeight) / 2;
                 const minY = -maxY;
                 if (offsetY > maxY) offsetY = maxY + ((offsetY - maxY) * CONFIG.PAN_RESISTANCE / scale);
+                // BUG FIX: Corrected a typo where offsetX was used instead of offsetY in the resistance calculation.
                 else if (offsetY < minY) offsetY = minY - ((minY - offsetY) * CONFIG.PAN_RESISTANCE / scale);
             }
             return { x: offsetX, y: offsetY };
@@ -833,11 +835,11 @@
             if (!galleryOverlay || !galleryOverlay.length) return;
             const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
             if ($container.length) {
-                $container.css('transition', 'transform 0.3s ease-out');
-                state.zoomScale = 1;
-                state.imageOffset = { x: 0, y: 0 };
-                Zoom.applyZoom();
-                setTimeout(() => $container.css('transition', ''), 300);
+                Zoom._applyTransition($container, () => {
+                    state.zoomScale = 1;
+                    state.imageOffset = { x: 0, y: 0 };
+                    Zoom.applyZoom();
+                });
             }
         },
 
@@ -883,12 +885,12 @@
                 const newOffsetX = centerX - (imageX * newScale);
                 const newOffsetY = centerY - (imageY * newScale);
 
-                $container.css('transition', 'transform 0.2s ease-out');
-                state.imageOffset.x = newOffsetX;
-                state.imageOffset.y = newOffsetY;
-                state.zoomScale = newScale;
-                Zoom.applyZoom();
-                setTimeout(() => $container.css('transition', ''), 200);
+                Zoom._applyTransition($container, () => {
+                    state.imageOffset.x = newOffsetX;
+                    state.imageOffset.y = newOffsetY;
+                    state.zoomScale = newScale;
+                    Zoom.applyZoom();
+                });
             }
         },
 
@@ -933,12 +935,13 @@
                             const imageDOM = $container.find(`.${CSS.GALLERY.MAIN_IMG}`)[0];
                             if (!imageDOM) return;
                             const boundedOffset = Zoom.enforceBoundaries(newOffsetX, newOffsetY, newScale, rect, imageDOM);
-                            $container.css('transition', 'transform 0.3s ease-out');
-                            state.imageOffset.x = boundedOffset.x;
-                            state.imageOffset.y = boundedOffset.y;
-                            state.zoomScale = newScale;
-                            Zoom.applyZoom();
-                            setTimeout(() => $container.css('transition', ''), 300);
+
+                            Zoom._applyTransition($container, () => {
+                                state.imageOffset.x = boundedOffset.x;
+                                state.imageOffset.y = boundedOffset.y;
+                                state.zoomScale = newScale;
+                                Zoom.applyZoom();
+                            });
                         }
                         state.lastTapTime = 0; e.preventDefault(); return;
                     }
@@ -1012,6 +1015,8 @@
     // ====================================================
     // UI Component Module
     // ====================================================
+    let lastFocusedElement;
+    let focusTrapListener;
 
     const UI = {
         createToggleButton: (name, action, disabled = false) => {
@@ -1210,7 +1215,13 @@
         },
 
         createSettingsUI: () => {
-            const $overlay = $('<div>').attr('id', 'ug-settings-overlay').addClass('ug-settings-overlay');
+            const $overlay = $('<div>').attr({
+                'id': 'ug-settings-overlay',
+                'role': 'dialog',
+                'aria-modal': 'true',
+                'aria-labelledby': 'ug-settings-main-header'
+            }).addClass('ug-settings-overlay');
+
             const $container = $('<div>').addClass('ug-settings-container').appendTo($overlay);
 
             // --- Sidebar ---
@@ -1220,7 +1231,7 @@
             // --- Content ---
             const $content = $('<div>').addClass('ug-settings-content').appendTo($container);
             const $header = $('<div>').addClass('ug-settings-header').appendTo($content);
-            const $headerText = $('<h2>').appendTo($header);
+            const $headerText = $('<h2>').attr('id', 'ug-settings-main-header').appendTo($header); // Add ID for aria-labelledby
             const $closeBtn = $('<button>').addClass('ug-settings-close-btn').text(BUTTONS.CLOSE).on('click', () => state.settingsOpen = false).appendTo($header);
             const $body = $('<div>').addClass('ug-settings-body').appendTo($content);
 
@@ -1278,7 +1289,6 @@
 
             // --- Populate Sections ---
             const generalSection = createSectionContent('general');
-            addCheckbox(generalSection, 'rightClickToOpenToggle', 'Right-click on post images to open in new tab', state.rightClickToOpen, val => { state.rightClickToOpen = val; });
             addCheckbox(generalSection, 'animationsToggle', 'Enable Animations', state.animationsEnabled, val => { state.animationsEnabled = val; GM_setValue('animationsEnabled', val); });
             addCheckbox(generalSection, 'bottomStripeToggle', 'Show Thumbnail Strip', state.bottomStripeVisible, val => { state.bottomStripeVisible = val; GM_setValue('bottomStripeVisible', val); });
 
@@ -1336,18 +1346,55 @@
         },
 
         showSettings: () => {
+            lastFocusedElement = document.activeElement;
             UI.createSettingsUI();
+
             const overlay = document.getElementById('ug-settings-overlay');
-            if (overlay) {
-                overlay.classList.add('opening');
-            }
+            if (!overlay) return;
+
+            overlay.classList.add('opening');
+
+            const focusableElements = Array.from(
+                overlay.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+            );
+            const firstFocusable = focusableElements[0];
+            const lastFocusable = focusableElements[focusableElements.length - 1];
+
+            // Move focus into the modal
+            firstFocusable?.focus();
+
+            focusTrapListener = (e) => {
+                if (e.key !== 'Tab') return;
+
+                if (e.shiftKey) { // Shift + Tab
+                    if (document.activeElement === firstFocusable) {
+                        lastFocusable.focus();
+                        e.preventDefault();
+                    }
+                } else { // Tab
+                    if (document.activeElement === lastFocusable) {
+                        firstFocusable.focus();
+                        e.preventDefault();
+                    }
+                }
+            };
+            document.addEventListener('keydown', focusTrapListener);
         },
 
         closeSettings: () => {
+            if (focusTrapListener) {
+                document.removeEventListener('keydown', focusTrapListener);
+                focusTrapListener = null;
+            }
+
             const overlay = document.getElementById('ug-settings-overlay');
             if (overlay) {
                 overlay.classList.remove('opening');
-                setTimeout(() => overlay.remove(), 300);
+                setTimeout(() => {
+                    overlay.remove();
+                    // Restore focus to the element that opened the modal
+                    lastFocusedElement?.focus();
+                }, 300);
             }
         }
     };
@@ -1550,12 +1597,12 @@
                     if (!mainImageDOM) return;
                     const boundedOffset = Zoom.enforceBoundaries(newOffsetX, newOffsetY, newScale, rect, mainImageDOM);
 
-                    $mainImageContainerElement.css('transition', 'transform 0.3s ease-out');
-                    state.imageOffset.x = boundedOffset.x;
-                    state.imageOffset.y = boundedOffset.y;
-                    state.zoomScale = newScale;
-                    Zoom.applyZoom();
-                    setTimeout(() => $mainImageContainerElement.css('transition', ''), 300);
+                    Zoom._applyTransition($mainImageContainerElement, () => {
+                         state.imageOffset.x = boundedOffset.x;
+                         state.imageOffset.y = boundedOffset.y;
+                         state.zoomScale = newScale;
+                         Zoom.applyZoom();
+                    });
                 }
             });
 
@@ -1628,6 +1675,7 @@
             if (!$mainImage.length || !$mainImageContainer.length || !$counter.length) return;
             if (index < 0 || index >= state.fullSizeImageSrcs.length) return;
 
+            $mainImageContainer.find(`.${CSS.GALLERY.IMAGE_ERROR_MSG}`).remove();
             state.currentGalleryIndex = index;
             let imageUrlToLoad = null;
             let usingPreloadedMemoryCache = false;
@@ -1658,6 +1706,12 @@
                 Gallery._preloadAdjacentImages(index);
             }).on('error', () => {
                 $mainImage.removeClass('loading').addClass('error').attr({src:'', alt:"Error loading image"});
+
+                const $errorMsg = $('<div>')
+                    .addClass(CSS.GALLERY.IMAGE_ERROR_MSG)
+                    .text('Failed to load image');
+                $mainImageContainer.append($errorMsg);
+
                 if (usingPreloadedMemoryCache && imageUrlToLoad.startsWith('blob:') && Gallery._preloadedImageCache[index]) {
                     try { URL.revokeObjectURL(imageUrlToLoad); } catch (e) { /* silent */ }
                     delete Gallery._preloadedImageCache[index];
@@ -1731,7 +1785,7 @@
             Gallery.showExpandedView(newIndex);
         },
 
-        createVirtualGallery: function() { // This was mostly vanilla, should be fine
+        createVirtualGallery: function() {
             Gallery.cleanupVirtualGallery();
             elements.virtualGalleryContainer = document.createElement('div');
             elements.virtualGalleryContainer.style.display = 'none';
@@ -1746,7 +1800,7 @@
             document.body.appendChild(elements.virtualGalleryContainer);
         },
 
-        cleanupVirtualGallery: function() { // This was vanilla, should be fine
+        cleanupVirtualGallery: function() {
             if (elements.virtualGalleryContainer) {
                 elements.virtualGalleryContainer.remove();
                 elements.virtualGalleryContainer = null;
@@ -1818,23 +1872,30 @@
             }
         },
 
-        // New helper function to handle loading/applying a single image to a page element
         loadImageAndApplyToPage: async (linkElement, galleryIndex, originalHref, isUniqueForGallery) => {
-            const imgElement = linkElement.querySelector('img.post__image');
+            const imgElement = linkElement.querySelector('img');
             if (!imgElement) {
-                console.warn(`ImageLoader: No img.post__image found for linkElement:`, linkElement);
-                // Still increment loadedImages for the counter to be accurate for page elements
-                state.loadedImages++;
-                return;
+                 // The site might have already swapped the thumbnail for the full image, let's add our class.
+                const potentialImg = linkElement.closest('.post__thumbnail')?.querySelector('img');
+                if(potentialImg) potentialImg.classList.add('post__image');
+                else {
+                    console.warn(`ImageLoader: No img found for linkElement:`, linkElement);
+                    state.loadedImages++;
+                    return;
+                }
             }
+             // Ensure our class is present for other functions to find it.
+            if(!imgElement.classList.contains('post__image')) {
+                imgElement.classList.add('post__image');
+            }
+
 
             let blobUrlToUse = loadedBlobUrls.get(originalHref);
             let blobToStore = loadedBlobs.get(originalHref);
             let loadedFromCache = false;
 
-            if (!blobUrlToUse) { // If not already in our in-memory cache (meaning it's a new unique URL or first encounter)
+            if (!blobUrlToUse) {
                 try {
-                    // 1. Try to get from Dexie cache
                     if (state.enablePersistentCaching && db) {
                         const cachedBlob = await getImageFromDexie(originalHref);
                         if (cachedBlob) {
@@ -1843,29 +1904,17 @@
                         }
                     }
 
-                    // 2. If not in Dexie, fetch via GM.xmlHttpRequest
                     if (!blobToStore) {
                         blobToStore = await ImageLoader.retryWithBackoff(async () => {
                             return new Promise((resolve, reject) => {
                                 GM.xmlHttpRequest({
-                                    method: 'GET',
-                                    url: originalHref,
-                                    responseType: 'blob',
-                                    onload: function(response) {
-                                        if (response.status === 200 || response.status === 206) {
-                                            resolve(response.response);
-                                        } else {
-                                            ImageLoader.handleImageFetchError(originalHref, response.status, reject);
-                                        }
-                                    },
-                                    onerror: (error) => {
-                                        ImageLoader.handleImageFetchError(originalHref, 'Network Error', reject, error);
-                                    },
+                                    method: 'GET', url: originalHref, responseType: 'blob',
+                                    onload: (response) => (response.status === 200 || response.status === 206) ? resolve(response.response) : reject(new Error(`HTTP ${response.status}`)),
+                                    onerror: (error) => reject(error),
                                 });
                             });
                         }, CONFIG.MAX_RETRIES, CONFIG.RETRY_DELAY, originalHref);
 
-                        // 3. If fetched successfully, store in Dexie
                         if (blobToStore && state.enablePersistentCaching && db) {
                             await storeImageInDexie(originalHref, blobToStore);
                         }
@@ -1873,31 +1922,23 @@
 
                     if (blobToStore) {
                         blobUrlToUse = URL.createObjectURL(blobToStore);
-                        loadedBlobUrls.set(originalHref, blobUrlToUse); // Store in our in-memory cache
+                        loadedBlobUrls.set(originalHref, blobUrlToUse);
                         loadedBlobs.set(originalHref, blobToStore);
-                        if (loadedFromCache) console.log(`Ultra Galleries: Image ${originalHref} loaded from persistent cache for page display.`);
                     } else {
                         throw new Error("Blob could not be obtained for " + originalHref);
                     }
                 } catch (error) {
                     console.error(`Ultra Galleries: Failed to load media for page display: ${originalHref}`, error);
                     state.errorCount++;
-                    // If loading fails, keep original thumbnail src, don't prevent click
-                    imgElement.src = imgElement.dataset.src || originalHref; // Fallback to thumbnail or original
-                    linkElement.classList.remove(CSS.NO_CLICK);
-                    state.loadedImages++; // Still count as processed for total progress
-                    return; // Exit this function, don't update gallery arrays below
+                    state.loadedImages++;
+                    return;
                 }
             }
 
-            // Apply the loaded blob URL to the image element on the page
             imgElement.src = blobUrlToUse;
-            imgElement.dataset.originalSrc = originalHref; // Keep original HTTP src for reference
-            linkElement.classList.add(CSS.NO_CLICK); // Add no-click to the parent link
+            imgElement.dataset.originalSrc = originalHref;
 
-            // If this is a unique item for the gallery, populate gallery arrays
             if (isUniqueForGallery) {
-                // Ensure the gallery arrays are large enough for the unique index
                 if (galleryIndex >= state.fullSizeImageSrcs.length) {
                     state.fullSizeImageSrcs.length = galleryIndex + 1;
                     state.originalImageSrcs.length = galleryIndex + 1;
@@ -1907,9 +1948,10 @@
                 state.originalImageSrcs[galleryIndex] = originalHref;
                 state.virtualGallery[galleryIndex] = blobUrlToUse;
             }
-            state.loadedImages++; // Increment for each page element successfully processed
-            state.mediaLoaded[galleryIndex] = true; // This tracks unique items for gallery, fine as is
+            state.loadedImages++;
+            state.mediaLoaded[galleryIndex] = true;
         },
+
 
         loadImages: async () => {
             if (!Utils.isPostPage() || state.galleryReady || state.isLoading) return;
@@ -1918,25 +1960,23 @@
                 state.isLoading = true;
                 state.loadingMessage = 'Loading Media...';
 
-                // Clear previous session's in-memory caches and state
                 loadedBlobUrls.clear();
                 loadedBlobs.clear();
-                state.fullSizeImageSrcs = []; // Gallery unique items
-                state.originalImageSrcs = []; // Gallery unique items
-                state.virtualGallery = [];    // Gallery unique items
+                state.fullSizeImageSrcs = [];
+                state.originalImageSrcs = [];
+                state.virtualGallery = [];
                 state.loadedImages = 0;
                 state.mediaLoaded = {};
                 state.errorCount = 0;
 
-                const allPageImageLinks = []; // Store all <a> elements that are image links on the page
-                const uniqueGalleryUrls = new Set(); // Track unique URLs for the gallery itself
+                const allPageImageLinks = [];
+                const uniqueGalleryUrls = new Set();
 
-                // Collect all image links on the page (including duplicates)
                 document.querySelectorAll(SELECTORS.IMAGE_LINK).forEach(linkElement => {
                     const fullUrl = Utils.handleMediaSrc(linkElement);
                     if (fullUrl) {
                         allPageImageLinks.push({ linkElement: linkElement, originalUrl: fullUrl });
-                        uniqueGalleryUrls.add(fullUrl); // Add to unique set for gallery
+                        uniqueGalleryUrls.add(fullUrl);
                     }
                 });
 
@@ -1947,7 +1987,7 @@
 
                     if (attachmentUrl && isLikelyImage) {
                         allPageImageLinks.push({ linkElement: linkElement, originalUrl: attachmentUrl });
-                        uniqueGalleryUrls.add(attachmentUrl); // Add to unique set for gallery
+                        uniqueGalleryUrls.add(attachmentUrl);
                     }
                 });
 
@@ -1957,47 +1997,33 @@
                         const posterSrc = video.getAttribute('poster');
                         if (posterSrc) {
                             allPageImageLinks.push({ linkElement: videoLink, originalUrl: posterSrc });
-                            uniqueGalleryUrls.add(posterSrc); // Add to unique set for gallery
+                            uniqueGalleryUrls.add(posterSrc);
                         }
                     }
                 });
 
-                // Set totalImages to the count of ALL image elements on the page for the counter.
                 state.totalImages = allPageImageLinks.length;
                 state.hasImages = state.totalImages > 0;
-
-                // Pre-fill gallery arrays with nulls, to be populated only by unique images
-                // The size of gallery arrays is based on unique URLs.
                 state.fullSizeImageSrcs = Array(uniqueGalleryUrls.size).fill(null);
                 state.originalImageSrcs = Array(uniqueGalleryUrls.size).fill(null);
                 state.virtualGallery = Array(uniqueGalleryUrls.size).fill(null);
 
-                // Ensure thumbnails exist and apply initial styles (if needed)
                 await ImageLoader.simulateScrollDown();
                 Utils.ensureThumbnailsExist();
 
-                // Create an ordered array of unique URLs to map them to gallery indices
                 const orderedUniqueGalleryUrls = Array.from(uniqueGalleryUrls);
-
-                // Process all image links on the page in batches
                 const processingPromises = [];
                 for (let i = 0; i < allPageImageLinks.length; i++) {
                     const item = allPageImageLinks[i];
-                    // Determine if this specific item's URL is unique for the gallery.
-                    // If it is, get its index in the ordered unique list.
                     const isUniqueForGallery = uniqueGalleryUrls.has(item.originalUrl);
                     const galleryIndex = isUniqueForGallery ? orderedUniqueGalleryUrls.indexOf(item.originalUrl) : -1;
-
                     processingPromises.push(
                         ImageLoader.loadImageAndApplyToPage(item.linkElement, galleryIndex, item.originalUrl, isUniqueForGallery)
                     );
                 }
 
-                // Execute all loading/applying promises concurrently.
-                // The loadImageAndApplyToPage function already increments state.loadedImages.
                 await Promise.all(processingPromises);
 
-                // After all processing, update notification status
                 if (state.loadedImages === state.totalImages && state.totalImages > 0 && state.errorCount === 0) {
                     state.notification = `Images Done Loading! Total: ${state.totalImages}`;
                     state.notificationType = 'success';
@@ -2012,7 +2038,6 @@
                     state.notificationType = 'info';
                 }
 
-                // Filter out nulls from gallery arrays if some unique items failed to load
                 state.fullSizeImageSrcs = state.fullSizeImageSrcs.filter(src => src !== null);
                 state.originalImageSrcs = state.originalImageSrcs.filter(src => src !== null);
                 state.virtualGallery = state.virtualGallery.filter(src => src !== null);
@@ -2156,15 +2181,13 @@
         processFileForZip: async (zip, url, originalName, itemType, itemIndex,
                                     sanitizedPostTitle, sanitizedPostArtistName) => {
             try {
-                // Ensure UPNG is loaded if optimization is enabled and it hasn't been loaded yet
-                // and we haven't already tried and failed to load it.
                 if (state.optimizePngInZip && !loadedUPNG && !upngLoadAttemptedAndFailed) {
                     loadedUPNG = await loadResourceScript('upngJsRaw', 'UPNG');
                     if (!loadedUPNG) {
                         console.warn('Ultra Galleries: UPNG.js could not be loaded. PNG optimization will be skipped for this session.');
                         state.notification = "PNG optimization library (UPNG.js) failed to load. Optimization will be skipped for this session.";
                         state.notificationType = "warning";
-                        upngLoadAttemptedAndFailed = true; // Set flag to prevent repeated notifications
+                        upngLoadAttemptedAndFailed = true;
                     }
                 }
 
@@ -2175,7 +2198,7 @@
                             url: url,
                             headers: { referer: `https://${window.location.hostname.split('.')[0]}.su/` },
                             responseType: 'blob',
-                            onload: async function(response) { // Make this onload async for UPNG processing
+                            onload: async function(response) {
                                 if (response.status === 200 || response.status === 206) {
                                     let fileBlob = response.response;
                                     const contentTypeHeader = response.responseHeaders.match(/content-type:\s*([^;]+)/i);
@@ -2194,24 +2217,16 @@
                                     }
                                     ext = ext || 'bin';
 
-                                    // PNG Optimization Step
                                     if (state.optimizePngInZip && loadedUPNG && (contentType === 'image/png' || ext.toLowerCase() === 'png')) {
                                         try {
-                                            console.log(`Ultra Galleries: Optimizing PNG: ${originalName}`);
                                             const arrayBuffer = await fileBlob.arrayBuffer();
                                             const decodedPng = loadedUPNG.decode(arrayBuffer);
-                                            // UPNG.encode(frames, w, h, cnum, dels)
-                                            // For single frame PNGs, frames is an array with one element: decodedPng.data
-                                            // cnum = 0 aims for lossless compression, choosing smallest representation
                                             const optimizedPngArrayBuffer = loadedUPNG.encode([decodedPng.data], decodedPng.width, decodedPng.height, 0);
                                             fileBlob = new Blob([optimizedPngArrayBuffer], { type: 'image/png' });
-                                            console.log(`Ultra Galleries: PNG optimized: ${originalName}. Original: ${arrayBuffer.byteLength}, Optimized: ${optimizedPngArrayBuffer.byteLength}`);
                                         } catch (upngError) {
                                             console.error(`Ultra Galleries: Error optimizing PNG ${originalName}:`, upngError);
-                                            // Proceed with the original blob if optimization fails
                                         }
                                     }
-
 
                                     const imageFileNameFormat = GM_getValue('imageFileNameFormat', '{title}-{artistName}-{fileName}-{index}');
                                     let pathInZip = imageFileNameFormat
@@ -2230,7 +2245,7 @@
                                         pathInZip = pathInZip.replace(/^(\.\.\/)+|^\/+/g, '');
                                     }
 
-                                    zip.file(pathInZip, fileBlob); // Use the (potentially optimized) fileBlob
+                                    zip.file(pathInZip, fileBlob);
                                     state.downloadedCount++;
                                     resolve();
                                 } else {
@@ -2261,8 +2276,6 @@
             let originalFileName;
             const urlParts = galleryItemSrc.split('?')[0].split('/');
             originalFileName = urlParts[urlParts.length - 1] || `image_${index + 1}.jpg`;
-            // To get the true original filename, state.fullSizeImageSrcs would need to store objects
-            // e.g., { src: 'url', originalName: 'name.jpg' }
 
             try {
                 await DownloadManager.retryWithBackoff(async () => {
@@ -2312,7 +2325,6 @@
     // Post Actions Management
     // ====================================================
 
-    // Global UI elements
     let elements = {
         loadingOverlay: null,
         virtualGalleryContainer: null,
@@ -2328,35 +2340,51 @@
     let uiCache = {};
 
     const PostActions = {
+        /**
+         * **NEW**: This handler specifically disables left-clicks on image links
+         * to prevent the site's native expansion, while allowing right-clicks.
+         * @param {MouseEvent} event
+         */
+        imageLinkClickHandler: event => {
+            // We only care about the primary mouse button (left-click).
+            if (event.button !== 0) {
+                return;
+            }
+
+            // Find the image link that was clicked.
+            const clickedImageLink = event.target.closest(SELECTORS.IMAGE_LINK);
+
+            // If a valid image link was clicked, prevent its default action.
+            if (clickedImageLink) {
+                event.preventDefault();
+                event.stopPropagation(); // Good practice to prevent other handlers.
+            }
+        },
+
         initPostActions: () => {
             try {
-                state.postActionsInitialized = true;
-                if (!Utils.isPostPage() || state.currentPostUrl === window.location.href) {
-                    if (state.currentPostUrl === window.location.href && elements.postActions) {
-                        // Potentially just re-check if global buttons are there if some other script removed them
-                    } else {
-                        return;
-                    }
-                } else {
-                    // URL has changed to a new post page, or first time initialization on a post page
+                if (state.postActionsInitialized && state.currentPostUrl === window.location.href) {
+                    return;
+                }
+                if (state.currentPostUrl && state.currentPostUrl !== window.location.href) {
                     PostActions.cleanupPostActions();
                 }
 
+                elements.postActions = document.querySelector(SELECTORS.POST_ACTIONS);
+                if (!elements.postActions) {
+                    return;
+                }
 
-                const currentPageUrl = window.location.href;
+                // If UI is already injected, don't do it again.
+                if (elements.postActions.querySelector('a.ug-button[data-action="gallery"]')) {
+                    return;
+                }
 
                 document.querySelectorAll(SELECTORS.IMAGE_LINK + ' img').forEach(img => img.classList.add('post__image'));
                 document.querySelectorAll(SELECTORS.ATTACHMENT_LINK).forEach(link => link.dataset.fileName = link.getAttribute('download'));
 
-                elements.postActions = document.querySelector(SELECTORS.POST_ACTIONS);
-                if (!elements.postActions) {
-                    console.warn("PostActions: elements.postActions not found with selector:", SELECTORS.POST_ACTIONS);
-                    return; // Cannot proceed without the main actions container
-                }
-
                 const hasMediaLinksOnPage = document.querySelectorAll(SELECTORS.IMAGE_LINK).length > 0;
 
-                // Setup global action buttons (FILL HEIGHT, FILL WIDTH, FULL, DL ALL, GALLERY)
                 if (hasMediaLinksOnPage) {
                     if (!elements.statusContainer) {
                         const { container, element } = UI.createStatusElement();
@@ -2364,7 +2392,6 @@
                         elements.statusElement = element;
                         elements.postActions.appendChild(container);
                     }
-                    // Check if global buttons are already present to avoid duplicates on minor re-runs
                     if (!elements.postActions.querySelector('a.ug-button[data-action="gallery"]')) {
                         const heightButton = UI.createToggleButton(BUTTONS.HEIGHT, () => PostActions.resizeAllImages('height'));
                         const widthButton  = UI.createToggleButton(BUTTONS.WIDTH,  () => PostActions.resizeAllImages('width'));
@@ -2376,7 +2403,6 @@
                         elements.postActions.append(heightButton, widthButton, fullButton, downloadAllButton, galleryButton);
                     }
                 }
-
 
                 if (!elements.settingsButton) {
                     const settingsButton = document.createElement('button');
@@ -2391,40 +2417,32 @@
                     elements.settingsButton = wrapper;
                 }
 
-                // Setup per-image buttons
                 const filesArea = document.querySelector('div.post__files');
                 if (filesArea) {
-                    const imageElementsOnPage = Array.from(filesArea.querySelectorAll(SELECTORS.IMAGE_LINK + ' > img.post__image'));
+                    const imageElementsOnPage = Array.from(filesArea.querySelectorAll(`img.${SELECTORS.POST_IMAGE}`));
                     state.displayedImages = imageElementsOnPage;
 
-                    imageElementsOnPage.forEach((imgElement, loopIndex) => {
+                    imageElementsOnPage.forEach((imgElement) => {
                         if (!imgElement) return;
-
                         ImageLoader.imageActions.height(imgElement);
-
                         const thumbnailDiv = imgElement.closest(SELECTORS.THUMBNAIL);
-                        if (!thumbnailDiv) {
-                            console.warn('PostActions: Could not find thumbnailDiv for imgElement:', imgElement);
-                            return;
-                        }
+                        if (!thumbnailDiv) return;
 
-                        if (thumbnailDiv.previousElementSibling && thumbnailDiv.previousElementSibling.classList.contains(CSS.BTN_CONTAINER)) {
+                        if (thumbnailDiv.previousElementSibling?.classList.contains(CSS.BTN_CONTAINER)) {
                             thumbnailDiv.previousElementSibling.remove();
                         }
 
                         const buttonGroupConfig = [
-                            // Make sure config.name matches what UI.createButtonGroup expects for hide checks
                             { text: BUTTONS.HEIGHT,   action: PostActions.resizeImage, name: 'HEIGHT' },
                             { text: BUTTONS.WIDTH,    action: PostActions.resizeImage, name: 'WIDTH' },
                             { text: BUTTONS.FULL,     action: () => ImageLoader.imageActions.full(imgElement), name: 'FULL' },
                             { text: BUTTONS.DOWNLOAD, action: () => {
-                                // Find index based on what ImageLoader.loadImage stored
                                 const originalSrcForDownload = imgElement.dataset.originalSrc || Utils.handleMediaSrc(imgElement.closest(SELECTORS.IMAGE_LINK));
-                                const downloadIndex = state.fullSizeImageSrcs.findIndex(src => state.originalImageSrcs[state.fullSizeImageSrcs.indexOf(src)] === originalSrcForDownload); // Find index based on original URL
+                                const downloadIndex = state.originalImageSrcs.indexOf(originalSrcForDownload);
                                 if (downloadIndex > -1) {
                                     DownloadManager.downloadImageByIndex(downloadIndex);
                                 } else {
-                                    console.error("Download (per-image): Could not find image index for src:", originalSrcForDownload, "Available:", state.originalImageSrcs);
+                                    console.error("Download (per-image): Could not find image index for src:", originalSrcForDownload);
                                 }
                             }, name: 'DOWNLOAD'},
                         ];
@@ -2436,14 +2454,17 @@
                         }
                     });
 
-                    // Add delegated click handler to the parent of all file thumbnails
-                    if (!filesArea.dataset.ugClickHandlerAttached) {
-                        filesArea.addEventListener('click', PostActions.delegatedImageClickHandler);
-                        filesArea.addEventListener('contextmenu', PostActions.delegatedImageRightClickHandler); // NEW: Right-click handler
-                        filesArea.dataset.ugClickHandlerAttached = "true";
+                    // Attach the new click handler to disable left-clicks.
+                    if (!filesArea.dataset.ugLeftClickHandlerAttached) {
+                        filesArea.addEventListener('click', PostActions.imageLinkClickHandler);
+                        filesArea.dataset.ugLeftClickHandlerAttached = "true";
                     }
                 }
-                state.currentPostUrl = currentPageUrl;
+                ImageLoader.loadImages();
+
+                state.postActionsInitialized = true;
+                state.currentPostUrl = window.location.href;
+
             } catch (error) {
                 console.error('Error initializing post actions:', error);
                 state.notification = 'Error initializing UI. Try refreshing the page.';
@@ -2454,30 +2475,20 @@
         cleanupPostActions: () => {
             if (elements.postActions) {
                 elements.postActions.querySelectorAll('a.ug-button').forEach(button => button.remove());
+                elements.postActions.querySelectorAll('div > span#Status').forEach(el => el.parentElement.remove());
             }
-            if (elements.settingsButton && elements.settingsButton.parentNode) {
+            if (elements.settingsButton) {
                 elements.settingsButton.remove();
-                elements.settingsButton = null;
             }
 
             const filesArea = document.querySelector('div.post__files');
             if (filesArea) {
-                filesArea.removeEventListener('click', PostActions.delegatedImageClickHandler);
-                filesArea.removeEventListener('contextmenu', PostActions.delegatedImageRightClickHandler); // NEW: Cleanup right-click handler
-                filesArea.removeAttribute('data-ug-click-handler-attached');
+                filesArea.removeEventListener('click', PostActions.imageLinkClickHandler);
+                filesArea.removeAttribute('data-ug-left-click-handler-attached');
                 filesArea.querySelectorAll(`.${CSS.BTN_CONTAINER}`).forEach(bc => bc.remove());
-                // Remove CSS.NO_CLICK from any remaining image links
-                filesArea.querySelectorAll(SELECTORS.IMAGE_LINK).forEach(link => {
-                    link.classList.remove(CSS.NO_CLICK);
-                });
             }
 
-            if (elements.statusContainer && elements.statusContainer.parentNode) {
-                elements.statusContainer.remove();
-                elements.statusContainer = null;
-                elements.statusElement = null;
-            }
-            elements.postActions = null;
+            elements = {};
 
             for (const blobUrl of loadedBlobUrls.values()) {
                 if (typeof blobUrl === 'string' && blobUrl.startsWith('blob:')) {
@@ -2495,126 +2506,46 @@
                 });
             }
 
-
-            state.fullSizeImageSrcs = [];
-            state.originalImageSrcs = [];
-            state.virtualGallery = [];
-
-            state.currentPostUrl = null;
-            state.galleryReady = false;
-            state.loadedImages = 0;
-            state.totalImages = 0;
-            state.mediaLoaded = {};
-            state.errorCount = 0;
-            state.postActionsInitialized = false;
+            Object.assign(state, {
+                fullSizeImageSrcs: [], originalImageSrcs: [], virtualGallery: [],
+                currentPostUrl: null, galleryReady: false, loadedImages: 0, totalImages: 0,
+                mediaLoaded: {}, errorCount: 0, postActionsInitialized: false
+            });
         },
 
         clickAllImageButtons: actionKey => {
             const targetButtonText = BUTTONS[actionKey.toUpperCase()];
-            if (!targetButtonText) {
-                console.error("clickAllImageButtons: Invalid actionKey", actionKey);
-                return;
-            }
-
+            if (!targetButtonText) return;
             const filesArea = document.querySelector('div.post__files');
             if (!filesArea) return;
-
-            // Find all relevant button containers and then the specific button
             filesArea.querySelectorAll(`.${CSS.BTN_CONTAINER}`).forEach(buttonGroup => {
-                const button = Array.from(buttonGroup.querySelectorAll(`.${CSS.BTN}`))
-                    .find(btn => btn.textContent === targetButtonText);
-                if (button) {
-                    button.click();
-                }
+                const button = Array.from(buttonGroup.querySelectorAll(`.${CSS.BTN}`)).find(btn => btn.textContent === targetButtonText);
+                if (button) button.click();
             });
         },
 
         resizeAllImages: action => {
-            if (!ImageLoader.imageActions[action]) {
-                console.error('PostActions.resizeAllImages: Invalid action:', action);
-                return;
-            }
-            document.querySelectorAll(`${SELECTORS.IMAGE_LINK} img.post__image`).forEach(img => {
+            if (!ImageLoader.imageActions[action]) return;
+            document.querySelectorAll(`img.post__image`).forEach(img => {
                 ImageLoader.imageActions[action](img);
             });
         },
 
         resizeImage: evt => {
             const actionText = evt.currentTarget.textContent;
-            const action = Object.keys(BUTTONS)
-                .find(key => BUTTONS[key] === actionText)
-                ?.toLowerCase();
-
-            if (!action || !ImageLoader.imageActions[action]) {
-                console.error('PostActions.resizeImage: Invalid action or action not found in ImageLoader.imageActions:', action);
-                return;
-            }
+            const action = Object.keys(BUTTONS).find(key => BUTTONS[key] === actionText)?.toLowerCase();
+            if (!action || !ImageLoader.imageActions[action]) return;
 
             const buttonContainer = evt.currentTarget.closest(`.${CSS.BTN_CONTAINER}`);
-            if (!buttonContainer) {
-                console.error('PostActions.resizeImage: Could not find button container.');
-                return;
-            }
+            if (!buttonContainer) return;
 
             const imageOwningThumbnailDiv = buttonContainer.nextElementSibling;
-            if (!imageOwningThumbnailDiv || !imageOwningThumbnailDiv.matches(SELECTORS.THUMBNAIL)) {
-                console.error('PostActions.resizeImage: Could not find image-owning thumbnail div, or it does not match selector:', SELECTORS.THUMBNAIL, imageOwningThumbnailDiv);
-                return;
-            }
+            if (!imageOwningThumbnailDiv || !imageOwningThumbnailDiv.matches(SELECTORS.THUMBNAIL)) return;
 
             const displayedImage = imageOwningThumbnailDiv.querySelector('img.post__image');
-            if (!displayedImage) {
-                console.error('PostActions.resizeImage: Could not find img.post__image within thumbnail div.');
-                return;
-            }
+            if (!displayedImage) return;
 
             ImageLoader.imageActions[action](displayedImage);
-        },
-
-        delegatedImageClickHandler: event => {
-            if (event.button === 2) return;
-            const clickedImageLink = event.target.closest(SELECTORS.IMAGE_LINK);
-
-            if (clickedImageLink) {
-                event.preventDefault(); // ALWAYS prevent default navigation on image link click
-
-                if (state.galleryReady) {
-                    // Determine which image was clicked to open the gallery at that index
-                    const originalSrcElement = clickedImageLink.querySelector('img.post__image');
-                    const originalSrcClicked = originalSrcElement ? originalSrcElement.dataset.originalSrc : Utils.handleMediaSrc(clickedImageLink);
-
-                    const galleryIndex = state.originalImageSrcs.indexOf(originalSrcClicked); // Find index in unique gallery array
-
-                    if (galleryIndex !== -1) {
-                        Gallery.createGallery(); // Ensure gallery structure exists
-                        Gallery.showExpandedView(galleryIndex); // Open at the clicked image's index
-                    } else {
-                        console.warn("Ultra Galleries: Clicked image not found in gallery index, opening gallery to grid view.");
-                        Gallery.toggleGallery(); // Fallback to just opening the gallery (grid view)
-                    }
-                } else {
-                    state.notification = "Gallery content is still loading or not available.";
-                    state.notificationType = "info";
-                }
-            }
-        },
-
-        delegatedImageRightClickHandler: event => {
-            if (!state.rightClickToOpen) return; // Check if the setting is enabled
-
-            // Check if the right-clicked element is one of our managed images
-            const imageElement = event.target.closest('img.post__image');
-            if (imageElement) {
-                // Find the parent anchor tag to get the original URL
-                const linkElement = imageElement.closest(SELECTORS.IMAGE_LINK);
-                if (linkElement && linkElement.href) {
-                    // Prevent the default context menu
-                    event.preventDefault();
-                    // Open the original image URL in a new tab
-                    window.open(linkElement.href, '_blank');
-                }
-            }
-            // If it's not our image, the default context menu will appear as normal.
         },
     };
 
@@ -2624,74 +2555,44 @@
 
     const EventHandlers = {
         handleGalleryKey: event => {
-            if (!Utils.isPostPage()) return; // Only on post pages
-
-            // Toggle gallery with configured key
+            if (!Utils.isPostPage()) return;
             if (event.key.toLowerCase() === state.galleryKey.toLowerCase() && !event.altKey && !event.ctrlKey && !event.metaKey) {
                 if (state.galleryReady) {
                     event.preventDefault();
                     Gallery.toggleGallery();
-                    return; // Exclusive action for gallery toggle
                 } else if (Utils.isPostPage() && !state.isGalleryMode) {
-                    // If on a post page, gallery not ready, and not in gallery mode, notify user
                     state.notification = "Gallery content is still loading or not available.";
                     state.notificationType = "info";
-                    return;
                 }
+                return;
             }
 
-            if (state.isGalleryMode && galleryOverlay && galleryOverlay.length) {
-                const $gridView = galleryOverlay.find(`.${CSS.GALLERY.GRID_VIEW}`);
+            if (state.isGalleryMode && galleryOverlay?.length) {
                 const $expandedView = galleryOverlay.find(`.${CSS.GALLERY.EXPANDED_VIEW}`);
-
-                if (!$gridView.length || !$expandedView.length) {
-                    // This might happen if the gallery structure is unexpectedly missing these elements
-                    console.warn("Ultra Galleries: handleGalleryKey - Grid or Expanded view not found in galleryOverlay.");
-                    return;
-                }
-
-                // --- Escape Key Logic ---
                 if (event.key === 'Escape') {
                     event.preventDefault();
                     if (!$expandedView.hasClass(CSS.GALLERY.HIDE)) {
                         Gallery.showGridView();
-                    } else if (!$gridView.hasClass(CSS.GALLERY.HIDE)) {
+                    } else {
                         Gallery.closeGallery();
                     }
-                    return; // Escape key action is exclusive
+                    return;
                 }
 
-                // --- Other Key Logic (Navigation, Zoom) - Only in Expanded View ---
-                if ($gridView.hasClass(CSS.GALLERY.HIDE) && !$expandedView.hasClass(CSS.GALLERY.HIDE)) {
+                if (!$expandedView.hasClass(CSS.GALLERY.HIDE)) {
                     const keyLower = event.key.toLowerCase();
-                    let actionTaken = false;
-
-                    // Define relevant keys for expanded view actions
-                    const prevKeys = [state.prevImageKey.toLowerCase(), 'arrowleft', 'k'];
-                    const nextKeys = [state.nextImageKey.toLowerCase(), 'arrowright', 'l'];
-                    const zoomInKeys = ['+', '='];
-                    const zoomOutKeys = ['-'];
-                    const resetZoomKeys = ['0'];
-
-                    if (prevKeys.includes(keyLower)) {
-                        Gallery.prevImage();
-                        actionTaken = true;
-                    } else if (nextKeys.includes(keyLower)) {
-                        Gallery.nextImage();
-                        actionTaken = true;
-                    } else if (zoomInKeys.includes(keyLower)) {
-                        Zoom.zoom(CONFIG.ZOOM_STEP);
-                        actionTaken = true;
-                    } else if (zoomOutKeys.includes(keyLower)) {
-                        Zoom.zoom(-CONFIG.ZOOM_STEP);
-                        actionTaken = true;
-                    } else if (resetZoomKeys.includes(keyLower)) {
-                        Zoom.resetZoom();
-                        actionTaken = true;
-                    }
-
-                    if (actionTaken) {
-                        event.preventDefault(); // Prevent default browser action if a script action was taken
+                    const keyMap = {
+                        [state.prevImageKey.toLowerCase()]: Gallery.prevImage,
+                        'arrowleft': Gallery.prevImage,
+                        [state.nextImageKey.toLowerCase()]: Gallery.nextImage,
+                        'arrowright': Gallery.nextImage,
+                        '+': () => Zoom.zoom(CONFIG.ZOOM_STEP), '=': () => Zoom.zoom(CONFIG.ZOOM_STEP),
+                        '-': () => Zoom.zoom(-CONFIG.ZOOM_STEP),
+                        '0': Zoom.resetZoom
+                    };
+                    if (keyMap[keyLower]) {
+                        keyMap[keyLower]();
+                        event.preventDefault();
                     }
                 }
             }
@@ -2704,34 +2605,23 @@
 
         handleWindowResize: Utils.debounce(() => {
             if (!galleryOverlay || !galleryOverlay.length || !state.isGalleryMode) return;
-
             const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
-            if (!$container.length) return; // Ensure container was found
+            if (!$container.length) return;
 
             const newWidth = $container.width();
             const newHeight = $container.height();
-
             if (newWidth !== state.lastWidth || newHeight !== state.lastHeight) {
                 state.lastWidth = newWidth;
                 state.lastHeight = newHeight;
-
                 const $expandedView = galleryOverlay.find(`.${CSS.GALLERY.EXPANDED_VIEW}`);
-                const $mainImage = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG}`); // Find within overlay
-
-                // Check if in expanded view and an image is loaded
-                if ($expandedView.length && !$expandedView.hasClass(CSS.GALLERY.HIDE) &&
-                    $mainImage.length && $mainImage.attr('src')) {
-                    // Zoom.initializeImage expects DOM elements
+                const $mainImage = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG}`);
+                if ($expandedView.length && !$expandedView.hasClass(CSS.GALLERY.HIDE) && $mainImage.length && $mainImage.attr('src')) {
                     Zoom.initializeImage($mainImage[0], $container[0]);
                 } else {
-                    Zoom.resetZoom(); // Fallback reset
+                    Zoom.resetZoom();
                 }
             }
         }, CONFIG.DEBOUNCE_DELAY),
-
-        toggleControlsVisibility: () => {
-            state.controlsVisible = !state.controlsVisible;
-        },
 
         handleGlobalError: event => {
             if (state.isGalleryMode || state.isLoading) {
@@ -2759,88 +2649,12 @@
     const injectUI = () => {
         try {
             if (!Utils.isPostPage()) {
-                // Reset state when leaving a post page
-                state.postActionsInitialized = false;
-                state.notification = null;
-                state.loadingMessage = null;
-                state.isLoading = false;
-                state.galleryReady = false;
-                state.hasImages = false;
-                state.totalImages = 0;
-                PostActions.cleanupPostActions();
-                uiCache = {};
-                previousPageUrl = null;
+                if (state.postActionsInitialized) {
+                    PostActions.cleanupPostActions();
+                }
                 return;
             }
-
-            const mediaLinks = [...document.querySelectorAll(SELECTORS.IMAGE_LINK)];
-            const currentTotalImages = mediaLinks.length;
-            const currentPageUrl = window.location.href;
-            const postSection = document.querySelector('.site-section.site-section--post');
-
-            if (!state.postActionsInitialized && postSection) {
-                // Initialize new post page
-                state.galleryReady = false;
-                state.loadedImages = 0;
-                state.hasImages = false;
-                state.totalImages = currentTotalImages;
-
-                const hasMedia = document.querySelectorAll(SELECTORS.IMAGE_LINK).length > 0;
-                if (hasMedia) {
-                    // Add status container
-                    if (!elements.statusContainer) {
-                        const { container, element } = UI.createStatusElement();
-                        elements.statusContainer = container;
-                        elements.statusElement = element;
-                        const actionsContainer = document.querySelector(SELECTORS.POST_ACTIONS);
-                        if (actionsContainer) {
-                            actionsContainer.appendChild(container);
-                        }
-                    }
-                    state.notification = `Loading media (${state.loadedImages}/${state.totalImages})...`;
-                }
-
-                // Generate missing thumbnails and load images
-                Utils.ensureThumbnailsExist();
-                ImageLoader.loadImages();
-                PostActions.initPostActions();
-                state.currentPostUrl = currentPageUrl;
-                previousPageUrl = currentPageUrl;
-            } else if (currentPageUrl !== state.currentPostUrl) {
-                // Handle URL change to a different post
-                PostActions.cleanupPostActions();
-                state.totalImages = currentTotalImages;
-                state.galleryReady = false;
-                state.loadedImages = 0;
-                state.hasImages = false;
-                state.notification = null;
-                state.loadingMessage = null;
-                state.isLoading = false;
-
-                const hasMedia = document.querySelectorAll(SELECTORS.IMAGE_LINK).length > 0;
-                if (hasMedia) {
-                    if (!elements.statusContainer) {
-                        const { container, element } = UI.createStatusElement();
-                        elements.statusContainer = container;
-                        elements.statusElement = element;
-                        const actionsContainer = document.querySelector(SELECTORS.POST_ACTIONS);
-                        if (actionsContainer) {
-                            actionsContainer.appendChild(container);
-                        }
-                    }
-                    state.notification = `Loading media (${state.loadedImages}/${state.totalImages})...`;
-                } else if (elements.statusContainer) {
-                    elements.statusContainer.remove();
-                    elements.statusContainer = null;
-                    elements.statusElement = null;
-                }
-
-                Utils.ensureThumbnailsExist();
-                ImageLoader.loadImages();
-                PostActions.initPostActions();
-                state.currentPostUrl = currentPageUrl;
-                previousPageUrl = currentPageUrl;
-            }
+            PostActions.initPostActions();
         } catch (error) {
             console.error('Error in injectUI:', error);
             state.notification = 'Error initializing UI. Try refreshing the page.';
@@ -2854,48 +2668,43 @@
 
     const init = async () => {
         try {
-            // Load CSS
-            GM.xmlHttpRequest({
-                method: 'GET',
-                url: 'https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/TestingBranch/Ultra-Galleries.css',
-                onload: function(response) {
-                    if (response.status === 200) {
-                        GM_addStyle(response.responseText);
-                    } else {
-                        console.error('Error loading CSS:', response.status);
-                    }
-                },
-                onerror: function(error) {
-                    console.error('Error loading CSS:', error);
-                },
-            });
+            try {
+                const cssText = GM_getResourceText('mainCSS');
+                if (cssText) {
+                    GM_addStyle(cssText);
+                } else {
+                    console.error('Ultra Galleries: Could not load CSS from @resource.');
+                }
+            } catch (e) {
+                console.error('Ultra Galleries: Error applying CSS from @resource:', e);
+            }
+
+            // Add critical CSS rules directly as a fallback and to apply fixes.
+            GM_addStyle(`
+                .post__actions, .scrape__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; }
+                .post__actions > a, .scrape__actions > a { margin: 2px 0 !important; }
+                .ug-button-container { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; margin-bottom: 5px; }
+                .ug-button { white-space: nowrap; }
+                .is-transitioning { transition: transform 0.3s ease-out; }
+                .ug-image-error-message { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #ffcccc; background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 5px; z-index: 5; }
+            `);
 
             if (!loadedPako) {
                 loadedPako = await loadResourceScript('pakoJsRaw', 'pako');
-                if (loadedPako) {
-                    console.log("Ultra Galleries: Pako.js loaded and available.");
-                } else {
-                    console.warn("Ultra Galleries: Pako.js could not be loaded.");
-                }
             }
-
             if (state.enablePersistentCaching) {
                 initDexie();
             }
 
-            // Load saved settings
             CONFIG.MAX_SCALE = GM_getValue('maxZoomScale', CONFIG.MAX_SCALE);
 
-            // Add mobile right-click handling CSS
             GM_addStyle(`
-                .${CSS.LONG_PRESS} { cursor: context-menu !important; }
                 .${CSS.NOTIF_AREA} {
                     top: ${state.notificationPosition === 'top' ? '10px' : 'auto'};
                     bottom: ${state.notificationPosition === 'bottom' ? '10px' : 'auto'};
                 }
             `);
 
-            // Attach event listeners
             if (!galleryKeyListenerAttached) {
                 window.addEventListener('keydown', EventHandlers.handleGalleryKey);
                 window.addEventListener('keydown', EventHandlers.handleSettingsKey);
@@ -2904,30 +2713,15 @@
             window.addEventListener('error', EventHandlers.handleGlobalError);
             window.addEventListener('resize', EventHandlers.handleWindowResize);
 
-            // Create notification area
             if (!document.getElementById(CSS.NOTIF_AREA) && state.notificationAreaVisible) {
                 UI.createNotificationArea();
             }
 
-            // Setup mutation observer for DOM changes
             const observer = new MutationObserver(injectUI);
             observer.observe(document.body, { childList: true, subtree: true });
 
-            // Initial UI state
-            if (Utils.isPostPage()) {
-                Utils.ensureThumbnailsExist();
+            injectUI();
 
-                if (state.loadedImages === state.totalImages && state.totalImages > 0) {
-                    state.notification = `Images Done Loading! Total: ${state.totalImages}`;
-                    state.notificationType = 'success';
-                } else if (state.notificationType === 'error') {
-                    state.notification = 'Error loading some media.';
-                }
-            } else {
-                state.notification = null;
-                state.isLoading = false;
-                state.galleryReady = false;
-            }
         } catch (error) {
             console.error('Error in init:', error);
             state.notification = 'Error initializing script. Check console for details.';
@@ -2935,6 +2729,5 @@
         }
     };
 
-    // Initialize the script
     init();
 })();
