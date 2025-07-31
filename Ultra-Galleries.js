@@ -1,11 +1,13 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1477603-%E3%83%A1%E3%83%AA%E3%83%BC
-// @version      3.2.1
+// @version      3.2.2
 // @description  Modern image gallery with enhanced browsing, fullscreen, and download features
 // @author       ntf (original), Meri/TearTyr (maintained and improved)
 // @match        *://kemono.su/*
 // @match        *://coomer.su/*
+// @match        *://kemono.cr/*
+// @match        *://coomer.cr/*
 // @match        *://nekohouse.su/*
 // @icon         https://kemono.party/static/menu/recent.svg
 // @grant        GM_download
@@ -24,7 +26,7 @@
 // @require      https://unpkg.com/dexie@3.2.7/dist/dexie.min.js
 // @resource     upngJsRaw https://unpkg.com/upng-js@2.1.0/UPNG.js
 // @resource     pakoJsRaw https://unpkg.com/pako@2.1.0/dist/pako.min.js
-// @resource     mainCSS https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/main/Ultra-Galleries.css
+// @resource     mainCSS https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/refs/heads/TestingBranch/Ultra-Galleries.css
 // ==/UserScript==
 (function() {
     'use strict';
@@ -152,8 +154,8 @@
         isPostPage: () => {
             const url = window.location.href;
             const patterns = [
-                /https:\/\/(kemono\.su|coomer\.su|nekohouse\.su)\/.*\/post\//,
-                /https:\/\/(kemono\.su|coomer\.su|nekohouse\.su)\/.*\/user\/.*\/post\//,
+                /https:\/\/(kemono\.su|coomer\.su|nekohouse\.su|kemono\.cr|coomer\.cr)\/.*\/post\//,
+                /https:\/\/(kemono\.su|coomer\.su|nekohouse\.su|kemono\.cr|coomer\.cr)\/.*\/user\/.*\/post\//,
             ];
             return patterns.some(pattern => pattern.test(url));
         },
@@ -351,6 +353,9 @@
         isGalleryMode: false,
         isDownloading: false,
         errorCount: 0,
+
+        // Add a session ID to track the current loading process
+        currentLoadSessionId: null,
 
         // UI preferences
         notificationsEnabled: GM_getValue('notificationsEnabled', true),
@@ -638,35 +643,33 @@
         }
     }
 
-    async function storeImageInDexie(url, blob) {
+    async function storeImageInDexie(url, blob, sessionId = null) {
         if (!db || !state.enablePersistentCaching) return;
+
         try {
             await db.imageCache.put({ url: url, blob: blob, cachedAt: Date.now() });
-            // console.log(`Ultra Galleries: Cached image in Dexie: ${url}`);
         } catch (e) {
             console.error(`Ultra Galleries: Error caching image ${url} in Dexie:`, e);
             if (e.name === 'QuotaExceededError') {
                 console.warn("Ultra Galleries: Dexie cache quota exceeded. Attempting to clear some old items...");
-                state.notification = "Cache full. Attempting to clear space...";
-                state.notificationType = "warning";
-                try {
-                    const evictedCount = await evictOldestCacheItems(CONFIG.CACHE_EVICTION_COUNT);
-                    if (evictedCount > 0) {
-                        console.log(`Ultra Galleries: Evicted ${evictedCount} old cache items. Retrying save for ${url}.`);
-                        state.notification = `Cleared ${evictedCount} old items from cache. Retrying save.`;
-                        state.notificationType = "info";
-                        await db.imageCache.put({ url: url, blob: blob, cachedAt: Date.now() }); // Retry
-                        console.log(`Ultra Galleries: Successfully cached ${url} after eviction.`);
-                    } else {
-                        console.warn(`Ultra Galleries: Eviction attempt failed or no items to evict for ${url}. Save might still fail or already failed.`);
-                        state.notification = "Cache full. Could not clear enough space automatically.";
-                        state.notificationType = "error";
+                const evictedCount = await evictOldestCacheItems();
+
+                if (evictedCount > 0) {
+                    console.log(`Ultra Galleries: Evicted ${evictedCount} items. Retrying cache put for ${url}.`);
+                    try {
+                        await db.imageCache.put({ url: url, blob: blob, cachedAt: Date.now() });
+                        console.log(`Ultra Galleries: Successfully cached image after eviction: ${url}`);
+                    } catch (retryError) {
+                        console.error(`Ultra Galleries: Failed to cache image ${url} even after eviction:`, retryError);
                     }
-                } catch (retrySaveError) {
-                    console.error(`Ultra Galleries: Error during cache eviction or retry for ${url}:`, retrySaveError);
-                    state.notification = "Error during cache auto-cleanup. Cache might be full.";
-                    state.notificationType = "error";
+                } else {
+                     console.warn(`Ultra Galleries: Eviction failed to remove any items for ${url}. Cache might remain full.`);
+                     state.notification = `Persistent cache full. Could not make space for new images.`;
+                     state.notificationType = 'warning';
                 }
+            } else {
+                 state.notification = `Error saving image to cache: ${e.message}`;
+                 state.notificationType = 'error';
             }
         }
     }
@@ -1429,9 +1432,13 @@
             loadedBlobs.clear();    // Clear the blobs map
         },
 
-        _fetchAndCacheImage: async function(indexToPreload) {
+        _fetchAndCacheImage: async function(indexToPreload, sessionId = null) {
             if (indexToPreload < 0 || indexToPreload >= state.originalImageSrcs.length) return;
             if (Gallery._preloadedImageCache[indexToPreload] || Gallery._preloadingInProgress[indexToPreload]) return;
+
+            if (sessionId !== null && state.currentLoadSessionId !== sessionId) {
+                return;
+            }
 
             const originalImageUrl = state.originalImageSrcs[indexToPreload];
             if (!originalImageUrl) return;
@@ -1441,6 +1448,10 @@
             let loadedFromPersistentCache = false;
 
             try {
+                if (sessionId !== null && state.currentLoadSessionId !== sessionId) {
+                    return;
+                }
+
                 if (state.enablePersistentCaching && db) {
                     const cachedBlob = await getImageFromDexie(originalImageUrl);
                     if (cachedBlob) {
@@ -1451,15 +1462,31 @@
 
                 if (!blobToCache) {
                     blobToCache = await new Promise((resolve, reject) => {
+                        if (sessionId !== null && state.currentLoadSessionId !== sessionId) {
+                            reject(new Error('Stale session'));
+                            return;
+                        }
                         GM.xmlHttpRequest({
                             method: 'GET', url: originalImageUrl, responseType: 'blob',
                             onload: r => (r.status === 200 || r.status === 206) ? resolve(r.response) : reject(new Error(`HTTP ${r.status}`)),
                             onerror: reject
                         });
                     });
-                    if (blobToCache && state.enablePersistentCaching && db) {
-                        await storeImageInDexie(originalImageUrl, blobToCache);
+                    if (sessionId !== null && state.currentLoadSessionId !== sessionId) {
+                         // Optionally revoke blob if not storing: if(blobToCache) URL.revokeObjectURL(URL.createObjectURL(blobToCache));
+                    } else {
+                         if (blobToCache && state.enablePersistentCaching && db && !loadedFromPersistentCache) {
+                             await storeImageInDexie(originalImageUrl, blobToCache);
+                         }
                     }
+                }
+
+                if (sessionId !== null && state.currentLoadSessionId !== sessionId) {
+                    // console.log(`Ultra Galleries: Discarding loaded blob for index ${indexToPreload} (Session: ${sessionId}) - Session stale (after load).`);
+                    // Optionally revoke blob if it was fetched: if(blobToCache && !loadedFromPersistentCache) { ... }
+                    Gallery._preloadedImageCache[indexToPreload] = 'failed_preload'; // Mark as failed or just return?
+                    delete Gallery._preloadingInProgress[indexToPreload]; // Clean up flag early
+                    return;
                 }
 
                 if (blobToCache) {
@@ -1468,16 +1495,27 @@
                     Gallery._preloadedImageCache[indexToPreload] = 'failed_preload';
                 }
             } catch (error) {
-                console.error(`Ultra Galleries: Error preloading image ${originalImageUrl}:`, error);
+                if (error.message === 'Stale session') {
+                    // console.log(`Ultra Galleries: Preload for index ${indexToPreload} aborted due to stale session.`);
+                    // Optionally, don't mark as failed if it's just a stale session abort?
+                    // Gallery._preloadedImageCache[indexToPreload] = 'aborted_stale_session';
+                    // Or just leave it unset/undefined to allow retry on next session?
+                    delete Gallery._preloadingInProgress[indexToPreload];
+                    return;
+                }
+                console.error(`Ultra Galleries: Error preloading image ${originalImageUrl} (index ${indexToPreload}):`, error);
                 Gallery._preloadedImageCache[indexToPreload] = 'failed_preload';
             } finally {
-                delete Gallery._preloadingInProgress[indexToPreload];
+                if (Gallery._preloadingInProgress[indexToPreload] !== undefined) {
+                     delete Gallery._preloadingInProgress[indexToPreload];
+                }
             }
         },
 
         _preloadAdjacentImages: function(currentIndex) {
-            Gallery._fetchAndCacheImage(currentIndex + 1);
-            Gallery._fetchAndCacheImage(currentIndex - 1);
+            const sessionId = state.currentLoadSessionId;
+            Gallery._fetchAndCacheImage(currentIndex + 1, sessionId);
+            Gallery._fetchAndCacheImage(currentIndex - 1, sessionId);
         },
 
         _createGalleryOverlayAndContainer: function() {
@@ -1862,6 +1900,10 @@
             try {
                 return await loadFn();
             } catch (err) {
+                // If the error is a "Stale session" error, don't retry.
+                if (err.message === 'Stale session') {
+                    throw err;
+                }
                 if (retries <= 0) {
                     console.error(`Failed to load ${mediaSrc} after ${CONFIG.MAX_RETRIES} retries.`);
                     throw err;
@@ -1872,23 +1914,22 @@
             }
         },
 
-        loadImageAndApplyToPage: async (linkElement, galleryIndex, originalHref, isUniqueForGallery) => {
+        loadImageAndApplyToPage: async (linkElement, galleryIndex, originalHref, isUniqueForGallery, sessionId) => {
             const imgElement = linkElement.querySelector('img');
             if (!imgElement) {
-                 // The site might have already swapped the thumbnail for the full image, let's add our class.
                 const potentialImg = linkElement.closest('.post__thumbnail')?.querySelector('img');
-                if(potentialImg) potentialImg.classList.add('post__image');
+                if (potentialImg) potentialImg.classList.add('post__image');
                 else {
                     console.warn(`ImageLoader: No img found for linkElement:`, linkElement);
-                    state.loadedImages++;
+                    if (state.currentLoadSessionId === sessionId) {
+                        state.loadedImages++;
+                    }
                     return;
                 }
             }
-             // Ensure our class is present for other functions to find it.
-            if(!imgElement.classList.contains('post__image')) {
+            if (!imgElement.classList.contains('post__image')) {
                 imgElement.classList.add('post__image');
             }
-
 
             let blobUrlToUse = loadedBlobUrls.get(originalHref);
             let blobToStore = loadedBlobs.get(originalHref);
@@ -1896,6 +1937,8 @@
 
             if (!blobUrlToUse) {
                 try {
+                    if (state.currentLoadSessionId !== sessionId) throw new Error('Stale session');
+
                     if (state.enablePersistentCaching && db) {
                         const cachedBlob = await getImageFromDexie(originalHref);
                         if (cachedBlob) {
@@ -1906,7 +1949,9 @@
 
                     if (!blobToStore) {
                         blobToStore = await ImageLoader.retryWithBackoff(async () => {
+                            if (state.currentLoadSessionId !== sessionId) throw new Error('Stale session');
                             return new Promise((resolve, reject) => {
+                                if (state.currentLoadSessionId !== sessionId) return reject(new Error('Stale session'));
                                 GM.xmlHttpRequest({
                                     method: 'GET', url: originalHref, responseType: 'blob',
                                     onload: (response) => (response.status === 200 || response.status === 206) ? resolve(response.response) : reject(new Error(`HTTP ${response.status}`)),
@@ -1915,10 +1960,13 @@
                             });
                         }, CONFIG.MAX_RETRIES, CONFIG.RETRY_DELAY, originalHref);
 
+                        if (state.currentLoadSessionId !== sessionId) return;
                         if (blobToStore && state.enablePersistentCaching && db) {
                             await storeImageInDexie(originalHref, blobToStore);
                         }
                     }
+
+                    if (state.currentLoadSessionId !== sessionId) return;
 
                     if (blobToStore) {
                         blobUrlToUse = URL.createObjectURL(blobToStore);
@@ -1928,11 +1976,20 @@
                         throw new Error("Blob could not be obtained for " + originalHref);
                     }
                 } catch (error) {
-                    console.error(`Ultra Galleries: Failed to load media for page display: ${originalHref}`, error);
-                    state.errorCount++;
-                    state.loadedImages++;
+                    if (error.message === 'Stale session') {
+                        throw error;
+                    }
+                    if (state.currentLoadSessionId === sessionId) {
+                        console.error(`Ultra Galleries: Failed to load media for page display: ${originalHref}`, error);
+                        state.errorCount++;
+                        state.loadedImages++;
+                    }
                     return;
                 }
+            }
+
+            if (state.currentLoadSessionId !== sessionId) {
+                return;
             }
 
             imgElement.src = blobUrlToUse;
@@ -1954,12 +2011,16 @@
 
 
         loadImages: async () => {
-            if (!Utils.isPostPage() || state.galleryReady || state.isLoading) return;
+            if (!Utils.isPostPage() || state.isLoading) return;
+
+            const sessionId = Date.now();
+            state.currentLoadSessionId = sessionId;
 
             try {
                 state.isLoading = true;
                 state.loadingMessage = 'Loading Media...';
 
+                // Reset state for the new page
                 loadedBlobUrls.clear();
                 loadedBlobs.clear();
                 state.fullSizeImageSrcs = [];
@@ -2013,16 +2074,30 @@
 
                 const orderedUniqueGalleryUrls = Array.from(uniqueGalleryUrls);
                 const processingPromises = [];
+
                 for (let i = 0; i < allPageImageLinks.length; i++) {
+                    if (state.currentLoadSessionId !== sessionId) break;
+
                     const item = allPageImageLinks[i];
                     const isUniqueForGallery = uniqueGalleryUrls.has(item.originalUrl);
                     const galleryIndex = isUniqueForGallery ? orderedUniqueGalleryUrls.indexOf(item.originalUrl) : -1;
+
                     processingPromises.push(
-                        ImageLoader.loadImageAndApplyToPage(item.linkElement, galleryIndex, item.originalUrl, isUniqueForGallery)
+                        ImageLoader.loadImageAndApplyToPage(item.linkElement, galleryIndex, item.originalUrl, isUniqueForGallery, sessionId)
+                        .catch(error => {
+                            if (error.message !== 'Stale session') {
+                                console.error("An image failed to process:", error);
+                            }
+                        })
                     );
                 }
 
                 await Promise.all(processingPromises);
+
+                if (state.currentLoadSessionId !== sessionId) {
+                    console.log("Ultra Galleries: Aborting final status update for stale session.");
+                    return;
+                }
 
                 if (state.loadedImages === state.totalImages && state.totalImages > 0 && state.errorCount === 0) {
                     state.notification = `Images Done Loading! Total: ${state.totalImages}`;
@@ -2047,12 +2122,14 @@
                 state.loadingMessage = null;
 
             } catch (error) {
-                console.error('Critical Error in ImageLoader.loadImages:', error);
-                state.notification = 'Critical error loading images for gallery. Please refresh.';
-                state.notificationType = 'error';
-                state.isLoading = false;
-                state.loadingMessage = null;
-                state.galleryReady = false;
+                if (state.currentLoadSessionId === sessionId) {
+                    console.error('Critical Error in ImageLoader.loadImages:', error);
+                    state.notification = 'Critical error loading images for gallery. Please refresh.';
+                    state.notificationType = 'error';
+                    state.isLoading = false;
+                    state.loadingMessage = null;
+                    state.galleryReady = false;
+                }
             }
         },
     };
@@ -2340,44 +2417,21 @@
     let uiCache = {};
 
     const PostActions = {
-        /**
-         * **NEW**: This handler specifically disables left-clicks on image links
-         * to prevent the site's native expansion, while allowing right-clicks.
-         * @param {MouseEvent} event
-         */
         imageLinkClickHandler: event => {
-            // We only care about the primary mouse button (left-click).
-            if (event.button !== 0) {
-                return;
-            }
-
-            // Find the image link that was clicked.
+            if (event.button !== 0) return;
             const clickedImageLink = event.target.closest(SELECTORS.IMAGE_LINK);
-
-            // If a valid image link was clicked, prevent its default action.
             if (clickedImageLink) {
                 event.preventDefault();
-                event.stopPropagation(); // Good practice to prevent other handlers.
+                event.stopPropagation();
             }
         },
 
+        // MODIFICATION: Simplified init function. The decision to run is now in injectUI.
         initPostActions: () => {
             try {
-                if (state.postActionsInitialized && state.currentPostUrl === window.location.href) {
-                    return;
-                }
-                if (state.currentPostUrl && state.currentPostUrl !== window.location.href) {
-                    PostActions.cleanupPostActions();
-                }
-
                 elements.postActions = document.querySelector(SELECTORS.POST_ACTIONS);
                 if (!elements.postActions) {
-                    return;
-                }
-
-                // If UI is already injected, don't do it again.
-                if (elements.postActions.querySelector('a.ug-button[data-action="gallery"]')) {
-                    return;
+                    return; // Should not happen due to checks in injectUI, but good for safety
                 }
 
                 document.querySelectorAll(SELECTORS.IMAGE_LINK + ' img').forEach(img => img.classList.add('post__image'));
@@ -2454,12 +2508,12 @@
                         }
                     });
 
-                    // Attach the new click handler to disable left-clicks.
                     if (!filesArea.dataset.ugLeftClickHandlerAttached) {
                         filesArea.addEventListener('click', PostActions.imageLinkClickHandler);
                         filesArea.dataset.ugLeftClickHandlerAttached = "true";
                     }
                 }
+
                 ImageLoader.loadImages();
 
                 state.postActionsInitialized = true;
@@ -2506,21 +2560,13 @@
                 });
             }
 
+            state.notification = null;
+
             Object.assign(state, {
                 fullSizeImageSrcs: [], originalImageSrcs: [], virtualGallery: [],
                 currentPostUrl: null, galleryReady: false, loadedImages: 0, totalImages: 0,
-                mediaLoaded: {}, errorCount: 0, postActionsInitialized: false
-            });
-        },
-
-        clickAllImageButtons: actionKey => {
-            const targetButtonText = BUTTONS[actionKey.toUpperCase()];
-            if (!targetButtonText) return;
-            const filesArea = document.querySelector('div.post__files');
-            if (!filesArea) return;
-            filesArea.querySelectorAll(`.${CSS.BTN_CONTAINER}`).forEach(buttonGroup => {
-                const button = Array.from(buttonGroup.querySelectorAll(`.${CSS.BTN}`)).find(btn => btn.textContent === targetButtonText);
-                if (button) button.click();
+                mediaLoaded: {}, errorCount: 0, postActionsInitialized: false,
+                currentLoadSessionId: null
             });
         },
 
@@ -2646,20 +2692,55 @@
         }
     };
 
+    let lastProcessedUrl = null;
+    let contentCheckTimeout = null;
+
     const injectUI = () => {
-        try {
-            if (!Utils.isPostPage()) {
-                if (state.postActionsInitialized) {
-                    PostActions.cleanupPostActions();
-                }
-                return;
+      try {
+        const onPostPage = Utils.isPostPage();
+        const isInitialized = state.postActionsInitialized;
+        const currentUrl = window.location.href;
+
+        if (onPostPage) {
+          const isNewUrl = currentUrl !== lastProcessedUrl;
+          const isNewContent = isNewUrl; // Simplified check
+
+          if (!isInitialized || isNewUrl) {
+            if (isNewUrl) {
+              console.log("Ultra Galleries: Detected new post URL");
+              if (isInitialized) {
+                PostActions.cleanupPostActions();
+              }
             }
-            PostActions.initPostActions();
-        } catch (error) {
-            console.error('Error in injectUI:', error);
-            state.notification = 'Error initializing UI. Try refreshing the page.';
-            state.notificationType = 'error';
+
+            if (document.querySelector(SELECTORS.POST_ACTIONS)) {
+              console.log("Ultra Galleries: Initializing on post page");
+              PostActions.initPostActions();
+              lastProcessedUrl = currentUrl;
+            } else if (isNewUrl) {
+              // If elements aren't ready, wait a bit and try again
+              clearTimeout(contentCheckTimeout);
+              contentCheckTimeout = setTimeout(() => {
+                if (Utils.isPostPage() && window.location.href === currentUrl) {
+                  injectUI();
+                }
+              }, 300);
+            }
+          }
+        } else {
+          if (isInitialized) {
+            console.log("Ultra Galleries: Navigated away from post page, cleaning up");
+            PostActions.cleanupPostActions();
+          }
+          lastProcessedUrl = null;
         }
+
+        state.currentPostUrl = currentUrl;
+      } catch (error) {
+        console.error('Error in injectUI:', error);
+        state.notification = 'Error initializing UI. Try refreshing the page.';
+        state.notificationType = 'error';
+      }
     };
 
     // ====================================================
@@ -2667,66 +2748,58 @@
     // ====================================================
 
     const init = async () => {
+      try {
         try {
-            try {
-                const cssText = GM_getResourceText('mainCSS');
-                if (cssText) {
-                    GM_addStyle(cssText);
-                } else {
-                    console.error('Ultra Galleries: Could not load CSS from @resource.');
-                }
-            } catch (e) {
-                console.error('Ultra Galleries: Error applying CSS from @resource:', e);
-            }
-
-            // Add critical CSS rules directly as a fallback and to apply fixes.
-            GM_addStyle(`
-                .post__actions, .scrape__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; }
-                .post__actions > a, .scrape__actions > a { margin: 2px 0 !important; }
-                .ug-button-container { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; margin-bottom: 5px; }
-                .ug-button { white-space: nowrap; }
-                .is-transitioning { transition: transform 0.3s ease-out; }
-                .ug-image-error-message { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #ffcccc; background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 5px; z-index: 5; }
-            `);
-
-            if (!loadedPako) {
-                loadedPako = await loadResourceScript('pakoJsRaw', 'pako');
-            }
-            if (state.enablePersistentCaching) {
-                initDexie();
-            }
-
-            CONFIG.MAX_SCALE = GM_getValue('maxZoomScale', CONFIG.MAX_SCALE);
-
-            GM_addStyle(`
-                .${CSS.NOTIF_AREA} {
-                    top: ${state.notificationPosition === 'top' ? '10px' : 'auto'};
-                    bottom: ${state.notificationPosition === 'bottom' ? '10px' : 'auto'};
-                }
-            `);
-
-            if (!galleryKeyListenerAttached) {
-                window.addEventListener('keydown', EventHandlers.handleGalleryKey);
-                window.addEventListener('keydown', EventHandlers.handleSettingsKey);
-                galleryKeyListenerAttached = true;
-            }
-            window.addEventListener('error', EventHandlers.handleGlobalError);
-            window.addEventListener('resize', EventHandlers.handleWindowResize);
-
-            if (!document.getElementById(CSS.NOTIF_AREA) && state.notificationAreaVisible) {
-                UI.createNotificationArea();
-            }
-
-            const observer = new MutationObserver(injectUI);
-            observer.observe(document.body, { childList: true, subtree: true });
-
-            injectUI();
-
-        } catch (error) {
-            console.error('Error in init:', error);
-            state.notification = 'Error initializing script. Check console for details.';
-            state.notificationType = 'error';
+          const cssText = GM_getResourceText('mainCSS');
+          if (cssText) {
+            GM_addStyle(cssText);
+          } else {
+            console.warn('Ultra Galleries: mainCSS resource not found or empty.');
+          }
+        } catch (e) {
+          console.error('Ultra Galleries: Error loading mainCSS resource:', e);
         }
+
+        // Load required libraries
+        if (!loadedPako) {
+          loadedPako = await loadResourceScript('pakoJsRaw', 'pako');
+        }
+
+        // Initialize Dexie if caching is enabled
+        if (state.enablePersistentCaching) {
+          initDexie();
+        }
+
+        // Set max zoom scale from config
+        CONFIG.MAX_SCALE = GM_getValue('maxZoomScale', CONFIG.MAX_SCALE);
+        GM_addStyle(`
+            .post__actions, .scrape__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; }
+            .post__actions > a, .scrape__actions > a { margin: 2px 0 !important; }
+            .ug-button-container { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; margin-bottom: 5px; }
+            .ug-button { white-space: nowrap; }
+            .is-transitioning { transition: transform 0.3s ease-out; }
+            .ug-image-error-message { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #ffcccc; background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 5px; z-index: 5; }
+        `);
+
+        // Add dynamic styles
+        GM_addStyle(`
+          .${CSS.NOTIF_AREA} {top: ${state.notificationPosition === 'top' ? '10px' : 'auto'};
+          bottom: ${state.notificationPosition === 'bottom' ? '10px' : 'auto'}
+        ;}
+        `);
+
+        // Start observing DOM changes
+        const observer = new MutationObserver(injectUI);
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        // Initial UI injection
+        injectUI();
+
+      } catch (error) {
+        console.error('Error in init:', error);
+        state.notification = 'Error initializing script. Check console for details.';
+        state.notificationType = 'error';
+      }
     };
 
     init();
