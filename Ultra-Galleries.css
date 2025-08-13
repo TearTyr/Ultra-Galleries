@@ -555,15 +555,17 @@
 }
 
 #ug-notification-text {
+    flex-grow: 1;
     margin-right: 16px;
 }
 
 #ug-notification-report {
-    margin-left: auto;
+    margin-left: 16px;
     color: #80bfff;
     text-decoration: none;
     font-weight: 500;
     transition: color var(--ug-transition-fast);
+    white-space: nowrap;
 }
 
 #ug-notification-report:hover {
