@@ -256,8 +256,8 @@
 .ug-gallery-toolbar {
     position: absolute;
     top: 15px;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 15px;
+    transform: none;
     display: flex;
     gap: 10px;
     z-index: 11;
@@ -272,7 +272,7 @@
 .ug-gallery-toolbar.ug-controls-hidden {
     opacity: 0;
     pointer-events: none;
-    transform: translateX(-50%) translateY(-10px);
+    transform: translateY(-10px);
 }
 
 .ug-toolbar-button {
