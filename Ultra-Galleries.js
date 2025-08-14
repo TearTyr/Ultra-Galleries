@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1477603-%E3%83%A1%E3%83%AA%E3%83%BC
-// @version      3.2.2
+// @version      3.2.3
 // @description  Modern image gallery with enhanced browsing, fullscreen, and download features
 // @author       ntf (original), Meri/TearTyr (maintained and improved)
 // @match        *://kemono.su/*
@@ -479,13 +479,15 @@
         },
         isFullscreen: (value) => {
             GM_setValue('isFullscreen', value);
-            if (galleryOverlay) {
-                if (value) {
+            if (value) {
+                if (galleryOverlay && galleryOverlay.length) {
                     document.body.classList.add('ug-fullscreen');
-                    galleryOverlay.classList.add(CSS.GALLERY.FULLSCREEN_OVERLAY);
-                } else {
-                    document.body.classList.remove('ug-fullscreen');
-                    galleryOverlay.classList.remove(CSS.GALLERY.FULLSCREEN_OVERLAY);
+                    galleryOverlay.addClass(CSS.GALLERY.FULLSCREEN_OVERLAY);
+                }
+            } else {
+                document.body.classList.remove('ug-fullscreen');
+                if (galleryOverlay && galleryOverlay.length) {
+                    galleryOverlay.removeClass(CSS.GALLERY.FULLSCREEN_OVERLAY);
                 }
             }
         },
@@ -1343,8 +1345,11 @@
                         const $this = $(this);
                         $('.ug-sidebar-button').removeClass('active');
                         $this.addClass('active');
-                        $('.ug-settings-section').removeClass('active');
-                        section.el.addClass('active');
+
+                        // Hide all sections and show the target one directly
+                        $('.ug-settings-section').hide();
+                        section.el.show();
+
                         $headerText.text(section.title);
                     });
                 $sidebar.append($button);
@@ -1550,10 +1555,12 @@
 
         _createExpandedViewToolbar: function($expandedViewElement) {
             const $toolbar = $('<div>').addClass(CSS.GALLERY.TOOLBAR).on('mousedown', e => e.stopPropagation());
-            $('<button>').addClass(CSS.GALLERY.TOOLBAR_BTN).text(BUTTONS.CLOSE)
-                .attr('aria-label', 'Close Expanded View').on('click', Gallery.showGridView)
-                .appendTo($toolbar);
 
+            // Reset button on the left
+            $('<button>').attr({id: 'reset-btn', title: 'Reset Zoom & Position'}).addClass(CSS.GALLERY.TOOLBAR_BTN)
+                .text('Reset').on('click', Zoom.resetZoom).appendTo($toolbar);
+
+            // Zoom controls
             const $zoomControls = $('<div>').addClass('zoom-controls').appendTo($toolbar);
             $('<button>').attr({id: 'zoom-out-btn', title: 'Zoom Out'}).addClass(CSS.GALLERY.TOOLBAR_BTN)
                 .html('<img src="https://www.svgrepo.com/show/263638/zoom-out-search.svg" alt="Zoom Out" style="filter: invert(100%); pointer-events: none;">')
@@ -1562,12 +1569,17 @@
             $('<button>').attr({id: 'zoom-in-btn', title: 'Zoom In'}).addClass(CSS.GALLERY.TOOLBAR_BTN)
                 .html('<img src="https://www.svgrepo.com/show/263635/zoom-in.svg" alt="Zoom In" style="filter: invert(100%); pointer-events: none;">')
                 .on('click', () => Zoom.zoom(CONFIG.ZOOM_STEP)).appendTo($zoomControls);
-            $('<button>').attr({id: 'reset-btn', title: 'Reset Zoom & Position'}).addClass(CSS.GALLERY.TOOLBAR_BTN)
-                .text('Reset').on('click', Zoom.resetZoom).appendTo($zoomControls);
 
+            // Fullscreen button
             $('<button>').text(BUTTONS.FULLSCREEN).addClass(CSS.GALLERY.FULLSCREEN).addClass(CSS.GALLERY.TOOLBAR_BTN)
                 .attr('aria-label', 'Toggle Fullscreen').on('click', Gallery.toggleFullscreen)
                 .appendTo($toolbar);
+
+            // Close button on the right
+            $('<button>').addClass(CSS.GALLERY.TOOLBAR_BTN).text(BUTTONS.CLOSE)
+                .attr('aria-label', 'Close Expanded View').on('click', Gallery.showGridView)
+                .appendTo($toolbar);
+
             $expandedViewElement.append($toolbar);
         },
 
@@ -1792,13 +1804,14 @@
 
         closeGallery: function() {
             if (!galleryOverlay || !galleryOverlay.length) return;
+            state.isGalleryMode = false;
+            state.isFullscreen = false;
+
             Gallery._clearPreloadCache();
             galleryOverlay.remove();
             galleryOverlay = null;
-            $(document.body).removeClass('ug-fullscreen');
-            state.isGalleryMode = false;
-            state.isFullscreen = false;
-            $(document).off('.galleryDrag'); // Remove namespaced events
+
+            $(document).off('.galleryDrag');
         },
 
         toggleGallery: function() {
@@ -2017,8 +2030,8 @@
         },
 
 
-                loadImages: async () => {
-            const postContainer = document.querySelector(website === 'nekohouse' ? '.scrape' : '.post__card');
+              loadImages: async () => {
+            const postContainer = document.querySelector('section.site-section--post');
             if (!postContainer || !Utils.isPostPage() || state.isLoading) {
                 return;
             }
@@ -2581,21 +2594,41 @@
     // ====================================================
 
     const EventHandlers = {
-        handleGalleryKey: event => {
-            if (!Utils.isPostPage()) return;
-            if (event.key.toLowerCase() === state.galleryKey.toLowerCase() && !event.altKey && !event.ctrlKey && !event.metaKey) {
-                if (state.galleryReady) {
+        handleGlobalKeyDown: event => {
+            const activeEl = document.activeElement;
+            const isTyping = activeEl && (activeEl.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName));
+
+            if (isTyping) {
+                return;
+            }
+
+            const keyLower = event.key.toLowerCase();
+
+            // Always handle the gallery toggle key first.
+            if (Utils.isPostPage() && keyLower === state.galleryKey.toLowerCase()) {
+                if (!event.altKey && !event.ctrlKey && !event.metaKey) {
                     event.preventDefault();
-                    Gallery.toggleGallery();
-                } else if (Utils.isPostPage() && !state.isGalleryMode) {
-                    state.notification = "Gallery content is still loading or not available.";
-                    state.notificationType = "info";
+                    if (state.galleryReady) {
+                        Gallery.toggleGallery();
+                    } else {
+                        state.notification = "Gallery content is still loading or not available.";
+                        state.notificationType = "info";
+                    }
                 }
                 return;
             }
 
+            // Handle settings modal escape key.
+            if (state.settingsOpen && event.key === 'Escape') {
+                event.preventDefault();
+                state.settingsOpen = false;
+                return;
+            }
+
+            // Handle gallery-specific keys only when the gallery is active.
             if (state.isGalleryMode && galleryOverlay?.length) {
                 const $expandedView = galleryOverlay.find(`.${CSS.GALLERY.EXPANDED_VIEW}`);
+
                 if (event.key === 'Escape') {
                     event.preventDefault();
                     if (!$expandedView.hasClass(CSS.GALLERY.HIDE)) {
@@ -2607,26 +2640,23 @@
                 }
 
                 if (!$expandedView.hasClass(CSS.GALLERY.HIDE)) {
-                    const keyLower = event.key.toLowerCase();
-                    const keyMap = {
-                        [state.prevImageKey.toLowerCase()]: Gallery.prevImage,
-                        'arrowleft': Gallery.prevImage,
-                        [state.nextImageKey.toLowerCase()]: Gallery.nextImage,
-                        'arrowright': Gallery.nextImage,
-                        '+': () => Zoom.zoom(CONFIG.ZOOM_STEP), '=': () => Zoom.zoom(CONFIG.ZOOM_STEP),
-                        '-': () => Zoom.zoom(-CONFIG.ZOOM_STEP),
-                        '0': Zoom.resetZoom
-                    };
-                    if (keyMap[keyLower]) {
-                        keyMap[keyLower]();
+                    if (keyLower === state.nextImageKey.toLowerCase() || keyLower === 'arrowright') {
                         event.preventDefault();
+                        Gallery.nextImage();
+                    } else if (keyLower === state.prevImageKey.toLowerCase() || keyLower === 'arrowleft') {
+                        event.preventDefault();
+                        Gallery.prevImage();
+                    } else if (keyLower === '+' || keyLower === '=') {
+                        event.preventDefault();
+                        Zoom.zoom(CONFIG.ZOOM_STEP);
+                    } else if (keyLower === '-') {
+                        event.preventDefault();
+                        Zoom.zoom(-CONFIG.ZOOM_STEP);
+                    } else if (keyLower === '0') {
+                        event.preventDefault();
+                        Zoom.resetZoom();
                     }
                 }
-            }
-        },
-        handleSettingsKey: event => {
-            if (state.settingsOpen && event.key === 'Escape') {
-                state.settingsOpen = false;
             }
         },
 
@@ -2677,49 +2707,36 @@
     let contentCheckTimeout = null;
 
         const injectUI = () => {
-      try {
-        const onPostPage = Utils.isPostPage();
-        const isInitialized = state.postActionsInitialized;
-        const currentUrl = window.location.href;
+        try {
+            const onPostPage = Utils.isPostPage();
+            const currentUrl = window.location.href;
 
-        // If not on a post page, ensure everything is cleaned up and exit.
-        if (!onPostPage) {
-            if (isInitialized) {
-                PostActions.cleanupPostActions();
-                lastProcessedUrl = null;
+            if (onPostPage) {
+                // We are on a post page.
+                if (currentUrl !== lastProcessedUrl) {
+                    // This is a new post URL that we haven't initialized yet.
+                    const postActionsContainer = document.querySelector(SELECTORS.POST_ACTIONS);
+                    if (postActionsContainer) {
+                        // The page is ready for injection.
+                        PostActions.cleanupPostActions(); // Clean up any old UI first.
+                        PostActions.initPostActions();
+                        lastProcessedUrl = currentUrl; // Mark this URL as processed.
+                    }
+                    // If the container isn't ready, do nothing and let the next interval/mutation check try again.
+                }
+            } else {
+                // We are not on a post page.
+                if (lastProcessedUrl !== null) {
+                    // We were on a post page, so we need to clean up.
+                    PostActions.cleanupPostActions();
+                    lastProcessedUrl = null; // Forget the last processed URL.
+                }
             }
-            return;
+        } catch (error) {
+            console.error('Error in injectUI:', error);
+            state.notification = 'Error initializing UI. Try refreshing the page.';
+            state.notificationType = 'error';
         }
-
-        // We are on a post page. If it's the same one we've already handled, do nothing.
-        if (currentUrl === lastProcessedUrl) {
-            return;
-        }
-
-        // This is a new post page. Clean up any previous UI first.
-        if (isInitialized) {
-            PostActions.cleanupPostActions();
-        }
-
-        const postActionsContainer = document.querySelector(SELECTORS.POST_ACTIONS);
-        if (postActionsContainer) {
-            // Content is ready. Initialize the UI.
-            clearTimeout(contentCheckTimeout);
-            PostActions.initPostActions();
-            lastProcessedUrl = currentUrl;
-        } else {
-            // Content not ready. Poll until it is.
-            clearTimeout(contentCheckTimeout);
-            contentCheckTimeout = setTimeout(() => {
-                lastProcessedUrl = null; // Force re-evaluation on the next check.
-                injectUI();
-            }, 500);
-        }
-      } catch (error) {
-        console.error('Error in injectUI:', error);
-        state.notification = 'Error initializing UI. Try refreshing the page.';
-        state.notificationType = 'error';
-      }
     };
 
     // ====================================================
@@ -2728,6 +2745,7 @@
 
     const init = async () => {
       try {
+        // 1. Load external resources
         try {
           const cssText = GM_getResourceText('mainCSS');
           if (cssText) {
@@ -2739,19 +2757,17 @@
           console.error('Ultra Galleries: Error loading mainCSS resource:', e);
         }
 
-        // Load required libraries
         if (!loadedPako) {
           loadedPako = await loadResourceScript('pakoJsRaw', 'pako');
         }
 
-        // Initialize Dexie if caching is enabled
+        // 2. Initialize modules and settings
         if (state.enablePersistentCaching) {
           initDexie();
         }
-
-        // Set max zoom scale from config
         CONFIG.MAX_SCALE = GM_getValue('maxZoomScale', CONFIG.MAX_SCALE);
-        // Add critical CSS rules directly as a fallback and to apply fixes.
+
+        // 3. Apply critical and dynamic styles
         GM_addStyle(`
             .post__actions, .scrape__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; }
             .post__actions > a, .scrape__actions > a { margin: 2px 0 !important; }
@@ -2761,18 +2777,20 @@
             .ug-image-error-message { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #ffcccc; background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 5px; z-index: 5; }
         `);
 
-        // Add dynamic styles
         GM_addStyle(`
           .${CSS.NOTIF_AREA} {top: ${state.notificationPosition === 'top' ? '10px' : 'auto'};
           bottom: ${state.notificationPosition === 'bottom' ? '10px' : 'auto'}
         ;}
+
         `);
 
-        // Start observing DOM changes
+        // 4. Setup global event listeners and observers
+        document.addEventListener('keydown', EventHandlers.handleGlobalKeyDown);
         const observer = new MutationObserver(injectUI);
         observer.observe(document.body, { childList: true, subtree: true });
+        setInterval(injectUI, 500);
 
-        // Initial UI injection
+        // 5. Initial UI injection
         injectUI();
 
       } catch (error) {
