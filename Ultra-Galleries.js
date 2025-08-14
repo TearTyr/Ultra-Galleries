@@ -27,7 +27,7 @@
 // @require      https://unpkg.com/dexie@3.2.7/dist/dexie.min.js
 // @resource     upngJsRaw https://unpkg.com/upng-js@2.1.0/UPNG.js
 // @resource     pakoJsRaw https://unpkg.com/pako@2.1.0/dist/pako.min.js
-// @resource     mainCSS https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/refs/heads/TestingBranch/Ultra-Galleries.css
+// @resource     mainCSS https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/refs/heads/main/Ultra-Galleries.css
 // ==/UserScript==
 (function() {
     'use strict';
