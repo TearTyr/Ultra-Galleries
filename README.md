@@ -13,11 +13,10 @@ This userscript provides a seamless and efficient way to interact with image and
 -   **Original Resolution Loading:** Directly loads images in their original resolution.
 -   **Resize Options:**
     -   Toggle to resize individual or all images in a gallery to fit:
-        -   Vertical height (`FILL HEIGHT`)
-        -   Horizontal width (`FILL WIDTH`)
-        -   Full resolution (`FULL`)
--   **Image Removal:** Option to remove individual images from the gallery view.
--   **Gallery View:** New gallery view for easier browsing of images within a post.
+    -   Vertical height (`FILL HEIGHT`)
+    -   Horizontal width (`FILL WIDTH`)
+    -   Full resolution (`FULL`)
+-   **Gallery View:** A modern, feature-rich gallery view for easier browsing of images within a post.
 -   **Zoom & Pan:** Advanced zooming with mouse wheel, buttons, and double-click support, plus smooth panning capabilities.
 
 ### Video Handling
@@ -34,14 +33,22 @@ This userscript provides a seamless and efficient way to interact with image and
 
 ### Performance and User Experience
 
--   **Improved Image Loading:** Modified image loading mechanism to prevent rate-limiting issues.
+-   **SPA Navigation:** Robust UI injection and cleanup logic ensures the script works reliably on sites with dynamic page loading (Single-Page Applications).
+-   **Optimized Image Loading:** Refactored image discovery and processing for significantly faster performance, especially on posts with many images.
+-   **Dynamic Notifications:** A redesigned notification system provides real-time feedback that resets and updates correctly as you navigate.
 -   **Retry Mechanism:** Implements exponential backoff for failed image loads.
--   **Status Updates:** Provides real-time status updates for image loading and download progress.
 -   **Mobile Support:** Touch-friendly interface with pinch-to-zoom and double-tap interactions.
 
 ## Version History
 
-### Version 3.1.3 (Current)
+### Version 3.2.2 (Current)
+
+-   **Major Reliability Fix:** Reworked the script's initialization logic to be fully compatible with single-page application (SPA) navigation. This resolves issues where the script would fail to load on subsequent posts or incorrectly trigger on non-post pages.
+-   **Performance Optimization:** Refactored image loading to use more efficient data structures (Map lookups), significantly improving performance on posts with a large number of images.
+-   **Enhanced Notifications:** The notification system is now more dynamic. It provides visual feedback when updating an existing message and correctly resets its auto-hide timer, ensuring users always see the latest status.
+-   **Bug Fixes:** Corrected a layout issue in the notification pop-up and eliminated race conditions that caused instability during page navigation.
+
+### Version 3.1.3
 
 -   **Persistent Image Caching:** Option to enable persistent image caching using IndexedDB (Dexie.js) for significantly faster image loading on revisits to previously viewed posts.
 -   **PNG Optimization:** Optional PNG optimization during ZIP creation (using UPNG.js and Pako) to reduce file sizes for downloaded archives.
@@ -53,18 +60,17 @@ This userscript provides a seamless and efficient way to interact with image and
 -   **Touch Support:** Mobile-friendly interface with pinch-to-zoom, double-tap to zoom, and smooth touch panning for images.
 -   **Inertia Panning:** Momentum-based panning for smooth navigation of zoomed images.
 -   **Expanded Settings Panel:** New settings section for zoom and pan configuration including maximum zoom level and inertia preferences, as well as toggles for caching and PNG optimization.
--   **Performance Improvements:** Optimized image handling for smoother operation and better memory management.
 
 ## Known Bugs
 
--   Videos are not directly playable within the gallery's expanded view. Clicking a video thumbnail in the gallery grid may not open it correctly within the gallery, but will likely open in an external player.
--   Certain UI elements or functionalities may appear broken or misaligned on `nekohouse.su`.
+-   Videos are not directly playable within the gallery's expanded view. Clicking a video thumbnail may not open it correctly within the gallery.
+-   Certain UI elements or functionalities may still have minor issues on `nekohouse.su`.
 
 ## Usage
 
-After installation, navigate to a post on `kemono.su`, `coomer.su`, or `nekohouse.su`. You'll see new buttons for resizing, downloading, and removing images. Use the `DL ALL` button to initiate a batch download of all media in the post. The `GALLERY` button opens the new gallery view. Press the configured gallery key (default 'g') to quickly open the gallery.
+After installation, navigate to a post on `kemono.su`, `coomer.su`, or `nekohouse.su`. You'll see new buttons for resizing and downloading images. Use the `DL ALL` button to initiate a batch download of all media in the post. The `GALLERY` button opens the new gallery view. Press the configured gallery key (default 'g') to quickly open the gallery.
 
-**Within the gallery view, you can open an image or video in an expanded view by clicking on its thumbnail. Once in expanded view, navigate using the 'k' (previous) and 'l' (next) keys or the on-screen navigation buttons.**
+**Within the gallery view, you can open an image by clicking its thumbnail. Once in expanded view, navigate using the 'k' (previous) and 'l' (next) keys or the on-screen navigation buttons.**
 
 **To zoom in on an image, use the mouse wheel, the zoom buttons in the toolbar, or double-click on the image. When zoomed in, click and drag to pan around the image. On mobile devices, use pinch gestures to zoom and swipe to pan.**
 
@@ -85,4 +91,4 @@ After installation, navigate to a post on `kemono.su`, `coomer.su`, or `nekohous
 
 ## Version
 
-Current version: 3.1.3
+Current version: 3.2.2
