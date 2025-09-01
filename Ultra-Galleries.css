@@ -27,6 +27,9 @@
     --ug-status-error-border: #e53935;
     --ug-status-info-bg: var(--ug-bg-sidebar);
     --ug-status-info-border: var(--ug-accent-color);
+    --ug-status-warning-bg: #5b4a2d;
+    --ug-status-warning-border: #e5a539;
+
 
     /* 2. SIZING & SPACING */
     --ug-thumbnail-size: 120px;
@@ -514,6 +517,7 @@
     cursor: context-menu !important;
 }
 
+/* === CSS FIX FOR NOTIFICATION === */
 .ug-notification-area {
     position: fixed;
     z-index: 10000;
@@ -525,69 +529,86 @@
 }
 
 .ug-notification-container {
-    display: flex;
-    align-items: center;
-    max-width: 90%;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    width: auto !important;
+    max-width: 90% !important;
     min-height: 48px;
-    padding: 10px 16px;
-    border-radius: var(--ug-border-radius-medium);
-    color: var(--ug-text-primary);
-    font-size: 16px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    padding: 10px 16px !important;
+    border-radius: var(--ug-border-radius-medium) !important;
+    color: var(--ug-text-primary) !important;
+    font-size: 16px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
     pointer-events: auto;
     transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out;
     border-left: 4px solid;
+    gap: 16px;
 }
 
 .ug-notification-container.info {
-    background-color: var(--ug-status-info-bg);
-    border-left-color: var(--ug-status-info-border);
+    background: var(--ug-status-info-bg) !important;
+    border-left-color: var(--ug-status-info-border) !important;
 }
 
 .ug-notification-container.success {
-    background-color: var(--ug-status-success-bg);
-    border-left-color: var(--ug-status-success-border);
+    background: var(--ug-status-success-bg) !important;
+    border-left-color: var(--ug-status-success-border) !important;
 }
 
 .ug-notification-container.error {
-    background-color: var(--ug-status-error-bg);
-    border-left-color: var(--ug-status-error-border);
+    background: var(--ug-status-error-bg) !important;
+    border-left-color: var(--ug-status-error-border) !important;
+}
+
+.ug-notification-container.warning {
+    background: var(--ug-status-warning-bg) !important;
+    border-left-color: var(--ug-status-warning-border) !important;
 }
 
 #ug-notification-text {
     flex-grow: 1;
-    margin-right: 16px;
+    background: transparent !important;
+    color: inherit !important;
+    padding: 0 !important;
+    margin: 0 !important;
 }
 
 #ug-notification-report {
-    margin-left: 16px;
-    color: #80bfff;
-    text-decoration: none;
+    background: transparent !important;
+    color: #80bfff !important;
+    text-decoration: none !important;
     font-weight: 500;
     transition: color var(--ug-transition-fast);
     white-space: nowrap;
+    padding: 0 !important;
+    margin: 0 !important;
 }
 
 #ug-notification-report:hover {
-    color: var(--ug-text-inverted);
-    text-decoration: underline;
+    color: var(--ug-text-inverted) !important;
+    text-decoration: underline !important;
 }
 
 #ug-notification-close {
-    margin-left: 16px;
-    background: none;
-    border: none;
-    color: var(--ug-text-secondary);
-    font-size: 24px;
+    background: transparent !important;
+    border: none !important;
+    color: var(--ug-text-secondary) !important;
+    font-size: 24px !important;
     cursor: pointer;
     opacity: 0.8;
     transition: all var(--ug-transition-fast);
+    padding: 0 !important;
+    margin: 0 !important;
+    line-height: 1;
 }
 
 #ug-notification-close:hover {
-    color: var(--ug-text-inverted);
+    color: var(--ug-text-inverted) !important;
     transform: scale(1.1);
 }
+/* === END CSS FIX === */
+
 
 /* Loading Overlay */
 .loading-overlay {
@@ -712,7 +733,9 @@
     margin: 2px 0 !important;
 }
 
-img.post__image[src^="blob:"] {
+/* === CSS FIX FOR SPA NAVIGATION === */
+/* Apply filter via class instead of attribute for better control */
+img.post__image.ug-image-loaded {
     filter: brightness(1.05) saturate(1.05);
 }
 
