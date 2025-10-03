@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1477603-%E3%83%A1%E3%83%AA%E3%83%BC
-// @version      3.3.1
+// @version      3.4.0
 // @description  Modern image gallery with highly efficient background zipping, video playback, enhanced browsing, fullscreen, and download features.
 // @author       ntf (original), Meri/TearTyr (maintained and improved)
 // @match        *://kemono.su/*
@@ -38,16 +38,54 @@
     // ====================================================
 
     const CONFIG = {
+        // Performance settings
         BATCH_SIZE: 5,
         MAX_RETRIES: 3,
         RETRY_DELAY: 1500,
+        DEBOUNCE_DELAY: 250,
+        CACHE_EVICTION_COUNT: 10,
+        PRELOAD_DISTANCE: 2, // Number of images to preload ahead/behind
+        
+        // UI settings
         MIN_SCALE: 0.05,
         MAX_SCALE: 5,
         ZOOM_STEP: 0.2,
-        DEBOUNCE_DELAY: 250,
         PAN_RESISTANCE: 0.8,
         DOUBLE_TAP_THRESHOLD: 300,
-        CACHE_EVICTION_COUNT: 10, // Number of items to evict when cache is full
+        ANIMATION_DURATION: 300,
+        
+        // Default settings
+        DEFAULT_SETTINGS: {
+            zipFileNameFormat: '{title}-{artistName}.zip',
+            imageFileNameFormat: '{title}-{artistName}-{fileName}-{index}',
+            galleryKey: 'g',
+            isFullscreen: false,
+            notificationsEnabled: true,
+            notificationAreaVisible: true,
+            notificationPosition: 'bottom',
+            animationsEnabled: true,
+            optimizePngInZip: false,
+            enablePersistentCaching: true,
+            hideNavArrows: false,
+            hideRemoveButton: false,
+            hideFullButton: false,
+            hideDownloadButton: false,
+            hideHeightButton: false,
+            hideWidthButton: false,
+            prevImageKey: 'k',
+            nextImageKey: 'l',
+            bottomStripeVisible: true,
+            dynamicResizing: true,
+            zoomEnabled: true,
+            inertiaEnabled: true,
+            maxZoomScale: 5,
+            enableImageRotation: true,
+            autoHideControls: true,
+            autoHideDelay: 3000,
+            showImageInfo: true,
+            enableKeyboardShortcuts: true,
+            enableGestures: true
+        }
     };
 
     const BUTTONS = {
@@ -60,7 +98,12 @@
         GALLERY: '【GALLERY】',
         SETTINGS: '⚙️',
         FULLSCREEN: '⛶',
-        CLOSE: '✕'
+        CLOSE: '✕',
+        ROTATE_LEFT: '↺',
+        ROTATE_RIGHT: '↻',
+        ZOOM_IN: '+',
+        ZOOM_OUT: '-',
+        RESET_ZOOM: '⟲'
     };
 
     // CSS class names
@@ -109,6 +152,8 @@
             ZOOMED: 'zoomed',
             IS_TRANSITIONING: 'is-transitioning',
             IMAGE_ERROR_MSG: 'ug-image-error-message',
+            IMAGE_INFO: 'ug-image-info',
+            ROTATION_CONTAINER: 'ug-rotation-container',
         },
 
         // Settings classes
@@ -252,7 +297,6 @@
 
         ensureThumbnailsExist: () => {
             try {
-                // Look for posts with images but no thumbnails
                 const posts = document.querySelectorAll('.post');
                 posts.forEach(post => {
                     const hasImages = post.querySelector(SELECTORS.IMAGE_LINK) !== null;
@@ -280,7 +324,6 @@
                     }
                 });
 
-                // Generate video thumbnails
                 const videoLinks = document.querySelectorAll(SELECTORS.VIDEO_LINK);
                 videoLinks.forEach(videoLink => {
                     const videoThumb = videoLink.closest(SELECTORS.VIDEO_THUMBNAIL);
@@ -303,6 +346,64 @@
             } catch (error) {
                 console.error('Error ensuring thumbnails exist:', error);
             }
+        },
+
+        // New utility functions
+        formatFileSize: (bytes) => {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        },
+
+        formatImageInfo: (img) => {
+            if (!img || !img.naturalWidth) return 'Unknown';
+            return `${img.naturalWidth} × ${img.naturalHeight}`;
+        },
+
+        createElement: (tag, className, attributes = {}) => {
+            const element = document.createElement(tag);
+            if (className) element.className = className;
+            Object.entries(attributes).forEach(([key, value]) => {
+                element.setAttribute(key, value);
+            });
+            return element;
+        },
+
+        addGlobalStyle: (css) => {
+            const style = document.createElement('style');
+            style.textContent = css;
+            document.head.appendChild(style);
+            return style;
+        },
+
+        // Animation utilities
+        animate: (element, keyframes, options = {}) => {
+            return element.animate(keyframes, {
+                duration: CONFIG.ANIMATION_DURATION,
+                easing: 'ease-out',
+                fill: 'forwards',
+                ...options
+            });
+        },
+
+        fadeIn: (element, duration = CONFIG.ANIMATION_DURATION) => {
+            element.style.opacity = '0';
+            element.style.display = 'block';
+            return Utils.animate(element, [
+                { opacity: 0 },
+                { opacity: 1 }
+            ], { duration });
+        },
+
+        fadeOut: (element, duration = CONFIG.ANIMATION_DURATION) => {
+            return Utils.animate(element, [
+                { opacity: 1 },
+                { opacity: 0 }
+            ], { duration }).onfinish = () => {
+                element.style.display = 'none';
+            };
         }
     };
 
@@ -310,17 +411,15 @@
     // State Management
     // ====================================================
 
-    // Helper to wrap a callback with a session ID check
     const withSessionCheck = (callback) => {
         return (value, oldValue) => {
             if (state.currentLoadSessionId === null) {
-                return; // Abort if no active session
+                return;
             }
             callback(value, oldValue);
         };
     };
 
-    // Create reactive state with update callbacks
     const createReactiveState = (initialState, updateCallbacks = {}) => {
         return new Proxy(initialState, {
             set(target, key, value) {
@@ -334,29 +433,30 @@
         });
     };
 
-    // Core state with reactive updates
-    const state = createReactiveState({
-        // File naming settings
-        zipFileNameFormat: GM_getValue('zipFileNameFormat', '{title}-{artistName}.zip'),
-        imageFileNameFormat: GM_getValue('imageFileNameFormat', '{title}-{artistName}-{fileName}-{index}'),
+    // Initialize settings with defaults
+    const initializeSettings = () => {
+        const settings = {};
+        Object.entries(CONFIG.DEFAULT_SETTINGS).forEach(([key, defaultValue]) => {
+            settings[key] = GM_getValue(key, defaultValue);
+        });
+        return settings;
+    };
 
-        // Gallery state
-        galleryKey: GM_getValue('galleryKey', 'g'),
+    const state = createReactiveState({
+        ...initializeSettings(),
+        
         galleryReady: false,
         galleryActive: false,
         currentGalleryIndex: 0,
-        isFullscreen: GM_getValue('isFullscreen', false),
         virtualGallery: [],
         originalImageSrcs: [],
         fullSizeImageSrcs: [],
 
-        // Post tracking
         currentPostUrl: null,
         displayedImages: [],
         totalImages: 0,
         loadedImages: 0,
 
-        // Status tracking
         downloadedCount: 0,
         isLoading: false,
         loadingMessage: null,
@@ -367,44 +467,13 @@
         isDownloading: false,
         errorCount: 0,
 
-        // Add a session ID to track the current loading process
         currentLoadSessionId: null,
 
-        // UI preferences
-        notificationsEnabled: GM_getValue('notificationsEnabled', true),
-        notificationAreaVisible: GM_getValue('notificationAreaVisible', true),
-        notificationPosition: GM_getValue('notificationPosition', 'bottom'),
-        animationsEnabled: GM_getValue('animationsEnabled', true),
-
-        // Download settings
-        optimizePngInZip: GM_getValue('optimizePngInZip', false),
-        enablePersistentCaching: GM_getValue('enablePersistentCaching', true),
-
-        // Notification state
         notification: null,
         notificationType: 'info',
-
-        // Button visibility settings
-        hideNavArrows: GM_getValue('hideNavArrows', false),
-        hideRemoveButton: GM_getValue('hideRemoveButton', false),
-        hideFullButton: GM_getValue('hideFullButton', false),
-        hideDownloadButton: GM_getValue('hideDownloadButton', false),
-        hideHeightButton: GM_getValue('hideHeightButton', false),
-        hideWidthButton: GM_getValue('hideWidthButton', false),
-
-        // Settings state
         settingsOpen: false,
 
-        // Keyboard shortcuts
-        prevImageKey: GM_getValue('prevImageKey', 'k'),
-        nextImageKey: GM_getValue('nextImageKey', 'l'),
-
-        // Gallery display options
-        bottomStripeVisible: GM_getValue('bottomStripeVisible', true),
-        dynamicResizing: GM_getValue('dynamicResizing', true),
-
-        // Zoom state
-        zoomEnabled: GM_getValue('zoomEnabled', true),
+        // Zoom and pan state
         isZoomed: false,
         zoomScale: 1,
         controlsVisible: true,
@@ -416,23 +485,21 @@
         lastHeight: 0,
         zoomOrigin: { x: 0, y: 0 },
         dragStartOffset: { x: 0, y: 0 },
+        imageRotation: 0,
 
-        // Touch interaction
         pendingRetries: {},
         lastTapTime: 0,
         pinchZoomActive: false,
         initialTouchDistance: 0,
         initialScale: 1,
         zoomIndicatorVisible: true,
-        inertiaEnabled: GM_getValue('inertiaEnabled', true),
         velocity: { x: 0, y: 0 },
         inertiaActive: false,
     }, {
-        // State update callbacks
         controlsVisible: (value) => {
             if (galleryOverlay && galleryOverlay.length) {
                 const $toolbar = galleryOverlay.find(`.${CSS.GALLERY.TOOLBAR}`);
-                if ($toolbar.length) { // Check if toolbar was found
+                if ($toolbar.length) {
                     $toolbar.toggleClass(CSS.GALLERY.CONTROLS_HIDDEN, !value);
                 }
             }
@@ -440,27 +507,27 @@
         galleryReady: (value) => {
             updateGalleryButton(value);
         },
-       loadedImages: withSessionCheck((value) => {
+        loadedImages: withSessionCheck((value) => {
             if (value === state.totalImages && state.totalImages > 0) {
-                state.notificationType = 'success'; // On completion, it's a success
+                state.notificationType = 'success';
                 state.notification = `Media Done Loading! Total: ${state.totalImages}`;
             } else if (state.totalImages > 0) {
-                state.notificationType = 'info'; // While loading, it's informational
+                state.notificationType = 'info';
                 state.notification = `Loading media (${value}/${state.totalImages})...`;
             }
         }),
         downloadedCount: (value) => {
             if (value === state.totalImages) {
-                state.notificationType = 'success'; // On completion, it's a success
+                state.notificationType = 'success';
                 state.notification = `All files ready for zipping!`;
             } else {
-                state.notificationType = 'info'; // While preparing, it's informational
+                state.notificationType = 'info';
                 state.notification = `Preparing... (${value}/${state.totalImages})`;
             }
         },
         totalImages: withSessionCheck((value, oldValue) => {
             if (value > 0) {
-                state.notificationType = 'info'; // When starting to load, it's informational
+                state.notificationType = 'info';
                 state.notification = `Loading media (${state.loadedImages}/${value})...`;
             }
             state.hasImages = value > 0;
@@ -522,7 +589,6 @@
         zoomScale: (value, oldValue) => {
             Zoom.applyZoom();
 
-
             if (galleryOverlay && galleryOverlay.length) {
                 const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
                 if ($container.length) {
@@ -530,7 +596,6 @@
                     $container.css('cursor', value > 1 ? 'grab' : 'default');
                 }
 
-                // Show instructions tooltip first time
                 if (value > 1 && oldValue === 1 && state.zoomIndicatorVisible) {
                     const tooltip = Utils.createTooltip('Click and drag to pan image');
                     galleryOverlay.append(tooltip);
@@ -540,7 +605,6 @@
         },
         imageOffset: () => Zoom.applyZoom(),
         isDragging: (value) => {
-
             if (galleryOverlay && galleryOverlay.length) {
                 const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
                 if ($container.length) {
@@ -568,17 +632,23 @@
 
         enablePersistentCaching: (value) => {
             GM_setValue('enablePersistentCaching', value);
-            if (value && !db) { // Initialize Dexie if enabled and not already done
+            if (value && !db) {
                 initDexie();
             } else if (!value && db) {
-                // Optionally, you might want to clear the cache when disabling, or just leave it.
-                // For now, we just stop using it.
                 console.log("Ultra Galleries: Persistent caching disabled. Existing cache remains but won't be used.");
             }
         },
         optimizePngInZip: (value) => {
-        GM_setValue('optimizePngInZip', value);
+            GM_setValue('optimizePngInZip', value);
         },
+        imageRotation: (value) => {
+            if (galleryOverlay && galleryOverlay.length) {
+                const $container = galleryOverlay.find(`.${CSS.GALLERY.ROTATION_CONTAINER}`);
+                if ($container.length) {
+                    $container.css('transform', `rotate(${value}deg)`);
+                }
+            }
+        }
     });
 
     // ====================================================
@@ -586,7 +656,7 @@
     // ====================================================
     let loadedUPNG = null;
     let loadedPako = null;
-    let upngLoadAttemptedAndFailed = false; // For single notification on UPNG load failure
+    let upngLoadAttemptedAndFailed = false;
 
     async function loadResourceScript(resourceName, expectedGlobal) {
         if (window[expectedGlobal]) {
@@ -600,16 +670,13 @@
                 return null;
             }
 
-            // Indirect eval to run in the global scope
             (0, eval)(scriptText);
 
-            // Check if the expected global variable is now available
             if (window[expectedGlobal]) {
                 console.log(`Ultra Galleries: ${expectedGlobal} loaded from resource.`);
                 return window[expectedGlobal];
             }
 
-            // Fallback for libraries with different global names (like UPNG.js)
             const globalNameMap = { 'upngJsRaw': 'UPNG', 'pakoJsRaw': 'pako' };
             const actualGlobal = globalNameMap[resourceName];
             if (actualGlobal && window[actualGlobal]) {
@@ -625,7 +692,6 @@
         }
     }
 
-
     // ====================================================
     // Dexie Database Initialization
     // ====================================================
@@ -638,7 +704,6 @@
         }
         db = new Dexie('UltraGalleriesCache');
         db.version(1).stores({
-            // Store original URL as key, and the image blob, plus when it was cached
             imageCache: 'url, cachedAt, blob'
         });
         console.log("Ultra Galleries: Dexie database initialized.");
@@ -648,7 +713,6 @@
     async function evictOldestCacheItems(count) {
         if (!db) return 0;
         try {
-            // Get the keys (URLs) of the oldest items
             const oldestItemKeys = await db.imageCache.orderBy('cachedAt').limit(count).primaryKeys();
             if (oldestItemKeys && oldestItemKeys.length > 0) {
                 await db.imageCache.bulkDelete(oldestItemKeys);
@@ -698,7 +762,6 @@
         try {
             const record = await db.imageCache.get(url);
             if (record && record.blob) {
-                // console.log(`Ultra Galleries: Retrieved image from Dexie: ${url}`);
                 return record.blob;
             }
             return null;
@@ -749,39 +812,38 @@
             $container.toggleClass(CSS.GALLERY.ZOOMED, state.zoomScale !== 1);
         },
 
-    handleWheelZoom: (event) => {
-        if (!state.zoomEnabled || !galleryOverlay || !galleryOverlay.length) return;
+        handleWheelZoom: (event) => {
+            if (!state.zoomEnabled || !galleryOverlay || !galleryOverlay.length) return;
 
-        event.preventDefault();
-        event.stopPropagation();
+            event.preventDefault();
+            event.stopPropagation();
 
-        const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
-        const $image = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG}`);
-        if (!$image.length || !$container.length) return;
+            const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
+            if (!$container.length) return;
 
-        const containerDOM = $container[0];
-        // const imageDOM = $image[0]; // Not directly used for naturalWidth/Height here
-        const rect = containerDOM.getBoundingClientRect();
-        const originalEvent = event.originalEvent || event; // Get original DOM event for deltaY
+            const containerDOM = $container[0];
+            const rect = containerDOM.getBoundingClientRect();
+            const originalEvent = event.originalEvent || event;
 
-        const mouseX = originalEvent.clientX - rect.left;
-        const mouseY = originalEvent.clientY - rect.top;
-        const delta = Math.sign(originalEvent.deltaY) * -0.1; // Use originalEvent.deltaY for scroll direction
-        const newScale = Math.max(CONFIG.MIN_SCALE, Math.min(state.zoomScale + delta, CONFIG.MAX_SCALE));
+            const zoomFactor = 1 - Math.sign(originalEvent.deltaY) * CONFIG.ZOOM_STEP;
+            const newScale = Math.max(CONFIG.MIN_SCALE, Math.min(state.zoomScale * zoomFactor, CONFIG.MAX_SCALE));
 
-        // Calculate new offsets to keep zoom centered on mouse pointer
-        const imageXUnderPointer = (mouseX - state.imageOffset.x) / state.zoomScale;
-        const imageYUnderPointer = (mouseY - state.imageOffset.y) / state.zoomScale;
+            if (newScale === state.zoomScale) return;
+            const mouseX = originalEvent.clientX - rect.left;
+            const mouseY = originalEvent.clientY - rect.top;
 
-        const newOffsetX = mouseX - (imageXUnderPointer * newScale);
-        const newOffsetY = mouseY - (imageYUnderPointer * newScale);
+            const imageXUnderPointer = (mouseX - state.imageOffset.x) / state.zoomScale;
+            const imageYUnderPointer = (mouseY - state.imageOffset.y) / state.zoomScale;
 
-        state.imageOffset.x = newOffsetX;
-        state.imageOffset.y = newOffsetY;
-        state.zoomScale = newScale; // This will trigger the reactive 'zoomScale' callback
+            const newOffsetX = mouseX - (imageXUnderPointer * newScale);
+            const newOffsetY = mouseY - (imageYUnderPointer * newScale);
+
+            state.imageOffset.x = newOffsetX;
+            state.imageOffset.y = newOffsetY;
+            state.zoomScale = newScale;
         },
 
-        enforceBoundaries: (offsetX, offsetY, scale, containerRect, imageDOM) => { // imageDOM is DOM element
+        enforceBoundaries: (offsetX, offsetY, scale, containerRect, imageDOM) => {
             if (!imageDOM || !containerRect) return { x: offsetX, y: offsetY };
             const imgWidth = imageDOM.naturalWidth * scale;
             const imgHeight = imageDOM.naturalHeight * scale;
@@ -803,7 +865,6 @@
                 const maxY = (imgHeight - containerHeight) / 2;
                 const minY = -maxY;
                 if (offsetY > maxY) offsetY = maxY + ((offsetY - maxY) * CONFIG.PAN_RESISTANCE / scale);
-                // BUG FIX: Corrected a typo where offsetX was used instead of offsetY in the resistance calculation.
                 else if (offsetY < minY) offsetY = minY - ((minY - offsetY) * CONFIG.PAN_RESISTANCE / scale);
             }
             return { x: offsetX, y: offsetY };
@@ -811,7 +872,7 @@
 
         startDrag: (event) => {
             if (!galleryOverlay || !galleryOverlay.length) return;
-            if (event.button === 2 && event.type === 'mousedown') return; // Allow context menu on actual mousedown
+            if (event.button === 2 && event.type === 'mousedown') return;
 
             if (event.preventDefault) event.preventDefault();
             state.isDragging = true;
@@ -916,6 +977,12 @@
             }
         },
 
+        rotate: (direction) => {
+            if (!state.enableImageRotation) return;
+            const rotationStep = 90;
+            state.imageRotation = (state.imageRotation + (direction * rotationStep)) % 360;
+        },
+
         setupTouchEvents: () => {
           if (!galleryOverlay || !galleryOverlay.length) return;
           const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
@@ -947,7 +1014,7 @@
                       Zoom.applyZoom();
                   });
               }
-              state.lastTapTime = 0; // Prevent triple-tap issues
+              state.lastTapTime = 0;
           };
 
           const handlePinchStart = (e) => {
@@ -1077,7 +1144,6 @@
 
             buttonsConfig.forEach(config => {
                 let createThisButton = true;
-                // Check settings to determine if a button should be hidden
                 switch(config.name) {
                     case 'REMOVE':   if (state.hideRemoveButton)   createThisButton = false; break;
                     case 'FULL':     if (state.hideFullButton)     createThisButton = false; break;
@@ -1134,7 +1200,6 @@
             area.id = CSS.NOTIF_AREA;
             area.classList.add(CSS.NOTIF_AREA);
 
-            // Position based on user preference
             area.style.top = state.notificationPosition === 'top' ? '10px' : 'auto';
             area.style.bottom = state.notificationPosition === 'bottom' ? '10px' : 'auto';
 
@@ -1158,7 +1223,7 @@
             closeBtn.id = CSS.NOTIF_CLOSE;
             closeBtn.textContent = '×';
             closeBtn.addEventListener('click', () => {
-                state.notification = null; // Clicking 'x' dismisses notification
+                state.notification = null;
             });
             container.appendChild(closeBtn);
 
@@ -1173,7 +1238,6 @@
             return container;
         },
 
-        // A timeout ID for auto-hiding notifications
         _notificationTimeoutId: null,
 
         showNotification: (message, type = 'info') => {
@@ -1186,7 +1250,6 @@
 
             const isAlreadyVisible = container.style.display === 'flex' && !container.classList.contains('ug-slide-out');
 
-            // Always clear any pending hide-action and animation classes
             if (UI._notificationTimeoutId) {
                 clearTimeout(UI._notificationTimeoutId);
                 UI._notificationTimeoutId = null;
@@ -1195,28 +1258,24 @@
 
             const text = container.querySelector(`#${CSS.NOTIF_TEXT}`);
             text.textContent = message;
-            container.className = `${CSS.NOTIF_CONTAINER} ${type}`; // Set base and type classes
+            container.className = `${CSS.NOTIF_CONTAINER} ${type}`;
 
             if (state.animationsEnabled) {
                 if (isAlreadyVisible) {
-                    // Add update class to trigger pulse animation
                     container.classList.add('ug-update');
-                    // Clean up the animation class after it plays
                     container.addEventListener('animationend', () => {
                         container.classList.remove('ug-update');
                     }, { once: true });
                 } else {
-                    // If it was hidden, slide it in
                     container.classList.add('ug-slide-in');
                 }
             }
 
             container.style.display = 'flex';
 
-            // Set a new auto-hide timer for non-persistent messages
             if (['info', 'success'].includes(type)) {
                 UI._notificationTimeoutId = setTimeout(() => {
-                    state.notification = null; // Triggers hideNotification
+                    state.notification = null;
                 }, 5000);
             }
         },
@@ -1225,7 +1284,6 @@
             const container = document.getElementById(CSS.NOTIF_CONTAINER);
             if (!container) return;
 
-            // Clear any pending auto-hide timeout if manually hidden
             if (UI._notificationTimeoutId) {
                 clearTimeout(UI._notificationTimeoutId);
                 UI._notificationTimeoutId = null;
@@ -1248,7 +1306,7 @@
             }
             const container = document.getElementById(CSS.NOTIF_CONTAINER);
             if (container) {
-                container.remove(); // Remove it from the DOM immediately
+                container.remove();
             }
         },
 
@@ -1293,13 +1351,17 @@
                 {
                     title: 'General', key: 'general', settings: [
                         { id: 'animationsToggle', label: 'Enable Animations', type: 'checkbox', stateKey: 'animationsEnabled', gmKey: 'animationsEnabled' },
-                        { id: 'bottomStripeToggle', label: 'Show Thumbnail Strip', type: 'checkbox', stateKey: 'bottomStripeVisible', gmKey: 'bottomStripeVisible' }
+                        { id: 'bottomStripeToggle', label: 'Show Thumbnail Strip', type: 'checkbox', stateKey: 'bottomStripeVisible', gmKey: 'bottomStripeVisible' },
+                        { id: 'autoHideControlsToggle', label: 'Auto-Hide Controls', type: 'checkbox', stateKey: 'autoHideControls', gmKey: 'autoHideControls' },
+                        { id: 'showImageInfoToggle', label: 'Show Image Information', type: 'checkbox', stateKey: 'showImageInfo', gmKey: 'showImageInfo' }
                     ]
                 },
                 {
                     title: 'Pan & Zoom', key: 'panZoom', settings: [
                         { id: 'zoomEnabledToggle', label: 'Enable Zoom & Pan', type: 'checkbox', stateKey: 'zoomEnabled', gmKey: 'zoomEnabled' },
-                        { id: 'inertiaEnabledToggle', label: 'Enable Smooth Pan Inertia', type: 'checkbox', stateKey: 'inertiaEnabled', gmKey: 'inertiaEnabled' }
+                        { id: 'inertiaEnabledToggle', label: 'Enable Smooth Pan Inertia', type: 'checkbox', stateKey: 'inertiaEnabled', gmKey: 'inertiaEnabled' },
+                        { id: 'enableImageRotationToggle', label: 'Enable Image Rotation', type: 'checkbox', stateKey: 'enableImageRotation', gmKey: 'enableImageRotation' },
+                        { id: 'maxZoomScaleInput', label: 'Max Zoom Scale:', type: 'text', stateKey: 'maxZoomScale', gmKey: 'maxZoomScale', maxLength: 3 }
                     ]
                 },
                 {
@@ -1316,7 +1378,8 @@
                     title: 'Keyboard', key: 'keys', settings: [
                         { id: 'galleryKeyInput', label: 'Gallery Key:', type: 'text', stateKey: 'galleryKey', gmKey: 'galleryKey', maxLength: 1 },
                         { id: 'prevImageKeyInput', label: 'Previous Image Key:', type: 'text', stateKey: 'prevImageKey', gmKey: 'prevImageKey', maxLength: 1 },
-                        { id: 'nextImageKeyInput', label: 'Next Image Key:', type: 'text', stateKey: 'nextImageKey', gmKey: 'nextImageKey', maxLength: 1 }
+                        { id: 'nextImageKeyInput', label: 'Next Image Key:', type: 'text', stateKey: 'nextImageKey', gmKey: 'nextImageKey', maxLength: 1 },
+                        { id: 'enableKeyboardShortcutsToggle', label: 'Enable Keyboard Shortcuts', type: 'checkbox', stateKey: 'enableKeyboardShortcuts', gmKey: 'enableKeyboardShortcuts' }
                     ]
                 },
                 {
@@ -1418,7 +1481,7 @@
     };
 
     // ====================================================
-    // Gallery Module
+    // Optimized Gallery Module
     // ====================================================
 
     let galleryOverlay = null;
@@ -1437,14 +1500,13 @@
             Gallery._preloadedImageCache = {};
             Gallery._preloadingInProgress = {};
 
-            // Also revoke blob URLs from the global loadedBlobUrls map
             for (const blobUrl of loadedBlobUrls.values()) {
                 if (typeof blobUrl === 'string' && blobUrl.startsWith('blob:')) {
                     try { URL.revokeObjectURL(blobUrl); } catch (e) { /* silent */ }
                 }
             }
-            loadedBlobUrls.clear(); // Clear the map after revoking
-            loadedBlobs.clear();    // Clear the blobs map
+            loadedBlobUrls.clear();
+            loadedBlobs.clear();
         },
 
         _fetchAndCacheImage: async function(indexToPreload, sessionId = null) {
@@ -1452,7 +1514,7 @@
             if (Gallery._preloadedImageCache[indexToPreload] || Gallery._preloadingInProgress[indexToPreload]) return;
 
             const mediaItem = state.originalImageSrcs[indexToPreload];
-            if (!mediaItem || mediaItem.type !== 'image') return; // Do not preload videos
+            if (!mediaItem || mediaItem.type !== 'image') return;
 
             if (sessionId !== null && state.currentLoadSessionId !== sessionId) {
                 return;
@@ -1491,7 +1553,7 @@
                         });
                     });
                     if (sessionId !== null && state.currentLoadSessionId !== sessionId) {
-                         // Optionally revoke blob if not storing: if(blobToCache) URL.revokeObjectURL(URL.createObjectURL(blobToCache));
+                         return;
                     } else {
                          if (blobToCache && state.enablePersistentCaching && db && !loadedFromPersistentCache) {
                              await storeImageInDexie(originalImageUrl, blobToCache);
@@ -1500,10 +1562,8 @@
                 }
 
                 if (sessionId !== null && state.currentLoadSessionId !== sessionId) {
-                    // console.log(`Ultra Galleries: Discarding loaded blob for index ${indexToPreload} (Session: ${sessionId}) - Session stale (after load).`);
-                    // Optionally revoke blob if it was fetched: if(blobToCache && !loadedFromPersistentCache) { ... }
-                    Gallery._preloadedImageCache[indexToPreload] = 'failed_preload'; // Mark as failed or just return?
-                    delete Gallery._preloadingInProgress[indexToPreload]; // Clean up flag early
+                    Gallery._preloadedImageCache[indexToPreload] = 'failed_preload';
+                    delete Gallery._preloadingInProgress[indexToPreload];
                     return;
                 }
 
@@ -1514,10 +1574,6 @@
                 }
             } catch (error) {
                 if (error.message === 'Stale session') {
-                    // console.log(`Ultra Galleries: Preload for index ${indexToPreload} aborted due to stale session.`);
-                    // Optionally, don't mark as failed if it's just a stale session abort?
-                    // Gallery._preloadedImageCache[indexToPreload] = 'aborted_stale_session';
-                    // Or just leave it unset/undefined to allow retry on next session?
                     delete Gallery._preloadingInProgress[indexToPreload];
                     return;
                 }
@@ -1532,12 +1588,13 @@
 
         _preloadAdjacentImages: function(currentIndex) {
             const sessionId = state.currentLoadSessionId;
-            Gallery._fetchAndCacheImage(currentIndex + 1, sessionId);
-            Gallery._fetchAndCacheImage(currentIndex - 1, sessionId);
+            for (let i = 1; i <= CONFIG.PRELOAD_DISTANCE; i++) {
+                Gallery._fetchAndCacheImage(currentIndex + i, sessionId);
+                Gallery._fetchAndCacheImage(currentIndex - i, sessionId);
+            }
         },
 
         _createGalleryOverlayAndContainer: function() {
-            // Ensure galleryOverlay is initialized as a jQuery object
             galleryOverlay = $('<div>').attr('id', 'gallery-overlay').addClass(CSS.GALLERY.OVERLAY);
             const $container = $('<div>').addClass(CSS.GALLERY.CONTAINER).appendTo(galleryOverlay);
             return $container;
@@ -1561,26 +1618,44 @@
         _createExpandedViewToolbar: function($expandedViewElement) {
             const $toolbar = $('<div>').addClass(CSS.GALLERY.TOOLBAR).on('mousedown', e => e.stopPropagation());
 
-            // Reset button on the left
+            // Reset button
             $('<button>').attr({id: 'reset-btn', title: 'Reset Zoom & Position'}).addClass(CSS.GALLERY.TOOLBAR_BTN)
                 .text('Reset').on('click', Zoom.resetZoom).appendTo($toolbar);
 
-            // Zoom controls
+            // Zoom controls with properly sized inline SVGs
             const $zoomControls = $('<div>').addClass('zoom-controls').appendTo($toolbar);
-            $('<button>').attr({id: 'zoom-out-btn', title: 'Zoom Out'}).addClass(CSS.GALLERY.TOOLBAR_BTN)
-                .html('<img src="https://www.svgrepo.com/show/263638/zoom-out-search.svg" alt="Zoom Out" style="filter: invert(100%); pointer-events: none;">')
+            
+            // Zoom out button with fixed inline SVG
+            const $zoomOutBtn = $('<button>').attr({id: 'zoom-out-btn', title: 'Zoom Out'}).addClass(CSS.GALLERY.TOOLBAR_BTN)
                 .on('click', () => Zoom.zoom(-CONFIG.ZOOM_STEP)).appendTo($zoomControls);
+            $zoomOutBtn.html('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path><line x1="8" y1="11" x2="14" y2="11"></line></svg>');
+            
             $('<span>').attr('id', 'zoom-level').addClass('zoom-level').text('100%').appendTo($zoomControls);
-            $('<button>').attr({id: 'zoom-in-btn', title: 'Zoom In'}).addClass(CSS.GALLERY.TOOLBAR_BTN)
-                .html('<img src="https://www.svgrepo.com/show/263635/zoom-in.svg" alt="Zoom In" style="filter: invert(100%); pointer-events: none;">')
+            
+            // Zoom in button with inline SVG
+            const $zoomInBtn = $('<button>').attr({id: 'zoom-in-btn', title: 'Zoom In'}).addClass(CSS.GALLERY.TOOLBAR_BTN)
                 .on('click', () => Zoom.zoom(CONFIG.ZOOM_STEP)).appendTo($zoomControls);
+            $zoomInBtn.html('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>');
+
+            // Rotation controls
+            if (state.enableImageRotation) {
+                const $rotationControls = $('<div>').addClass('rotation-controls').appendTo($toolbar);
+                
+                const $rotateLeftBtn = $('<button>').attr({id: 'rotate-left-btn', title: 'Rotate Left'}).addClass(CSS.GALLERY.TOOLBAR_BTN)
+                    .on('click', () => Zoom.rotate(-1)).appendTo($rotationControls);
+                $rotateLeftBtn.html('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>');
+                
+                const $rotateRightBtn = $('<button>').attr({id: 'rotate-right-btn', title: 'Rotate Right'}).addClass(CSS.GALLERY.TOOLBAR_BTN)
+                    .on('click', () => Zoom.rotate(1)).appendTo($rotationControls);
+                $rotateRightBtn.html('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>');
+            }
 
             // Fullscreen button
             $('<button>').text(BUTTONS.FULLSCREEN).addClass(CSS.GALLERY.FULLSCREEN).addClass(CSS.GALLERY.TOOLBAR_BTN)
                 .attr('aria-label', 'Toggle Fullscreen').on('click', Gallery.toggleFullscreen)
                 .appendTo($toolbar);
 
-            // Close button on the right
+            // Close button
             $('<button>').addClass(CSS.GALLERY.TOOLBAR_BTN).text(BUTTONS.CLOSE)
                 .attr('aria-label', 'Close Expanded View').on('click', Gallery.showGridView)
                 .appendTo($toolbar);
@@ -1591,12 +1666,21 @@
         _createExpandedViewMainImageArea: function($expandedViewElement) {
             const $zoomContainer = $('<div>').addClass(CSS.GALLERY.ZOOM_CONTAINER).appendTo($expandedViewElement);
             const $mainImageContainer = $('<div>').addClass(CSS.GALLERY.MAIN_IMG_CONTAINER).addClass('image-container').appendTo($zoomContainer);
+            
+            // Add rotation container
+            const $rotationContainer = $('<div>').addClass(CSS.GALLERY.ROTATION_CONTAINER).appendTo($mainImageContainer);
+            
+            // Add image info container
+            if (state.showImageInfo) {
+                const $imageInfo = $('<div>').addClass(CSS.GALLERY.IMAGE_INFO).appendTo($expandedViewElement);
+                $imageInfo.text('Loading image info...');
+            }
+            
             $('<div>').addClass('pan-indicator')
                 .css({position:'absolute',top:'15px',left:'15px',zIndex:'10',opacity:'0',transition:'opacity 0.3s ease',pointerEvents:'none'})
                 .html(`<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="white" opacity="0.7"><path d="M10 9h4V6h3l-5-5-5 5h3v3zm-1 1H6V7l-5 5 5 5v-3h3v-4zm14 2l-5-5v3h-3v4h3v3l5-5zm-9 3h-4v3H7l5 5 5-5h-3v-3z"/></svg>`)
                 .appendTo($mainImageContainer);
-            // Media elements will be added dynamically here
-            return { $mainImageContainer };
+            return { $mainImageContainer, $rotationContainer };
         },
 
         _createExpandedViewNavigationAndCounter: function($expandedViewElement) {
@@ -1617,19 +1701,28 @@
         },
 
         _populateAllThumbnails: function($gridThumbnailsContainer, $stripThumbnailsContainer) {
+            const gridFragment = document.createDocumentFragment();
+            const stripFragment = document.createDocumentFragment();
+
             state.fullSizeImageSrcs.forEach((mediaItem, index) => {
                 if (mediaItem) {
                     const thumbSrc = mediaItem.type === 'video' ? mediaItem.poster : mediaItem.src;
+
                     const $gridThumbImg = $('<img>').attr('src', thumbSrc).addClass(CSS.GALLERY.THUMBNAIL)
                         .data('index', index).on('click', () => Gallery.showExpandedView(index))
                         .attr('aria-label', `Open media ${index + 1}`);
-                    $('<div>').addClass(CSS.GALLERY.THUMBNAIL_CONTAINER).append($gridThumbImg).appendTo($gridThumbnailsContainer);
+                    const $gridContainer = $('<div>').addClass(CSS.GALLERY.THUMBNAIL_CONTAINER).append($gridThumbImg);
+                    gridFragment.appendChild($gridContainer[0]);
 
-                    $('<img>').attr('src', thumbSrc).addClass(CSS.GALLERY.THUMBNAIL_ITEM)
+                    const $stripThumbImg = $('<img>').attr('src', thumbSrc).addClass(CSS.GALLERY.THUMBNAIL_ITEM)
                         .data('index', index).on('click', () => Gallery.showExpandedView(index))
-                        .attr('aria-label', `Thumbnail ${index + 1}`).appendTo($stripThumbnailsContainer);
+                        .attr('aria-label', `Thumbnail ${index + 1}`);
+                    stripFragment.appendChild($stripThumbImg[0]);
                 }
             });
+
+            $gridThumbnailsContainer[0].appendChild(gridFragment);
+            $stripThumbnailsContainer[0].appendChild(stripFragment);
         },
 
         _setupGalleryInteractions: function($expandedViewElement, $mainImageContainerElement) {
@@ -1683,16 +1776,19 @@
             $expandedViewElement.on('mousemove', () => {
                 state.controlsVisible = true;
                 clearTimeout(controlsTimeout);
-                controlsTimeout = setTimeout(() => {
-                    if (!state.isDragging && !state.pinchZoomActive) state.controlsVisible = false;
-                }, 3000);
+                if (state.autoHideControls) {
+                    controlsTimeout = setTimeout(() => {
+                        if (!state.isDragging && !state.pinchZoomActive) state.controlsVisible = false;
+                    }, state.autoHideDelay);
+                }
             });
             state.controlsVisible = true;
             clearTimeout(controlsTimeout);
-            controlsTimeout = setTimeout(() => {
-                if (!state.isDragging && !state.pinchZoomActive) state.controlsVisible = false;
-            }, 3000);
-
+            if (state.autoHideControls) {
+                controlsTimeout = setTimeout(() => {
+                    if (!state.isDragging && !state.pinchZoomActive) state.controlsVisible = false;
+                }, state.autoHideDelay);
+            }
 
             Zoom.setupTouchEvents();
 
@@ -1707,16 +1803,19 @@
                 return;
             }
 
+            const fragment = document.createDocumentFragment();
+            galleryOverlay = $('<div>').attr('id', 'gallery-overlay').addClass(CSS.GALLERY.OVERLAY);
             const $galleryContentContainer = Gallery._createGalleryOverlayAndContainer();
             const { $gridView, $expandedView } = Gallery._createBaseViews($galleryContentContainer);
             const $gridThumbnailsContainer = Gallery._createGridViewContent($gridView);
 
             Gallery._createExpandedViewToolbar($expandedView);
-            const { $mainImageContainer } = Gallery._createExpandedViewMainImageArea($expandedView);
+            const { $mainImageContainer, $rotationContainer } = Gallery._createExpandedViewMainImageArea($expandedView);
             Gallery._createExpandedViewNavigationAndCounter($expandedView);
             const $stripThumbnailsContainer = Gallery._createExpandedViewThumbnailStrip($expandedView);
 
-            $('body').append(galleryOverlay);
+            fragment.appendChild(galleryOverlay[0]);
+            document.body.appendChild(fragment);
 
             Gallery._populateAllThumbnails($gridThumbnailsContainer, $stripThumbnailsContainer);
             Gallery._setupGalleryInteractions($expandedView, $mainImageContainer);
@@ -1738,12 +1837,14 @@
             if (!galleryOverlay || !galleryOverlay.length || index < 0 || index >= state.fullSizeImageSrcs.length) return;
 
             const $mainMediaContainer = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
+            const $rotationContainer = galleryOverlay.find(`.${CSS.GALLERY.ROTATION_CONTAINER}`);
             const $counter = galleryOverlay.find(`.${CSS.GALLERY.COUNTER}`);
             const $prevButton = galleryOverlay.find(`.${CSS.GALLERY.PREV}`);
             const $nextButton = galleryOverlay.find(`.${CSS.GALLERY.NEXT}`);
             const $thumbnailStrip = galleryOverlay.find(`.${CSS.GALLERY.THUMBNAIL_STRIP}`);
             const $zoomControls = galleryOverlay.find('.zoom-controls');
             const $resetBtn = galleryOverlay.find('#reset-btn');
+            const $imageInfo = galleryOverlay.find(`.${CSS.GALLERY.IMAGE_INFO}`);
 
             if (!$mainMediaContainer.length || !$counter.length) return;
 
@@ -1757,38 +1858,63 @@
                 return;
             }
 
-            // Clear previous content and reset state
             $mainMediaContainer.empty();
-            $mainMediaContainer.removeClass(CSS.GALLERY.ZOOMED).css({width:'100%',height:'100%',display:'flex',justifyContent:'center',alignItems:'center',overflow:'hidden'});
+            $mainMediaContainer.removeClass(CSS.GALLERY.ZOOMED).css({
+                width:'100%',
+                height:'100%',
+                display:'flex',
+                justifyContent:'center',
+                alignItems:'center',
+                overflow:'hidden'
+            });
             Zoom.resetZoom();
+            state.imageRotation = 0;
 
             if (mediaItem.type === 'image') {
                 $zoomControls.show();
                 $resetBtn.show();
                 $mainMediaContainer.css('cursor', 'grab');
 
-                const $mainImage = $('<img>').addClass(CSS.GALLERY.MAIN_IMG).appendTo($mainMediaContainer);
-                $mainImage.addClass('loading').removeClass('error').css({maxWidth:'100%',maxHeight:'100%',objectFit:'contain',position:'relative'});
+                const $mainImage = $('<img>').addClass(CSS.GALLERY.MAIN_IMG).appendTo($rotationContainer);
+                $mainImage.addClass('loading').removeClass('error').css({
+                    maxWidth:'100%',
+                    maxHeight:'100%',
+                    objectFit:'contain',
+                    position:'relative'
+                });
 
                 $mainImage.off('load error').on('load', () => {
                     $mainImage.removeClass('loading');
                     Zoom.initializeImage($mainImage[0], $mainMediaContainer[0]);
                     Gallery._preloadAdjacentImages(index);
+                    
+                    // Update image info
+                    if (state.showImageInfo && $imageInfo.length) {
+                        const dimensions = Utils.formatImageInfo($mainImage[0]);
+                        const fileSize = mediaItem.fileSize ? Utils.formatFileSize(mediaItem.fileSize) : 'Unknown';
+                        $imageInfo.text(`${dimensions} | ${fileSize}`);
+                    }
                 }).on('error', () => {
-                    $mainImage.removeClass('loading').addClass('error').attr({src:'', alt:"Error loading image"});
+                    $mainImage.removeClass('loading').addClass('error').attr({
+                        src:'',
+                        alt:"Error loading image"
+                    });
                     $mainMediaContainer.append($('<div>').addClass(CSS.GALLERY.IMAGE_ERROR_MSG).text('Failed to load image'));
                     Gallery._preloadAdjacentImages(index);
                 });
 
                 let imageUrlToLoad = Gallery._preloadedImageCache[index] || mediaItem.src;
-                $mainImage.attr({src: imageUrlToLoad, alt: `Image ${index + 1}`});
+                $mainImage.attr({
+                    src: imageUrlToLoad,
+                    alt: `Image ${index + 1}`
+                });
 
             } else if (mediaItem.type === 'video') {
                 $zoomControls.hide();
                 $resetBtn.hide();
                 $mainMediaContainer.css('cursor', 'default');
 
-                const $mainVideo = $('<video>').addClass(CSS.GALLERY.MAIN_VIDEO).appendTo($mainMediaContainer);
+                const $mainVideo = $('<video>').addClass(CSS.GALLERY.MAIN_VIDEO).appendTo($rotationContainer);
                 $mainVideo.attr({
                     src: mediaItem.src,
                     poster: mediaItem.poster,
@@ -1797,6 +1923,11 @@
                     loop: true,
                     muted: true
                 });
+                
+                // Update image info for video
+                if (state.showImageInfo && $imageInfo.length) {
+                    $imageInfo.text('Video');
+                }
             }
 
             $counter.text(`${index + 1} / ${state.fullSizeImageSrcs.length}`);
@@ -1889,7 +2020,7 @@
     };
 
     // ====================================================
-    // Image Loading Module
+    // Optimized Image Loading Module
     // ====================================================
 
     let loadedBlobUrls = new Map();
@@ -1923,7 +2054,7 @@
                     });
                 });
                 images.forEach(img => observer.observe(img));
-                setTimeout(resolve, 2000); // Fallback timeout in case images are not intersecting
+                setTimeout(resolve, 2000);
             });
         },
 
@@ -1937,76 +2068,79 @@
             reject(new Error(`Failed to fetch image (${status}): ${mediaSrc}`));
         },
 
-        retryWithBackoff: async (loadFn, retries = CONFIG.MAX_RETRIES, delay = CONFIG.RETRY_DELAY, mediaSrc) => {
+        fetchWithRetry: async (url, sessionId, retries = CONFIG.MAX_RETRIES, delay = CONFIG.RETRY_DELAY) => {
             try {
-                return await loadFn();
+                return await new Promise((resolve, reject) => {
+                    if (state.currentLoadSessionId !== sessionId) reject(new Error('Stale session'));
+
+                    GM.xmlHttpRequest({
+                        method: 'GET',
+                        url: url,
+                        responseType: 'blob',
+                        timeout: 10000,
+                        onload: (response) => {
+                            if (response.status === 200 || response.status === 206) {
+                                resolve(response.response);
+                            } else {
+                                reject(new Error(`HTTP ${response.status}`));
+                            }
+                        },
+                        onerror: (error) => reject(error),
+                        ontimeout: () => reject(new Error('Request timeout'))
+                    });
+                });
             } catch (err) {
-                if (err.message === 'Stale session') {
-                    throw err;
-                }
-                if (retries <= 0) {
-                    console.error(`Failed to load ${mediaSrc} after ${CONFIG.MAX_RETRIES} retries.`);
-                    throw err;
-                }
-                console.log(`Retrying load for ${mediaSrc}, ${retries} attempts remaining`);
+                if (err.message === 'Stale session') throw err;
+                if (retries <= 0) throw err;
+
+                console.log(`Retrying fetch for ${url}, ${retries} attempts remaining`);
                 await Utils.delay(delay);
-                return ImageLoader.retryWithBackoff(loadFn, retries - 1, delay * 1.5, mediaSrc);
+                return ImageLoader.fetchWithRetry(url, sessionId, retries - 1, delay * 1.5);
             }
         },
 
         loadImageAndApplyToPage: async (linkElement, galleryIndex, posterHref, isUniqueForGallery, sessionId, itemData) => {
             const imgElement = linkElement.querySelector('img');
             if (!imgElement) {
-                console.warn(`ImageLoader: No img found for linkElement:`, linkElement);
-                if (state.currentLoadSessionId === sessionId) {
-                    state.loadedImages++;
-                }
+                if (state.currentLoadSessionId === sessionId) state.loadedImages++;
                 return;
             }
+
             if (!imgElement.classList.contains('post__image')) {
                 imgElement.classList.add('post__image');
             }
 
+            const cacheKey = itemData.originalUrl;
+            let blobToStore = loadedBlobs.get(cacheKey);
             let blobUrlToUse = loadedBlobUrls.get(posterHref);
-            let blobToStore = loadedBlobs.get(itemData.originalUrl); // **Crucially, check for the main media blob**
 
             if (!blobToStore) {
                 try {
                     if (state.currentLoadSessionId !== sessionId) throw new Error('Stale session');
 
                     if (state.enablePersistentCaching && db) {
-                        const cachedBlob = await getImageFromDexie(itemData.originalUrl);
+                        const cachedBlob = await getImageFromDexie(cacheKey);
                         if (cachedBlob) blobToStore = cachedBlob;
                     }
 
                     if (!blobToStore) {
-                        blobToStore = await ImageLoader.retryWithBackoff(async () => {
-                            if (state.currentLoadSessionId !== sessionId) throw new Error('Stale session');
-                            return new Promise((resolve, reject) => {
-                                GM.xmlHttpRequest({
-                                    method: 'GET', url: itemData.originalUrl, responseType: 'blob',
-                                    onload: (response) => (response.status === 200 || response.status === 206) ? resolve(response.response) : reject(new Error(`HTTP ${response.status}`)),
-                                    onerror: (error) => reject(error),
-                                });
-                            });
-                        }, CONFIG.MAX_RETRIES, CONFIG.RETRY_DELAY, itemData.originalUrl);
+                        blobToStore = await ImageLoader.fetchWithRetry(cacheKey, sessionId);
 
                         if (state.currentLoadSessionId !== sessionId) return;
-                        if (blobToStore && state.enablePersistentCaching && db) {
-                            await storeImageInDexie(itemData.originalUrl, blobToStore);
+
+                        if (blobToStore && state.enablePersistentCaching && db && !loadedFromPersistentCache) {
+                            await storeImageInDexie(cacheKey, blobToStore);
                         }
                     }
 
                     if (state.currentLoadSessionId !== sessionId) return;
+                    if (!blobToStore) throw new Error("Blob could not be obtained for " + cacheKey);
 
-                    if (!blobToStore) {
-                        throw new Error("Blob could not be obtained for " + itemData.originalUrl);
-                    }
-                    loadedBlobs.set(itemData.originalUrl, blobToStore); // Store the main media blob
+                    loadedBlobs.set(cacheKey, blobToStore);
                 } catch (error) {
                     if (error.message === 'Stale session') throw error;
                     if (state.currentLoadSessionId === sessionId) {
-                        console.error(`Ultra Galleries: Failed to load media: ${itemData.originalUrl}`, error);
+                        console.error(`Ultra Galleries: Failed to load media: ${cacheKey}`, error);
                         state.errorCount++;
                         state.loadedImages++;
                     }
@@ -2014,56 +2148,47 @@
                 }
             }
 
-            // For the thumbnail on the page, we still need a blob URL of the poster/image itself
             if (!blobUrlToUse) {
-                 if (posterHref === itemData.originalUrl) {
-                     blobUrlToUse = URL.createObjectURL(blobToStore);
-                 } else {
-                     // This is a video with a separate poster, we need to fetch the poster
+                if (posterHref === cacheKey) {
+                    blobUrlToUse = URL.createObjectURL(blobToStore);
+                } else {
                     try {
-                        const posterBlob = await new Promise((resolve, reject) => {
-                             GM.xmlHttpRequest({
-                                method: 'GET', url: posterHref, responseType: 'blob',
-                                onload: (response) => (response.status === 200 || response.status === 206) ? resolve(response.response) : reject(new Error(`HTTP ${response.status}`)),
-                                onerror: (error) => reject(error),
-                            });
-                        });
+                        const posterBlob = await ImageLoader.fetchWithRetry(posterHref, sessionId);
                         blobUrlToUse = URL.createObjectURL(posterBlob);
                     } catch(e) {
-                         console.error(`Failed to load video poster: ${posterHref}`, e);
-                         blobUrlToUse = ''; // fallback
+                        console.error(`Failed to load video poster: ${posterHref}`, e);
+                        blobUrlToUse = '';
                     }
-                 }
-                 loadedBlobUrls.set(posterHref, blobUrlToUse);
+                }
+                loadedBlobUrls.set(posterHref, blobUrlToUse);
             }
-
 
             if (state.currentLoadSessionId !== sessionId) return;
 
             imgElement.src = blobUrlToUse;
-            imgElement.dataset.originalSrc = itemData.originalUrl;
+            imgElement.dataset.originalSrc = cacheKey;
             imgElement.classList.add('ug-image-loaded');
-
 
             if (isUniqueForGallery) {
                 if (itemData.type === 'video') {
                     state.fullSizeImageSrcs[galleryIndex] = {
                         type: 'video',
-                        src: itemData.originalUrl,
+                        src: cacheKey,
                         poster: blobUrlToUse
                     };
                 } else {
                     state.fullSizeImageSrcs[galleryIndex] = {
                         type: 'image',
                         src: URL.createObjectURL(blobToStore),
-                        originalSrc: itemData.originalUrl
+                        originalSrc: cacheKey,
+                        fileSize: blobToStore.size
                     };
                 }
 
                 state.originalImageSrcs[galleryIndex] = {
-                    src: itemData.originalUrl,
+                    src: cacheKey,
                     type: itemData.type,
-                    fileName: linkElement.getAttribute('download') || itemData.originalUrl.split('/').pop()
+                    fileName: linkElement.getAttribute('download') || cacheKey.split('/').pop()
                 };
 
                 state.mediaLoaded[galleryIndex] = true;
@@ -2071,62 +2196,105 @@
             state.loadedImages++;
         },
 
+        collectUniqueMediaItems: (postContainer) => {
+            const uniqueGalleryItems = new Map();
+            const mediaSelectors = [SELECTORS.IMAGE_LINK, SELECTORS.ATTACHMENT_LINK, SELECTORS.VIDEO_LINK];
+
+            postContainer.querySelectorAll(mediaSelectors.join(', ')).forEach(linkElement => {
+                const isVideo = linkElement.matches(SELECTORS.VIDEO_LINK);
+                const isAttachment = linkElement.matches(SELECTORS.ATTACHMENT_LINK);
+                let url, poster, type = 'image';
+
+                if (isVideo) {
+                    type = 'video';
+                    url = linkElement.getAttribute('href')?.split('?')[0];
+                    poster = linkElement.querySelector('img, video')?.getAttribute('poster') || linkElement.querySelector('img')?.src;
+                    if (!url || !poster) return;
+                    if (!uniqueGalleryItems.has(url)) {
+                        uniqueGalleryItems.set(url, { linkElement, originalUrl: url, posterUrl: poster, type: 'video' });
+                    }
+                } else {
+                    url = Utils.handleMediaSrc(linkElement);
+                    if (!url) return;
+                    if (isAttachment && !/\.(jpe?g|png|gif|webp)$/i.test(linkElement.getAttribute('download') || url)) return;
+                    if (!uniqueGalleryItems.has(url)) {
+                        uniqueGalleryItems.set(url, { linkElement, originalUrl: url, posterUrl: url, type: 'image' });
+                    }
+                }
+            });
+
+            return uniqueGalleryItems;
+        },
+
+        processItemsInBatches: async (items, sessionId) => {
+            const batchSize = CONFIG.BATCH_SIZE;
+            for (let i = 0; i < items.length; i += batchSize) {
+                const batch = items.slice(i, i + batchSize);
+
+                const batchPromises = batch.map((item, index) => {
+                    if (state.currentLoadSessionId !== sessionId) return Promise.resolve();
+                    return ImageLoader.loadImageAndApplyToPage(
+                        item.linkElement,
+                        i + index,
+                        item.posterUrl,
+                        true,
+                        sessionId,
+                        item
+                    ).catch(error => {
+                        if (error.message !== 'Stale session') console.error("An item failed to process:", error);
+                    });
+                });
+
+                await Promise.all(batchPromises);
+
+                if (i + batchSize < items.length) {
+                    await Utils.delay(50);
+                }
+            }
+        },
+
+        updateFinalStatus: () => {
+            if (state.loadedImages === state.totalImages && state.totalImages > 0 && state.errorCount === 0) {
+                state.notification = `Media Done Loading! Total: ${state.totalImages}`;
+                state.notificationType = 'success';
+            } else if (state.errorCount > 0) {
+                state.notification = `Gallery: ${state.errorCount} error(s). Loaded: ${state.loadedImages}/${state.totalImages} items.`;
+                state.notificationType = 'warning';
+            } else if (state.loadedImages < state.totalImages && state.totalImages > 0) {
+                state.notification = `Gallery: Partially loaded (${state.loadedImages}/${state.totalImages} items).`;
+                state.notificationType = 'warning';
+            } else if (state.totalImages === 0) {
+                state.notification = 'No media found for gallery.';
+                state.notificationType = 'info';
+            }
+        },
+
         loadImages: async () => {
             const postContainer = document.querySelector('section.site-section--post');
-            if (!postContainer || !Utils.isPostPage() || state.isLoading) {
-                return;
-            }
+            if (!postContainer || !Utils.isPostPage() || state.isLoading) return;
 
             const sessionId = Date.now();
             state.currentLoadSessionId = sessionId;
 
             try {
                 state.isLoading = true;
+                await Utils.delay(16);
 
-                // === FIX FOR SPA NOTIFICATION FLICKER ===
-                // Introduce a micro-delay to allow the UI from the previous page
-                // to finish its cleanup animation before showing a new notification.
-                await Utils.delay(16); // Waits for roughly one browser frame.
-
-                // After the delay, we must check if the session is still valid,
-                // in case the user navigated again very quickly.
                 if (state.currentLoadSessionId !== sessionId) return;
-
                 state.loadingMessage = 'Loading Media...';
-                // === END FIX ===
 
                 loadedBlobUrls.clear();
                 loadedBlobs.clear();
                 Object.assign(state, {
-                    fullSizeImageSrcs: [], originalImageSrcs: [], virtualGallery: [],
-                    loadedImages: 0, mediaLoaded: {}, errorCount: 0
+                    fullSizeImageSrcs: [],
+                    originalImageSrcs: [],
+                    virtualGallery: [],
+                    loadedImages: 0,
+                    mediaLoaded: {},
+                    errorCount: 0
                 });
 
-                const uniqueGalleryItems = new Map();
-                const mediaSelectors = [SELECTORS.IMAGE_LINK, SELECTORS.ATTACHMENT_LINK, SELECTORS.VIDEO_LINK];
-
-                postContainer.querySelectorAll(mediaSelectors.join(', ')).forEach(linkElement => {
-                    const isVideo = linkElement.matches(SELECTORS.VIDEO_LINK);
-                    const isAttachment = linkElement.matches(SELECTORS.ATTACHMENT_LINK);
-                    let url, poster, type = 'image';
-
-                    if (isVideo) {
-                        type = 'video';
-                        url = linkElement.getAttribute('href')?.split('?')[0];
-                        poster = linkElement.querySelector('img, video')?.getAttribute('poster') || linkElement.querySelector('img')?.src;
-                        if (!url || !poster) return;
-                        if (!uniqueGalleryItems.has(url)) {
-                            uniqueGalleryItems.set(url, { linkElement, originalUrl: url, posterUrl: poster, type: 'video' });
-                        }
-                    } else {
-                        url = Utils.handleMediaSrc(linkElement);
-                        if (!url) return;
-                        if (isAttachment && !/\.(jpe?g|png|gif|webp)$/i.test(linkElement.getAttribute('download') || url)) return;
-                        if (!uniqueGalleryItems.has(url)) {
-                            uniqueGalleryItems.set(url, { linkElement, originalUrl: url, posterUrl: url, type: 'image' });
-                        }
-                    }
-                });
+                const uniqueGalleryItems = ImageLoader.collectUniqueMediaItems(postContainer);
 
                 if (state.currentLoadSessionId !== sessionId) return;
 
@@ -2140,31 +2308,11 @@
                 await ImageLoader.simulateScrollDown();
                 Utils.ensureThumbnailsExist();
 
-                const processingPromises = uniqueItems.map((item, index) => {
-                    if (state.currentLoadSessionId !== sessionId) return Promise.resolve();
-                    return ImageLoader.loadImageAndApplyToPage(item.linkElement, index, item.posterUrl, true, sessionId, item)
-                        .catch(error => {
-                            if (error.message !== 'Stale session') console.error("An item failed to process:", error);
-                        });
-                });
-
-                await Promise.all(processingPromises);
+                await ImageLoader.processItemsInBatches(uniqueItems, sessionId);
 
                 if (state.currentLoadSessionId !== sessionId) return;
 
-                if (state.loadedImages === state.totalImages && state.totalImages > 0 && state.errorCount === 0) {
-                    state.notification = `Media Done Loading! Total: ${state.totalImages}`;
-                    state.notificationType = 'success';
-                } else if (state.errorCount > 0) {
-                    state.notification = `Gallery: ${state.errorCount} error(s). Loaded: ${state.loadedImages}/${state.totalImages} items.`;
-                    state.notificationType = 'warning';
-                } else if (state.loadedImages < state.totalImages && state.totalImages > 0) {
-                    state.notification = `Gallery: Partially loaded (${state.loadedImages}/${state.totalImages} items).`;
-                    state.notificationType = 'warning';
-                } else if (state.totalImages === 0) {
-                    state.notification = 'No media found for gallery.';
-                    state.notificationType = 'info';
-                }
+                ImageLoader.updateFinalStatus();
 
                 state.galleryReady = true;
                 state.isLoading = false;
@@ -2184,10 +2332,12 @@
     };
 
     // ====================================================
-    // Download Management
+    // Optimized Download Management
     // ====================================================
 
     const DownloadManager = {
+        _worker: null,
+
         downloadAllImages: async () => {
             if (state.isDownloading) {
                 Swal.fire('Download in Progress', 'A download is already running.', 'info');
@@ -2198,15 +2348,16 @@
                 const title = document.querySelector(SELECTORS.POST_TITLE)?.textContent?.trim() || 'Untitled';
                 const artistName = document.querySelector(SELECTORS.POST_USER_NAME)?.textContent?.trim() || 'Unknown Artist';
 
-                // --- Step 1: De-duplicate the files to be zipped ---
                 const itemsToProcess = [];
                 const processedBlobs = new Set();
+
                 document.querySelectorAll(`${SELECTORS.IMAGE_LINK}, ${SELECTORS.ATTACHMENT_LINK}, ${SELECTORS.VIDEO_LINK}`).forEach((link, index) => {
                     const url = link.href.split('?')[0];
                     const blob = loadedBlobs.get(url);
-                    if (url && blob && !processedBlobs.has(blob)) {
+
+                    if (blob && !processedBlobs.has(blob)) {
                         const originalName = link.getAttribute('download') || url.split('/').pop() || `media-${index + 1}`;
-                        itemsToProcess.push({ blob, originalName, index });
+                        itemsToProcess.push({ blob: blob, originalName, index });
                         processedBlobs.add(blob);
                     }
                 });
@@ -2219,102 +2370,129 @@
 
                 const result = await Swal.fire({
                     title: 'Download All?',
-                    text: `You are about to download ${itemsToProcess.length} item(s) as a ZIP.`,
+                    text: `You are about to create a ZIP file from ${itemsToProcess.length} preloaded item(s).`,
                     icon: 'question',
                     showCancelButton: true,
-                    confirmButtonText: 'Download',
+                    confirmButtonText: 'Create ZIP',
                     cancelButtonText: 'Cancel',
                 });
                 if (!result.isConfirmed) return;
 
-                // --- Step 2: Perform Zipping on the Main Thread Asynchronously ---
                 state.isDownloading = true;
-                const zip = new JSZip();
-                let filesAdded = 0;
+                state.notification = 'Starting download...';
 
-                if (state.optimizePngInZip && !loadedUPNG) {
-                    loadedUPNG = await loadResourceScript('upngJsRaw', 'UPNG');
-                    if (!loadedUPNG) {
-                         state.notification = 'PNG optimization library failed to load. Continuing without optimization.';
-                         state.notificationType = 'warning';
-                    }
-                }
+                const workerCode = `
+                    self.onmessage = async (e) => {
+                        const {
+                            itemsToProcess, imageFileNameFormat, title, artistName, jszipUrl
+                        } = e.data;
 
-                for (const item of itemsToProcess) {
-                    state.notification = `Adding files to zip... (${filesAdded + 1}/${itemsToProcess.length})`;
-                    await Utils.delay(10); // Yield to the browser to keep UI responsive
-
-                    let fileBlob = item.blob;
-                    const contentType = fileBlob.type || '';
-
-                    let correctExt = Utils.getExtension(item.originalName);
-                    if (!correctExt || ['tmp', 'file', ''].includes(correctExt)) {
-                        if (contentType.startsWith('image/')) correctExt = contentType.split('/')[1].replace('jpeg', 'jpg');
-                        else if (contentType.startsWith('video/')) correctExt = contentType.split('/')[1];
-                        else correctExt = 'bin';
-                    }
-
-                    if (state.optimizePngInZip && loadedUPNG && (contentType === 'image/png' || correctExt === 'png')) {
                         try {
-                            const arrayBuffer = await fileBlob.arrayBuffer();
-                            const decodedPng = loadedUPNG.decode(arrayBuffer);
-                            const pakoInstance = loadedPako || undefined;
-                            const optimizedPngArrayBuffer = loadedUPNG.encode([decodedPng.data], decodedPng.width, decodedPng.height, 0, undefined, pakoInstance);
-                            fileBlob = new Blob([optimizedPngArrayBuffer], { type: 'image/png' });
-                        } catch (upngError) {
-                            console.warn(`Could not optimize PNG ${item.originalName}, adding original file.`, upngError);
+                            importScripts(jszipUrl);
+                            const zip = new self.JSZip();
+                            let filesAdded = 0;
+
+                            for (const item of itemsToProcess) {
+                                let fileBlob = item.blob;
+                                let correctExt = item.originalName.split('.').pop().toLowerCase() || 'jpg';
+
+                                const fileNameWithoutExt = item.originalName.replace(/\\.[^/.]+$/, "");
+                                let pathInZip = imageFileNameFormat
+                                    .replace('{title}', title.replace(/[/\\\\:*?\\"<>|]/g, '-'))
+                                    .replace('{artistName}', artistName.replace(/[/\\\\:*?\\"<>|]/g, '-'))
+                                    .replace('{fileName}', fileNameWithoutExt.replace(/[/\\\\:*?\\"<>|]/g, '-'))
+                                    .replace('{index}', item.index + 1)
+                                    .replace('{ext}', correctExt);
+
+                                if (!pathInZip.toLowerCase().endsWith(\`.\${correctExt}\`)) pathInZip += \`.\${correctExt}\`;
+                                zip.file(pathInZip, fileBlob);
+                                filesAdded++;
+
+                                self.postMessage({
+                                    type: 'progress',
+                                    message: \`Added \${filesAdded}/\${itemsToProcess.length} files\`
+                                });
+                            }
+
+                            self.postMessage({ type: 'progress', message: 'Bundling files...' });
+
+                            const zipBlob = await zip.generateAsync({
+                                type: 'blob',
+                                compression: "STORE"
+                            }, (meta) => {
+                                self.postMessage({
+                                    type: 'progress',
+                                    message: \`Bundling... \${Math.round(meta.percent)}%\`
+                                });
+                            });
+
+                            self.postMessage({ type: 'complete', zipBlob: zipBlob });
+                        } catch (error) {
+                            self.postMessage({ type: 'error', message: 'Worker error: ' + error.message });
                         }
+                    };
+                `;
+
+                const blob = new Blob([workerCode], { type: 'application/javascript' });
+                DownloadManager._worker = new Worker(URL.createObjectURL(blob));
+
+                DownloadManager._worker.onmessage = (e) => {
+                    const { type, message, zipBlob } = e.data;
+                    switch (type) {
+                        case 'progress':
+                            state.notification = message;
+                            state.notificationType = 'info';
+                            break;
+                        case 'complete':
+                            const sanitizedTitle = Utils.sanitizeFileName(title);
+                            const sanitizedArtistName = Utils.sanitizeFileName(artistName);
+                            let zipFileName = state.zipFileNameFormat.replace('{artistName}', sanitizedArtistName).replace('{title}', sanitizedTitle);
+                            if (!zipFileName.toLowerCase().endsWith('.zip')) zipFileName += '.zip';
+                            saveAs(zipBlob, zipFileName);
+                            state.notification = 'Download complete!';
+                            state.notificationType = 'success';
+                            DownloadManager.cleanupWorker();
+                            break;
+                        case 'error':
+                        case 'warning':
+                            console.error('Error from worker:', message);
+                            state.notification = `Download failed: ${message}`;
+                            state.notificationType = 'error';
+                            DownloadManager.cleanupWorker();
+                            break;
                     }
+                };
 
-                    const fileNameWithoutExt = item.originalName.replace(/\.[^/.]+$/, "");
+                DownloadManager._worker.onerror = (e) => {
+                    console.error(`Error in worker: ${e.message}`, e);
+                    state.notification = 'A critical worker error occurred. See console.';
+                    state.notificationType = 'error';
+                    DownloadManager.cleanupWorker();
+                };
 
-                    let pathInZip = state.imageFileNameFormat
-                        .replace('{title}', Utils.sanitizeFileName(title))
-                        .replace('{artistName}', Utils.sanitizeFileName(artistName))
-                        .replace('{fileName}', Utils.sanitizeFileName(fileNameWithoutExt))
-                        .replace('{index}', item.index + 1)
-                        .replace('{ext}', correctExt);
-
-                    const expectedEnding = `.${correctExt}`;
-                    if (!pathInZip.toLowerCase().endsWith(expectedEnding)) {
-                        pathInZip += expectedEnding;
-                    }
-
-                    zip.file(pathInZip, fileBlob);
-                    filesAdded++;
-                }
-
-                // --- Step 3: Generate and Save the ZIP File ---
-                state.notification = 'Compressing files... This may take a moment.';
-                const zipBlob = await zip.generateAsync({ type: 'blob' }, (metadata) => {
-                    state.notification = `Zipping... ${Math.round(metadata.percent)}%`;
+                DownloadManager._worker.postMessage({
+                    itemsToProcess,
+                    imageFileNameFormat: state.imageFileNameFormat,
+                    title: title,
+                    artistName: artistName,
+                    jszipUrl: 'https://unpkg.com/jszip@3.9.1/dist/jszip.min.js'
                 });
 
-                const sanitizedTitle = Utils.sanitizeFileName(title);
-                const sanitizedArtistName = Utils.sanitizeFileName(artistName);
-                let zipFileName = state.zipFileNameFormat.replace('{artistName}', sanitizedArtistName).replace('{title}', sanitizedTitle);
-                if (!zipFileName.toLowerCase().endsWith('.zip')) zipFileName += '.zip';
-
-                saveAs(zipBlob, zipFileName);
-
-                state.notificationType = 'success';
-                state.notification = 'Download complete!';
-
-
             } catch (error) {
-                console.error('Error during download process:', error);
-                Swal.fire('Error!', `Failed to create ZIP file: ${error.message}`, 'error');
-                state.notificationType = 'error';
-                state.notification = 'Download failed. See console for details.';
-            } finally {
-                state.isDownloading = false;
+                console.error('Error initializing download process:', error);
+                Swal.fire('Error!', `Failed to start download process: ${error.message}`, 'error');
+                DownloadManager.cleanupWorker();
             }
         },
 
         cleanupWorker: () => {
-            // No worker to clean up.
+            if (DownloadManager._worker) {
+                DownloadManager._worker.terminate();
+                DownloadManager._worker = null;
+            }
             state.isDownloading = false;
         },
+
         downloadImageByIndex: async (index) => {
             const originalItem = state.originalImageSrcs[index];
             if (!originalItem || !originalItem.src) {
@@ -2384,7 +2562,6 @@
                 const postActionsContainer = document.querySelector(SELECTORS.POST_ACTIONS);
                 if (!postActionsContainer) return;
 
-                // --- Add global action buttons ---
                 const globalButtons = document.createElement('div');
                 globalButtons.className = 'ug-injected-ui';
                 elements.galleryButton = UI.createToggleButton('Loading Gallery...', Gallery.toggleGallery, true);
@@ -2398,7 +2575,6 @@
                 );
                 postActionsContainer.append(globalButtons);
 
-                // --- Add settings button ---
                 if (!document.querySelector('.settings-button-wrapper')) {
                     const settingsButton = document.createElement('button');
                     settingsButton.textContent = BUTTONS.SETTINGS;
@@ -2411,7 +2587,6 @@
                     elements.settingsButton = wrapper;
                 }
 
-                // --- Add per-image buttons ---
                 const filesArea = document.querySelector('div.post__files');
                 if (filesArea) {
                     filesArea.querySelectorAll(SELECTORS.FILE_DIVS).forEach(thumbnailDiv => {
@@ -2465,35 +2640,30 @@
         cleanupPostActions: () => {
             UI.forceHideNotification();
 
-            // Explicitly remove the loaded class from all images to reset their visual state.
             document.querySelectorAll('img.post__image.ug-image-loaded').forEach(img => {
                 img.classList.remove('ug-image-loaded');
             });
 
-            // Remove all injected UI elements in one go.
             document.querySelectorAll('.ug-injected-ui').forEach(el => el.remove());
 
-            // Explicitly remove global UI elements that are not post-specific.
             const notifArea = document.getElementById(CSS.NOTIF_AREA);
             if (notifArea) {
                 notifArea.remove();
             }
-            UI.hideLoadingOverlay(); // This handles the loading overlay correctly.
+            UI.hideLoadingOverlay();
 
             const filesArea = document.querySelector('div.post__files');
             if (filesArea) {
                 filesArea.removeEventListener('click', PostActions.imageLinkClickHandler);
-                filesArea.removeAttribute('data-ug-left-clickHandler-attached');
+                filesArea.removeAttribute('data-ug-leftClickHandler-attached');
             }
 
-            // Clear blob URLs created during the page session.
             for (const blobUrl of loadedBlobUrls.values()) {
                 try { URL.revokeObjectURL(blobUrl); } catch (e) { /* silent */ }
             }
             loadedBlobUrls.clear();
             loadedBlobs.clear();
 
-            // Full state reset for new page context.
             state.notification = null;
             Object.assign(state, {
                 fullSizeImageSrcs: [],
@@ -2510,7 +2680,7 @@
                 isLoading: false,
                 loadingMessage: null
             });
-            elements = {}; // Reset cached elements.
+            elements = {};
         },
 
         resizeAllImages: action => {
@@ -2537,6 +2707,7 @@
             ImageLoader.imageActions[action](displayedImage);
         },
     };
+
     // ====================================================
     // Event Handlers
     // ====================================================
@@ -2546,13 +2717,12 @@
             const activeEl = document.activeElement;
             const isTyping = activeEl && (activeEl.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName));
 
-            if (isTyping) {
+            if (isTyping || !state.enableKeyboardShortcuts) {
                 return;
             }
 
             const keyLower = event.key.toLowerCase();
 
-            // Always handle the gallery toggle key first.
             if (Utils.isPostPage() && keyLower === state.galleryKey.toLowerCase()) {
                 if (!event.altKey && !event.ctrlKey && !event.metaKey) {
                     event.preventDefault();
@@ -2566,14 +2736,12 @@
                 return;
             }
 
-            // Handle settings modal escape key.
             if (state.settingsOpen && event.key === 'Escape') {
                 event.preventDefault();
                 state.settingsOpen = false;
                 return;
             }
 
-            // Handle gallery-specific keys only when the gallery is active.
             if (state.isGalleryMode && galleryOverlay?.length) {
                 const $expandedView = galleryOverlay.find(`.${CSS.GALLERY.EXPANDED_VIEW}`);
 
@@ -2595,7 +2763,6 @@
                         event.preventDefault();
                         Gallery.prevImage();
                     }
-                    // Only handle zoom keys if current item is an image
                     const currentItem = state.fullSizeImageSrcs[state.currentGalleryIndex];
                     if (currentItem && currentItem.type === 'image') {
                          if (keyLower === '+' || keyLower === '=') {
@@ -2607,6 +2774,14 @@
                         } else if (keyLower === '0') {
                             event.preventDefault();
                             Zoom.resetZoom();
+                        } else if (state.enableImageRotation) {
+                            if (keyLower === 'r') {
+                                event.preventDefault();
+                                Zoom.rotate(1);
+                            } else if (keyLower === 'e') {
+                                event.preventDefault();
+                                Zoom.rotate(-1);
+                            }
                         }
                     }
                 }
@@ -2666,23 +2841,18 @@
             const currentUrl = window.location.href;
 
             if (onPostPage && postContainer) {
-                // We are on a post page.
                 if (currentUrl !== lastProcessedUrl) {
-                    // This is a new post URL that we haven't initialized yet.
                     const postActionsContainer = document.querySelector(SELECTORS.POST_ACTIONS);
                     if (postActionsContainer) {
-                        // The page is ready for injection.
-                        PostActions.cleanupPostActions(); // Clean up any old UI first.
+                        PostActions.cleanupPostActions();
                         PostActions.initPostActions();
-                        lastProcessedUrl = currentUrl; // Mark this URL as processed.
+                        lastProcessedUrl = currentUrl;
                     }
                 }
             } else {
-                // We are not on a post page.
                 if (lastProcessedUrl !== null) {
-                    // We were on a post page, so we need to clean up.
                     PostActions.cleanupPostActions();
-                    lastProcessedUrl = null; // Forget the last processed URL.
+                    lastProcessedUrl = null;
                 }
             }
         } catch (error) {
@@ -2698,7 +2868,6 @@
 
     const init = async () => {
       try {
-        // 1. Load external resources
         try {
           const cssText = GM_getResourceText('mainCSS');
           if (cssText) {
@@ -2714,13 +2883,11 @@
           loadedPako = await loadResourceScript('pakoJsRaw', 'pako');
         }
 
-        // 2. Initialize modules and settings
         if (state.enablePersistentCaching) {
           initDexie();
         }
         CONFIG.MAX_SCALE = GM_getValue('maxZoomScale', CONFIG.MAX_SCALE);
 
-        // 3. Apply critical and dynamic styles
         GM_addStyle(`
             .post__actions, .scrape__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; }
             .post__actions > a, .scrape__actions > a { margin: 2px 0 !important; }
@@ -2729,6 +2896,10 @@
             .is-transitioning { transition: transform 0.3s ease-out; }
             .ug-image-error-message { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #ffcccc; background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 5px; z-index: 5; }
             .${CSS.GALLERY.MAIN_VIDEO} { max-width: 100%; max-height: 100%; display: block; }
+            .${CSS.GALLERY.IMAGE_INFO} { position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); color: white; padding: 5px 10px; border-radius: 5px; font-size: 12px; z-index: 10; }
+            .${CSS.GALLERY.ROTATION_CONTAINER} { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
+            .zoom-controls, .rotation-controls { display: flex; align-items: center; gap: 5px; margin: 0 10px; }
+            .zoom-level { margin: 0 5px; min-width: 45px; text-align: center; }
         `);
 
         GM_addStyle(`
@@ -2738,20 +2909,17 @@
 
         `);
 
-        // 4. Setup global event listeners and observers
         document.addEventListener('keydown', EventHandlers.handleGlobalKeyDown);
         window.addEventListener('beforeunload', () => {
-            // Ensure any active worker is terminated when the page is closed.
             if (DownloadManager._worker) {
                 DownloadManager.cleanupWorker();
             }
         });
 
-
         const debouncedInject = Utils.debounce(injectUI, 150);
         const observer = new MutationObserver(debouncedInject);
         observer.observe(document.body, { childList: true, subtree: true });
-        // 5. Initial UI injection
+
         injectUI();
 
       } catch (error) {
