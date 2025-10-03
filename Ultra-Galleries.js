@@ -28,7 +28,7 @@
 // @resource     upngJsRaw https://unpkg.com/upng-js@2.1.0/UPNG.js
 // @resource     pakoJsRaw https://unpkg.com/pako@2.1.0/dist/pako.min.js
 // @resource     jszipJsRaw https://unpkg.com/jszip@3.9.1/dist/jszip.min.js
-// @resource     mainCSS https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/refs/heads/TestingBranch/Ultra-Galleries.css
+// @resource     mainCSS https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/refs/heads/main/Ultra-Galleries.css
 // ==/UserScript==
 (function() {
     'use strict';
@@ -2868,6 +2868,7 @@
 
     const init = async () => {
       try {
+        // 1. Load external resources
         try {
           const cssText = GM_getResourceText('mainCSS');
           if (cssText) {
@@ -2919,7 +2920,9 @@
         const debouncedInject = Utils.debounce(injectUI, 150);
         const observer = new MutationObserver(debouncedInject);
         observer.observe(document.body, { childList: true, subtree: true });
+        setInterval(injectUI, 500);
 
+        // 5. Initial UI injection
         injectUI();
 
       } catch (error) {
