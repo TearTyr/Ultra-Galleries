@@ -3,7 +3,7 @@
 // @namespace    https://sleazyfork.org/en/users/1477603-%E3%83%A1%E3%83%AA%E3%83%BC
 // @version      3.4.1
 // @description  Modern image gallery with highly efficient background zipping, video playback, enhanced browsing, fullscreen, and download features. Memory leaks fixed.
-// @author       ntf (original), Meri/TearTyr (maintained), Fixed by AI
+// @author       ntf (original), Meri/TearTyr (maintained)
 // @match        *://kemono.su/*
 // @match        *://coomer.su/*
 // @match        *://kemono.cr/*
@@ -28,7 +28,7 @@
 // @resource     upngJsRaw https://unpkg.com/upng-js@2.1.0/UPNG.js
 // @resource     pakoJsRaw https://unpkg.com/pako@2.1.0/dist/pako.min.js
 // @resource     jszipJsRaw https://unpkg.com/jszip@3.9.1/dist/jszip.min.js
-// @resource     mainCSS https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/refs/heads/TestingBranch/Ultra-Galleries.css
+// @resource     mainCSS https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/refs/heads/main/Ultra-Galleries.css
 // ==/UserScript==
 (() => {
 'use strict';
