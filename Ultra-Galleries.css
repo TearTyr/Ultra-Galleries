@@ -179,6 +179,45 @@
     background-color: black;
 }
 
+.ug-thumbnail-container {
+    position: relative;
+}
+
+.ug-main-image {
+    transform-origin: center !important;
+    transition: transform 0.1s ease-out, opacity 0.3s ease;
+}
+
+.ug-thumbnail-zoom-preview {
+    position: absolute;
+    bottom: 60px; 
+    left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    width: 200px;
+    height: auto;
+    background: #000;
+    border: 2px solid var(--ug-accent-color);
+    border-radius: 8px;
+    z-index: 1000;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.8);
+    overflow: hidden;
+}
+
+.ug-thumbnail-zoom-preview.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.ug-thumbnail-zoom-preview img {
+    width: 100%;
+    height: auto;
+    display: block;
+    object-fit: contain;
+}
+
 /* ------------------- EXPANDED VIEW & CONTROLS ------------------- */
 .ug-gallery-expanded-view {
     position: relative;
