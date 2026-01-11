@@ -266,6 +266,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
 }
 
 .ug-toolbar-button:hover {
@@ -859,9 +860,11 @@
 
 .ug-button-container {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap; 
     gap: 4px 8px;
     margin-bottom: 5px;
+    width: 100%;
+    overflow-x: auto;
 }
 
 .ug-button {
@@ -876,6 +879,7 @@
     transition: all var(--ug-transition-fast);
     white-space: nowrap;
     box-shadow: none !important;
+    flex-shrink: 0;
 }
 
 .ug-button:hover {
@@ -962,6 +966,23 @@
     }
 
     .ug-gallery-toolbar {
-        top: 10px;
+        position: absolute;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        width: 100%;
+        gap: 8px;
+        z-index: 20;
+        background-color: rgba(30, 30, 30, 0.85);
+        backdrop-filter: blur(10px);
+        border: 1px solid var(--ug-border-primary);
+        border-radius: 50px;
+        padding: 6px 16px;
+        align-items: center;
+        transition: all var(--ug-transition-medium);
+        box-shadow: var(--ug-shadow-lg);
+        overflow-x: auto; 
+        justify-content: space-between; 
     }
 }
