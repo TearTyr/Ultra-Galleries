@@ -186,10 +186,29 @@ const Utils = {
         };
     },
     handleMediaSrc: mediaLink => {
-        const directImg = mediaLink.querySelector('img')?.src;
-        if (directImg && directImg.includes('/data/')) return directImg.split('?')[0];
         let href = mediaLink.getAttribute('href') || mediaLink.querySelector('.fileThumb')?.getAttribute('href');
-        return href?.split('?')[0] || null;
+
+        if (!href && mediaLink.href) href = mediaLink.href;
+
+        if (href) {
+            href = href.split('?')[0];
+            if (href.includes('/thumbnail/')) {
+                href = href.replace(/\/thumbnail\//, '/data/');
+            }
+            return href;
+        }
+
+        const directImg = mediaLink.querySelector('img')?.src;
+        if (directImg) {
+            const imgSrc = directImg.split('?')[0];
+            if (imgSrc.includes('/data/')) return imgSrc;
+            if (imgSrc.includes('/thumbnail/')) {
+                return imgSrc.replace(/\/thumbnail\//, '/data/');
+            }
+            return imgSrc;
+        }
+
+        return null;
     },
     supportsPassiveEvents: () => {
         let supportsPassive = false;
@@ -2336,7 +2355,7 @@ const Gallery = {
         const $container = $('<div>').addClass(CSS.GALLERY.CONTAINER).appendTo(galleryOverlay);
         return $container;
     },
-    
+
     _createBaseLayout: function ($galleryContentContainer) {
         const $expandedView = $('<div>').addClass(CSS.GALLERY.EXPANDED_VIEW).addClass(CSS.GALLERY.HIDE).appendTo($galleryContentContainer);
         return { $expandedView };
