@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1477603-%E3%83%A1%E3%83%AA%E3%83%BC
-// @version      3.4.4
-// @description  Modern image gallery with highly efficient background zipping, video playback, browsing, fullscreen, and download features. Grid removed, Numbers hidden, Notifications restored.
+// @version      3.4.5
+// @description  Modern image gallery with highly efficient background zipping, video playback, browsing, fullscreen, and download features. Grid removed, Numbers hidden, Notifications restored. Cleaned and optimized.
 // @author       ntf (original), Meri/TearTyr (maintained)
 // @match        *://kemono.su/*
 // @match        *://coomer.su/*
@@ -25,9 +25,6 @@
 // @require      https://cdn.jsdelivr.net/npm/file-saver@1.3.2/FileSaver.min.js
 // @require      https://cdn.jsdelivr.net/npm/sweetalert2@11
 // @require      https://unpkg.com/dexie@3.2.7/dist/dexie.min.js
-// @resource     upngJsRaw https://unpkg.com/upng-js@2.1.0/UPNG.js
-// @resource     pakoJsRaw https://unpkg.com/pako@2.1.0/dist/pako.min.js
-// @resource     jszipJsRaw https://unpkg.com/jszip@3.9.1/dist/jszip.min.js
 // @resource     mainCSS https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/refs/heads/main/Ultra-Galleries.css
 // ==/UserScript==
 (() => {
@@ -37,7 +34,6 @@
 // Core Configuration
 // ====================================================
 const CONFIG = {
-    BATCH_SIZE: 3,
     MAX_CONCURRENT_FETCHES: 3,
     MAX_RETRIES: 5,
     RETRY_DELAY: 2000,
@@ -56,7 +52,6 @@ const BUTTONS = {
     DOWNLOAD_ALL: '【DL ALL】',
     FULL: '【FULL】',
     HEIGHT: '【FILL HEIGHT】',
-    REMOVE: '【REMOVE】',
     WIDTH: '【FILL WIDTH】',
     GALLERY: '【GALLERY】',
     SETTINGS: '⚙️',
@@ -75,9 +70,8 @@ const CSS = {
     NOTIF_CLOSE: 'ug-notification-close',
     NOTIF_REPORT: 'ug-notification-report',
     SETTINGS_BTN: 'settings-button',
-    VIRTUAL_IMAGE: 'virtual-image',
     LONG_PRESS: 'ug-long-press',
-   GALLERY: {
+    GALLERY: {
         OVERLAY: 'ug-gallery-overlay',
         CONTAINER: 'ug-gallery-container',
         EXPANDED_VIEW: 'ug-gallery-expanded-view',
@@ -131,9 +125,7 @@ const SELECTORS = {
     THUMBNAIL: website === 'nekohouse' ? '.scrape__thumbnail' : '.post__thumbnail',
     MAIN_THUMBNAIL: website === 'nekohouse' ? '.scrape__thumbnail:not(.scrape__thumbnail--attachment)' : '.post__thumbnail:not(.post__thumbnail--attachment)',
     POST_ACTIONS: website === 'nekohouse' ? '.scrape__actions' : '.post__actions',
-    FAVORITE_BUTTON: website === 'nekohouse' ? '.scrape__actions a.favorite-button' : '.post__actions a.favorite-button',
     FILE_DIVS: website === 'nekohouse' ? '.scrape__thumbnail' : '.post__thumbnail',
-    FILES_IMG: website === 'nekohouse' ? '.scrape__files img' : 'img.post__image',
     VIDEO_LINK: 'a.fileThumb[href$=".mp4"], a.fileThumb[href$=".webm"], a.fileThumb[href$=".mov"], a[href$=".mp4"], a[href$=".webm"], a[href$=".mov"]',
     VIDEO_THUMBNAIL: website === 'nekohouse' ? '.scrape__video-thumbnail' : '.post__video-thumbnail',
 };
@@ -209,20 +201,6 @@ const Utils = {
         }
 
         return null;
-    },
-    supportsPassiveEvents: () => {
-        let supportsPassive = false;
-        try {
-            const opts = Object.defineProperty({}, 'passive', {
-                get: function () {
-                    supportsPassive = true;
-                    return true;
-                }
-            });
-            window.addEventListener('testPassive', null, opts);
-            window.removeEventListener('testPassive', null, opts);
-        } catch (e) { }
-        return supportsPassive;
     },
     createTooltip: (text, duration = 3000) => {
         const tooltip = document.createElement('div');
@@ -335,6 +313,7 @@ const ImageSizing = {
         });
     }
 };
+
 // ====================================================
 // Drag Handler Module
 // ====================================================
@@ -693,7 +672,6 @@ const GalleryView = {
                 Zoom.applyZoom();
 
                 Gallery._preloadAdjacentImages(index);
-                TouchGestures.init();
             }).on('error', function() {
                 $mainMediaContainer.append(
                     $('<div>').addClass(CSS.GALLERY.IMAGE_ERROR_MSG).text('Failed to load image')
@@ -741,159 +719,6 @@ const ImageActionHandler = {
         document.querySelectorAll('img.post__image.ug-image-loaded').forEach(img => {
             ImageSizing.applyFillHeight(img);
         });
-    }
-};
-
-const LazyLoader = {
-    observer: null,
-    init: () => {
-        if ('IntersectionObserver' in window) {
-            LazyLoader.observer = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        const img = entry.target;
-                        const src = img.dataset.src;
-                        if (src) {
-                            img.src = src;
-                            img.classList.remove('lazy');
-                            LazyLoader.observer.unobserve(img);
-                        }
-                    }
-                });
-            }, {
-                rootMargin: '50px',
-                threshold: 0.1
-            });
-        }
-    },
-    observe: (img) => {
-        if (LazyLoader.observer) LazyLoader.observer.observe(img);
-    },
-    unobserve: (img) => {
-        if (LazyLoader.observer) LazyLoader.observer.unobserve(img);
-    }
-};
-
-const PreloadManager = {
-    queue: [],
-    loading: new Set(),
-    maxConcurrent: 3,
-
-    addToQueue: (url, priority = 0) => {
-        if (PreloadManager.queue.some(item => item.url === url) ||
-            PreloadManager.loading.has(url)) {
-            return;
-        }
-
-        PreloadManager.queue.push({ url, priority });
-        PreloadManager.queue.sort((a, b) => b.priority - a.priority);
-        PreloadManager.processQueue();
-    },
-
-    processQueue: async () => {
-        if (PreloadManager.loading.size >= PreloadManager.maxConcurrent ||
-            PreloadManager.queue.length === 0) {
-            return;
-        }
-
-        const { url } = PreloadManager.queue.shift();
-        PreloadManager.loading.add(url);
-
-        try {
-            await ImageLoader.fetchWithRetry(url, state.currentLoadSessionId);
-        } catch (error) {
-            console.warn('Failed to preload:', url, error);
-        } finally {
-            PreloadManager.loading.delete(url);
-            setTimeout(() => PreloadManager.processQueue(), 100);
-        }
-    },
-
-    preloadAdjacent: (currentIndex) => {
-        for (let i = 1; i <= 3; i++) {
-            const nextIndex = currentIndex + i;
-            if (nextIndex < state.originalImageSrcs.length) {
-                const item = state.originalImageSrcs[nextIndex];
-                if (item && item.src) {
-                    PreloadManager.addToQueue(item.src, 3 - i);
-                }
-            }
-        }
-        const prevIndex = currentIndex - 1;
-        if (prevIndex >= 0) {
-            const item = state.originalImageSrcs[prevIndex];
-            if (item && item.src) {
-                PreloadManager.addToQueue(item.src, 1);
-            }
-        }
-    },
-
-    clearQueue: () => {
-        PreloadManager.queue = [];
-        PreloadManager.loading.clear();
-    }
-};
-
-const TouchGestures = {
-    init: () => {
-        const container = document.querySelector('.ug-main-image-container');
-        if (!container) return;
-
-        let touchStartX = 0;
-        let touchStartY = 0;
-        let touchStartTime = 0;
-        let lastTouchX = 0;
-        let lastTouchY = 0;
-        let isSwiping = false;
-
-        container.addEventListener('touchstart', (e) => {
-            if (e.touches.length === 1) {
-                const touch = e.touches[0];
-                touchStartX = touch.clientX;
-                touchStartY = touch.clientY;
-                lastTouchX = touch.clientX;
-                lastTouchY = touch.clientY;
-                touchStartTime = Date.now();
-                isSwiping = false;
-            }
-        }, { passive: true });
-
-        container.addEventListener('touchmove', (e) => {
-            if (e.touches.length === 1) {
-                const touch = e.touches[0];
-                const deltaX = touch.clientX - lastTouchX;
-                const deltaY = touch.clientY - lastTouchY;
-
-                if (!isSwiping && (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10)) {
-                    isSwiping = true;
-                }
-
-                lastTouchX = touch.clientX;
-                lastTouchY = touch.clientY;
-            }
-        }, { passive: true });
-
-        container.addEventListener('touchend', (e) => {
-            if (e.changedTouches.length === 1 && isSwiping) {
-                const touch = e.changedTouches[0];
-                const touchEndX = touch.clientX;
-                const touchEndTime = Date.now();
-
-                const deltaX = touchEndX - touchStartX;
-                const deltaTime = touchEndTime - touchStartTime;
-
-                const minSwipeDistance = 50;
-                const maxSwipeTime = 300;
-
-                if (Math.abs(deltaX) > minSwipeDistance && deltaTime < maxSwipeTime) {
-                    if (deltaX > 0) {
-                        Gallery.prevImage();
-                    } else {
-                        Gallery.nextImage();
-                    }
-                }
-            }
-        }, { passive: true });
     }
 };
 
@@ -1304,14 +1129,11 @@ const state = StateManager.createReactiveState({
     galleryActive: false,
     currentGalleryIndex: 0,
     isFullscreen: SettingsManager.loadSetting('isFullscreen', false),
-    virtualGallery: [],
     originalImageSrcs: [],
     fullSizeImageSrcs: [],
     currentPostUrl: null,
-    displayedImages: [],
     totalImages: 0,
     loadedImages: 0,
-    downloadedCount: 0,
     isLoading: false,
     loadingMessage: null,
     hasImages: false,
@@ -1339,27 +1161,21 @@ const state = StateManager.createReactiveState({
     prevImageKey: SettingsManager.loadSetting('prevImageKey', 'k'),
     nextImageKey: SettingsManager.loadSetting('nextImageKey', 'l'),
     bottomStripeVisible: SettingsManager.loadSetting('bottomStripeVisible', true),
-    dynamicResizing: SettingsManager.loadSetting('dynamicResizing', true),
     zoomEnabled: SettingsManager.loadSetting('zoomEnabled', true),
     isZoomed: false,
     zoomScale: 1,
     controlsVisible: true,
     isDragging: false,
     dragStartPosition: { x: 0, y: 0 },
-    lastMousePosition: { x: 0, y: 0 },
     imageOffset: { x: 0, y: 0 },
-    lastWidth: 0,
-    lastHeight: 0,
     zoomOrigin: { x: 0, y: 0 },
     dragStartOffset: { x: 0, y: 0 },
-    pendingRetries: {},
     lastTapTime: 0,
     pinchZoomActive: false,
     initialTouchDistance: 0,
     initialScale: 1,
     zoomIndicatorVisible: true,
     inertiaEnabled: SettingsManager.loadSetting('inertiaEnabled', true),
-    velocity: { x: 0, y: 0 },
     inertiaActive: false,
     isSlideshowActive: false,
 }, {
@@ -1383,15 +1199,6 @@ const state = StateManager.createReactiveState({
             state.notification = `Loading media (${value}/${state.totalImages})...`;
         }
     }),
-    downloadedCount: (value) => {
-        if (value === state.totalImages) {
-            state.notificationType = 'success';
-            state.notification = `All files ready for zipping!`;
-        } else {
-            state.notificationType = 'info';
-            state.notification = `Preparing... (${value}/${state.totalImages})`;
-        }
-    },
     totalImages: StateManager.withSessionCheck((value, oldValue) => {
         if (value > 0) {
             state.notificationType = 'info';
@@ -1476,7 +1283,6 @@ const state = StateManager.createReactiveState({
                 $container.toggleClass(CSS.GALLERY.GRABBING, value);
                 if (value && state.inertiaActive) {
                     state.inertiaActive = false;
-                    state.velocity = { x: 0, y: 0 };
                     if (state.inertiaAnimFrame) {
                         cancelAnimationFrame(state.inertiaAnimFrame);
                         state.inertiaAnimFrame = null;
@@ -1503,27 +1309,6 @@ const state = StateManager.createReactiveState({
         SettingsManager.saveSetting('optimizePngInZip', value);
     },
 });
-
-const ResourceLoader = {
-    loadedUPNG: null,
-    loadedPako: null,
-    async loadResourceScript(resourceName, expectedGlobal) {
-        if (window[expectedGlobal]) return window[expectedGlobal];
-        try {
-            const scriptText = GM_getResourceText(resourceName);
-            if (!scriptText) return null;
-            (0, eval)(scriptText);
-            return window[expectedGlobal];
-        } catch (e) {
-            return null;
-        }
-    },
-    async init() {
-        if (!ResourceLoader.loadedPako) {
-            ResourceLoader.loadedPako = await ResourceLoader.loadResourceScript('pakoJsRaw', 'pako');
-        }
-    }
-};
 
 // ====================================================
 // Dexie Database (IndexedDB)
@@ -1924,7 +1709,6 @@ const ThumbnailStrip = {
         }
     },
     updateThumbnailNumbers: () => {
-        // We still generate numbers but CSS hides them, keeping logic intact
         galleryOverlay.find(`.${CSS.GALLERY.THUMBNAIL_WRAPPER}`).each(function(index) {
             const $number = $(this).find('.ug-thumbnail-number');
             if ($number.length === 0) {
@@ -1964,7 +1748,6 @@ const UI = {
         buttonsConfig.forEach(config => {
             let createThisButton = true;
             switch (config.name) {
-                case 'REMOVE': if (state.hideRemoveButton) createThisButton = false; break;
                 case 'FULL': if (state.hideFullButton) createThisButton = false; break;
                 case 'DOWNLOAD': if (state.hideDownloadButton) createThisButton = false; break;
                 case 'HEIGHT': if (state.hideHeightButton) createThisButton = false; break;
@@ -2165,7 +1948,6 @@ const UI = {
             {
                 title: 'Buttons', key: 'buttonVisibility', settings: [
                     { id: 'hideNavArrows', label: 'Hide Navigation Arrows', type: 'checkbox', stateKey: 'hideNavArrows', gmKey: 'hideNavArrows' },
-                    { id: 'hideRemoveBtn', label: 'Hide Remove Button', type: 'checkbox', stateKey: 'hideRemoveButton', gmKey: 'hideRemoveButton' },
                     { id: 'hideFullBtn', label: 'Hide Full Size Button', type: 'checkbox', stateKey: 'hideFullButton', gmKey: 'hideFullButton' },
                     { id: 'hideDownloadBtn', label: 'Hide Download Button', type: 'checkbox', stateKey: 'hideDownloadButton', gmKey: 'hideDownloadButton' },
                     { id: 'hideHeightBtn', label: 'Hide Fill Height Button', type: 'checkbox', stateKey: 'hideHeightButton', gmKey: 'hideHeightButton' },
@@ -2578,7 +2360,6 @@ const Gallery = {
         state.isGalleryMode = false;
         state.isFullscreen = false;
         Slideshow.stop();
-        PreloadManager.clearQueue();
         Gallery._clearPreloadCache();
 
         galleryOverlay.remove();
@@ -2903,7 +2684,7 @@ const ImageLoader = {
 
             loadedBlobUrls.clear();
             Object.assign(state, {
-                fullSizeImageSrcs: [], originalImageSrcs: [], virtualGallery: [],
+                fullSizeImageSrcs: [], originalImageSrcs: [],
                 loadedImages: 0, mediaLoaded: {}, errorCount: 0
             });
 
@@ -3235,7 +3016,7 @@ const PostActions = {
 
         state.notification = null;
         Object.assign(state, {
-            fullSizeImageSrcs: [], originalImageSrcs: [], virtualGallery: [],
+            fullSizeImageSrcs: [], originalImageSrcs: [],
             currentPostUrl: null, galleryReady: false, loadedImages: 0,
             totalImages: 0, mediaLoaded: {}, errorCount: 0,
             postActionsInitialized: false,
@@ -3351,7 +3132,6 @@ const fullCleanup = () => {
     Gallery._clearPreloadCache();
     DownloadManager.cleanupWorker();
     UI.forceHideNotification();
-    PreloadManager.clearQueue();
     ErrorHandler.clearRetries();
 };
 
@@ -3359,8 +3139,7 @@ const init = async () => {
     try {
         const cssText = GM_getResourceText('mainCSS');
         if (cssText) GM_addStyle(cssText);
-        await ResourceLoader.init();
-        LazyLoader.init();
+
         Slideshow.init();
         const allSettings = SettingsManager.loadAllSettings();
         Object.assign(state, allSettings);
