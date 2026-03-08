@@ -319,7 +319,7 @@
     transform: rotate(90deg);
 }
 
-/* ------------------- MAIN IMAGE AREA (CRITICAL FIXES) ------------------- */
+/* ------------------- MAIN IMAGE AREA ------------------- */
 .ug-gallery-zoom-container {
     width: 100%;
     height: 100%;
@@ -349,7 +349,6 @@
     cursor: grab;
     touch-action: none;
     will-change: transform;
-    transform: translateZ(0);
     transform-origin: 0 0 !important;
     display: flex;
     justify-content: center;
@@ -494,22 +493,44 @@
     display: block;
     transition: transform 0.2s;
 }
-
-/* Hover & Selection */
-.ug-thumbnail-container:hover {
-    opacity: 1;
-    transform: scale(1.05);
-    box-shadow: 0 0 10px rgba(0,0,0,0.3);
+.ug-gallery-overlay .ug-thumbnail-container {
+    opacity: 0.70;
+    filter: brightness(0.92) saturate(0.88);
+    transform: scale(1);
+    transition: all 0.18s ease;
 }
 
-.ug-thumbnail-container.selected {
-    opacity: 1;
-    border-color: var(--ug-accent-color);
-    box-shadow: 0 0 15px var(--ug-accent-color-translucent);
-    transform: scale(1.05);
+.ug-thumbnail-container.selected,
+.ug-thumbnail-strip .ug-thumbnail-container.selected {
+    opacity: 1 !important;
+    filter: brightness(1) saturate(1) !important;
+    border-color: var(--ug-accent-color) !important;
+    box-shadow: 0 0 0 3px var(--ug-accent-color-translucent) !important;
+    transform: scale(1.06) !important;
 }
 
-/* Video Play Icon Overlay */
+.ug-gallery-overlay .ug-thumbnail-container:hover {
+    opacity: 0.92;
+    filter: brightness(1.04) saturate(1.05);
+    transform: scale(1.03);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+.ug-gallery-overlay ~ * .post__thumbnail:hover,
+.ug-gallery-overlay ~ * .scrape__thumbnail:hover,
+.ug-gallery-overlay ~ * .post__thumbnail-container:hover,
+.ug-gallery-overlay ~ * .scrape__thumbnail-container:hover,
+.ug-gallery-overlay ~ * [class*="thumb"]:hover,
+.ug-gallery-overlay ~ * [class*="thumbnail"]:hover {
+    transform: none !important;
+    scale: 1 !important;
+    filter: brightness(1) !important;
+    opacity: 0.85 !important;
+    box-shadow: none !important;
+    transition: none !important;
+}
+
+/* ------------------- VIDEO PLAY ICON ------------------- */
 .ug-play-icon {
     position: absolute;
     top: 50%;
