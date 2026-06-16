@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1477603-%E3%83%A1%E3%83%AA%E3%83%BC
-// @version      3.5.1
-// @description  Modern image gallery with highly efficient background zipping, video playback, browsing, fullscreen, and download features. Grid removed, Numbers hidden, Notifications restored. Cleaned and optimized. Added option to disable auto-load and video fill height.
+// @version      3.6.0
+// @description  Modern image gallery with highly efficient background zipping, video playback, browsing, fullscreen, and download features. Optimized, cleaned, and added Pawchive support.
 // @author       ntf (original), Meri/TearTyr (maintained)
 // @match        *://kemono.su/*
 // @match        *://coomer.su/*
@@ -10,7 +10,10 @@
 // @match        *://coomer.cr/*
 // @match        *://coomer.st/*
 // @match        *://nekohouse.su/*
+// @match        *://pawchive.st/*
+// @match        *://*.pawchive.st/*
 // @icon         https://kemono.party/static/menu/recent.svg
+// @connect      *
 // @grant        GM_download
 // @grant        GM.download
 // @grant        GM_xmlhttpRequest
@@ -113,21 +116,21 @@
         }
     };
 
-    // Website-specific selectors
-    const website = window.location.hostname.split('.')[0];
+    // Website-specific selectors - Adjusted to be robust
+    const isNekohouse = window.location.hostname.includes('nekohouse');
     const SELECTORS = {
-        IMAGE_LINK: website === 'nekohouse' ? 'a.image-link:not(.scrape__user-profile)' : 'a.fileThumb.image-link',
+        IMAGE_LINK: isNekohouse ? 'a.image-link:not(.scrape__user-profile)' : 'a.fileThumb.image-link',
         GENERIC_IMAGE_LINK: 'a[href*=".jpg"], a[href*=".png"], a[href*=".gif"], a[href*=".webp"], a[href*=".jpeg"]',
-        ATTACHMENT_LINK: website === 'nekohouse' ? '.scrape__attachment-link' : '.post__attachment-link',
-        POST_TITLE: website === 'nekohouse' ? '.scrape__title' : '.post__title',
-        POST_USER_NAME: website === 'nekohouse' ? '.scrape__user-name' : '.post__user-name',
+        ATTACHMENT_LINK: isNekohouse ? '.scrape__attachment-link' : '.post__attachment-link',
+        POST_TITLE: isNekohouse ? '.scrape__title' : '.post__title',
+        POST_USER_NAME: isNekohouse ? '.scrape__user-name' : '.post__user-name',
         POST_IMAGE: 'img.post__image',
-        THUMBNAIL: website === 'nekohouse' ? '.scrape__thumbnail' : '.post__thumbnail',
-        MAIN_THUMBNAIL: website === 'nekohouse' ? '.scrape__thumbnail:not(.scrape__thumbnail--attachment)' : '.post__thumbnail:not(.post__thumbnail--attachment)',
-        POST_ACTIONS: website === 'nekohouse' ? '.scrape__actions' : '.post__actions',
-        FILE_DIVS: website === 'nekohouse' ? '.scrape__thumbnail' : '.post__thumbnail',
+        THUMBNAIL: isNekohouse ? '.scrape__thumbnail' : '.post__thumbnail',
+        MAIN_THUMBNAIL: isNekohouse ? '.scrape__thumbnail:not(.scrape__thumbnail--attachment)' : '.post__thumbnail:not(.post__thumbnail--attachment)',
+        POST_ACTIONS: isNekohouse ? '.scrape__actions' : '.post__actions',
+        FILE_DIVS: isNekohouse ? '.scrape__thumbnail' : '.post__thumbnail',
         VIDEO_LINK: 'a.fileThumb[href$=".mp4"], a.fileThumb[href$=".webm"], a.fileThumb[href$=".mov"], a[href$=".mp4"], a[href$=".webm"], a[href$=".mov"]',
-        VIDEO_THUMBNAIL: website === 'nekohouse' ? '.scrape__video-thumbnail' : '.post__video-thumbnail',
+        VIDEO_THUMBNAIL: isNekohouse ? '.scrape__video-thumbnail' : '.post__video-thumbnail',
     };
 
     // ====================================================
@@ -144,13 +147,14 @@
 
             if (hasImages) return true;
 
-            const url = window.location.href;
+            const path = window.location.pathname;
+            // Domain agnostic paths check
             const patterns = [
-                /https:\/\/(kemono|coomer|nekohouse)\.(su|cr|st)\/.*\/user\/.*\/post\//,
-                /https:\/\/(kemono|coomer)\.(su|cr|st)\/.*\/server\/.*\/channel\//,
-                /https:\/\/(kemono|coomer)\.(su|cr|st)\/.*\/post\//
+                /\/user\/.*\/post\//,
+                /\/server\/.*\/channel\//,
+                /\/post\//
             ];
-            return patterns.some(pattern => pattern.test(url));
+            return patterns.some(pattern => pattern.test(path));
         },
         delay: ms => new Promise(resolve => setTimeout(resolve, ms)),
         debounce: (func, wait) => {
@@ -190,9 +194,13 @@
                 return href;
             }
 
-            const directImg = mediaLink.querySelector('img')?.src;
+            const directImg = mediaLink.querySelector('img');
             if (directImg) {
-                const imgSrc = directImg.split('?')[0];
+                // Support extracting from `data-src` if loaded lazily on sites like Pawchive
+                const rawSrc = directImg.getAttribute('data-src') || directImg.src;
+                if (!rawSrc) return null;
+                const imgSrc = rawSrc.split('?')[0];
+
                 if (imgSrc.includes('/data/')) return imgSrc;
                 if (imgSrc.includes('/thumbnail/')) {
                     return imgSrc.replace(/\/thumbnail\//, '/data/');
@@ -246,10 +254,10 @@
                             const posterUrl = video.getAttribute('poster');
                             if (videoLink.parentNode) {
                                 const thumbnailContainer = document.createElement('div');
-                                thumbnailContainer.className = website === 'nekohouse' ? 'scrape__video-thumbnail' : 'post__video-thumbnail';
+                                thumbnailContainer.className = isNekohouse ? 'scrape__video-thumbnail' : 'post__video-thumbnail';
                                 const thumbnailImg = document.createElement('img');
                                 thumbnailImg.src = posterUrl;
-                                thumbnailImg.className = website === 'nekohouse' ? 'scrape__thumbnail-img' : 'post__thumbnail-img';
+                                thumbnailImg.className = isNekohouse ? 'scrape__thumbnail-img' : 'post__thumbnail-img';
                                 thumbnailContainer.appendChild(thumbnailImg);
                                 videoLink.parentNode.insertBefore(thumbnailContainer, videoLink);
                             }
@@ -895,7 +903,7 @@
             maxZoomScale: 5,
             zipFileNameFormat: '{title}-{artistName}.zip',
             imageFileNameFormat: '{title}-{artistName}-{fileName}-{index}',
-            autoLoadOriginals: true // NEW SETTING
+            autoLoadOriginals: true
         },
 
         saveSetting: (key, value) => {
@@ -1137,7 +1145,7 @@
         inertiaEnabled: SettingsManager.loadSetting('inertiaEnabled', true),
         inertiaActive: false,
         isSlideshowActive: false,
-        autoLoadOriginals: SettingsManager.loadSetting('autoLoadOriginals', true), // NEW STATE
+        autoLoadOriginals: SettingsManager.loadSetting('autoLoadOriginals', true),
     }, {
         controlsVisible: (value) => {
             if (galleryOverlay && galleryOverlay.length) {
@@ -1168,11 +1176,16 @@
         }),
         isLoading: (value, oldValue) => {
             if (value && !oldValue) {
-                if (state.loadedImages === 0) {
+                if (state.loadedImages === 0 && !state.autoLoadOriginals) {
                     UI.showLoadingOverlay(state.loadingMessage);
                 }
             } else if (!value && oldValue) {
                 UI.hideLoadingOverlay();
+            }
+        },
+        loadingMessage: (value) => {
+            if (state.isLoading && !state.autoLoadOriginals) {
+                UI.updateLoadingOverlayText(value);
             }
         },
         loadingMessage: (value) => {
@@ -2885,7 +2898,7 @@
                 if (isVideo) {
                     type = 'video';
                     url = linkElement.getAttribute('href')?.split('?')[0];
-                    poster = linkElement.querySelector('img, video')?.getAttribute('poster') || linkElement.querySelector('img')?.src;
+                    poster = linkElement.querySelector('img, video')?.getAttribute('poster') || (linkElement.querySelector('img')?.getAttribute('data-src') || linkElement.querySelector('img')?.src);
 
                     if (!url) return;
 
@@ -3488,7 +3501,6 @@
         ThumbnailStrip.cleanup();
         document.removeEventListener('keydown', EventHandlers.handleGlobalKeyDown);
     };
-
 
     const init = async () => {
         try {
