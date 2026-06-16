@@ -1,9 +1,3 @@
-Here is the updated `README.md` reflecting all the latest features, the addition of `pawchive.st`, the UI cleanup, and the bug fixes for version 3.6.0. 
-
-I've also removed the "Videos are not directly playable" bug from the Known Bugs section, since the updated script now correctly handles and plays video elements inside the gallery view, and updated the dependency list to reflect the current script header.
-
-***
-
 # Ultra Galleries
 
 **Ultra Galleries** is a powerful userscript that enhances the browsing and downloading experience on `kemono.su`, `coomer.su`, `nekohouse.su`, and `pawchive.st` by adding features for image manipulation, viewing, and batch downloading. It was originally based on [Better Kemono Galleries](https://sleazyfork.org/en/scripts/460064-better-kemono-galleries) but has been significantly expanded and improved.
