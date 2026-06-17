@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Ultra Galleries
+// @name         Ultra Galleries (Fixed & Optimized)
 // @namespace    https://sleazyfork.org/en/users/1477603-%E3%83%A1%E3%83%AA%E3%83%BC
 // @version      3.6.0
 // @description  Modern image gallery with highly efficient background zipping, video playback, browsing, fullscreen, and download features. Optimized, cleaned, and added Pawchive support.
@@ -28,7 +28,7 @@
 // @require      https://cdn.jsdelivr.net/npm/file-saver@1.3.2/FileSaver.min.js
 // @require      https://cdn.jsdelivr.net/npm/sweetalert2@11
 // @require      https://unpkg.com/dexie@3.2.7/dist/dexie.min.js
-// @resource     mainCSS https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/refs/heads/TestingBranch/Ultra-Galleries.css
+// @resource     mainCSS https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/refs/heads/main/Ultra-Galleries.css
 // ==/UserScript==
 (() => {
     'use strict';
@@ -1309,7 +1309,6 @@
         } catch (e) {
             return 0;
         }
-    }
 
     async function storeImageInDexie(url, blob) {
         if (!db) return;
@@ -1345,7 +1344,6 @@
         } catch (e) {
             return null;
         }
-    }
 
     async function clearDexieCache() {
         if (!db) return;
@@ -1357,7 +1355,7 @@
             state.notification = "Error clearing cache.";
             state.notificationType = "error";
         }
-    }
+    },
 
     const Zoom = {
         _applyTransition: function($element, action) {
@@ -1377,8 +1375,6 @@
             if ($zoomDisplay.length) {
                 $zoomDisplay.text(`${Math.round(state.zoomScale * 100)}%`);
             }
-            $container.toggleClass(CSS.GALLERY.ZOOMED, state.zoomScale !== 1);
-        },
 
         handleWheelZoom: (event) => {
             if (!state.zoomEnabled || !galleryOverlay || !galleryOverlay.length) return;
@@ -2260,8 +2256,9 @@
                     lastFocusedElement?.focus();
                 }, 300);
             }
-        }
-    };
+        }, { passive: true });
+    }
+};
 
     let galleryOverlay = null;
     const Gallery = {
@@ -2280,9 +2277,9 @@
             BlobManager.revokeAll();
         },
 
-        _fetchAndCacheImage: async function(indexToPreload, sessionId = null) {
-            if (indexToPreload < 0 || indexToPreload >= state.originalImageSrcs.length) return;
-            if (Gallery._preloadedImageCache[indexToPreload] || Gallery._preloadingInProgress[indexToPreload]) return;
+        Slideshow.interval = setInterval(() => {
+            Gallery.nextImage();
+        }, Slideshow.delay);
 
             const mediaItem = state.originalImageSrcs[indexToPreload];
             if (!mediaItem || mediaItem.type !== 'image') return;
@@ -2551,8 +2548,16 @@
             Gallery._createExpandedViewNavigationAndCounter($expandedView);
             const $stripThumbnailsContainer = Gallery._createExpandedViewThumbnailStrip($expandedView);
 
-            fragment.appendChild(galleryOverlay[0]);
-            document.body.appendChild(fragment);
+                        state.notification = 'Image loaded successfully';
+                        state.notificationType = 'success';
+                    }
+                } catch (retryError) {
+                    ErrorHandler.handleImageError(retryError, url, element, context);
+                }
+            }, delay);
+        } else {
+            ErrorHandler.showErrorPlaceholder(element, url, context);
+            ErrorHandler.retryAttempts.delete(url);
 
             Gallery._populateAllThumbnails($stripThumbnailsContainer);
             Gallery._setupGalleryInteractions($expandedView, $mainImageContainer);
@@ -2588,6 +2593,13 @@
                 );
                 return;
             }
+        } catch (error) {
+            console.error('Failed to import settings:', error);
+            state.notification = 'Failed to import settings: Invalid format';
+            state.notificationType = 'error';
+        }
+        return false;
+    },
 
             $mainMediaContainer.empty().removeClass(CSS.GALLERY.ZOOMED);
             Zoom.resetZoom();
@@ -2678,9 +2690,198 @@
             $(document).off('.galleryDrag');
         },
 
-        toggleGallery: function() {
-            if (state.isGalleryMode) {
-                Gallery.closeGallery();
+        const eventOptions = { passive: false };
+        containerDOM.addEventListener('touchstart', handleTouchStart, eventOptions);
+        containerDOM.addEventListener('touchmove', handleTouchMove, eventOptions);
+        containerDOM.addEventListener('touchend', handleTouchEnd, eventOptions);
+        containerDOM.addEventListener('touchcancel', handleTouchEnd, eventOptions);
+    }
+};
+
+const ThumbnailStrip = {
+    init: () => {
+        if (!galleryOverlay) return;
+        const $strip = galleryOverlay.find('.ug-thumbnail-strip');
+        ThumbnailStrip.updateScrollIndicators();
+        ThumbnailStrip.setupKeyboardNavigation();
+        ThumbnailStrip.setupDragNavigation();
+        ThumbnailStrip.setupHoverPreview();
+        ThumbnailStrip.setupContextMenu();
+        $strip.on('scroll', Utils.throttle(() => {
+            ThumbnailStrip.updateScrollIndicators();
+        }, 100));
+    },
+    updateScrollIndicators: () => {
+        const $strip = galleryOverlay.find('.ug-thumbnail-strip');
+        const hasScroll = $strip[0].scrollWidth > $strip[0].clientWidth;
+        $strip.toggleClass('no-scroll', !hasScroll);
+    },
+    setupKeyboardNavigation: () => {
+        const $strip = galleryOverlay.find('.ug-thumbnail-strip');
+        $strip.on('keydown', (e) => {
+            const $focused = $(e.target);
+            if (!$focused.hasClass('ug-thumbnail')) return;
+            switch(e.key) {
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    ThumbnailStrip.navigateThumbnails('prev');
+                    break;
+                case 'ArrowRight':
+                    e.preventDefault();
+                    ThumbnailStrip.navigateThumbnails('next');
+                    break;
+                case 'Enter':
+                case ' ':
+                    e.preventDefault();
+                    const index = parseInt($focused.data('index'));
+                    Gallery.showExpandedView(index);
+                    break;
+            }
+        });
+    },
+    navigateThumbnails: (direction) => {
+        const $strip = galleryOverlay.find('.ug-thumbnail-strip');
+        const $current = $strip.find('.ug-thumbnail.selected');
+        const $target = direction === 'next' ? $current.next() : $current.prev();
+        if ($target.length) {
+            $target[0].focus();
+            $target[0].scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+        }
+    },
+    setupDragNavigation: () => {
+        const $strip = galleryOverlay.find('.ug-thumbnail-strip');
+        let isDragging = false;
+        let startX = 0;
+        let scrollLeft = 0;
+        $strip.on('mousedown', (e) => {
+            if (e.button !== 0) return;
+            if (e.target.closest('.ug-thumbnail')) return;
+            isDragging = true;
+            startX = e.pageX - $strip.offset().left;
+            scrollLeft = $strip.scrollLeft();
+            $strip.css('cursor', 'grabbing');
+            $strip.addClass('ug-dragging');
+        });
+        $(document).on('mousemove.thumbnailstrip', (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            const x = e.pageX - $strip.offset().left;
+            const walk = (x - startX) * 2;
+            $strip.scrollLeft(scrollLeft - walk);
+        });
+        $(document).on('mouseup.thumbnailstrip', () => {
+            isDragging = false;
+            $strip.css('cursor', '');
+            $strip.removeClass('ug-dragging');
+        });
+    },
+    setupHoverPreview: () => {
+        const $strip = galleryOverlay.find('.ug-thumbnail-strip');
+        let previewTimeout;
+        $strip.on('mouseenter', '.ug-thumbnail', function() {
+            const $thumb = $(this);
+            const index = parseInt($thumb.data('index'));
+            clearTimeout(previewTimeout);
+            previewTimeout = setTimeout(() => {
+                ThumbnailStrip.showZoomPreview($thumb, index);
+            }, 500);
+        });
+        $strip.on('mouseleave', '.ug-thumbnail', function() {
+            clearTimeout(previewTimeout);
+            ThumbnailStrip.hideZoomPreview();
+        });
+    },
+    showZoomPreview: ($thumb, index) => {
+        const mediaItem = state.fullSizeImageSrcs[index];
+        if (!mediaItem || mediaItem.type !== 'image') return;
+        const $preview = $('<div>').addClass('ug-thumbnail-zoom-preview');
+        $('<img>').attr('src', mediaItem.src).appendTo($preview);
+        $thumb.append($preview);
+        setTimeout(() => $preview.addClass('show'), 10);
+    },
+    hideZoomPreview: () => {
+        galleryOverlay.find('.ug-thumbnail-zoom-preview').removeClass('show');
+        setTimeout(() => {
+            galleryOverlay.find('.ug-thumbnail-zoom-preview').remove();
+        }, 300);
+    },
+    setupContextMenu: () => {
+        const $strip = galleryOverlay.find('.ug-thumbnail-strip');
+        $strip.on('contextmenu', '.ug-thumbnail', function(e) {
+            e.preventDefault();
+            const $thumb = $(this);
+            const index = parseInt($thumb.data('index'));
+            ThumbnailStrip.showContextMenu($thumb, index, e.pageX, e.pageY);
+        });
+        $(document).on('click.thumbnailstrip', () => {
+            ThumbnailStrip.hideContextMenu();
+        });
+    },
+    showContextMenu: ($thumb, index, x, y) => {
+        ThumbnailStrip.hideContextMenu();
+        const $menu = $('<div>').addClass('ug-thumbnail-context-menu');
+        const menuItems = [
+            { text: 'Open Image', action: () => Gallery.showExpandedView(index) },
+            { text: 'Download Image', action: () => DownloadManager.downloadImageByIndex(index) },
+            { text: 'Copy URL', action: () => ThumbnailStrip.copyImageUrl(index) },
+            { text: 'Remove from Gallery', action: () => ThumbnailStrip.removeFromGallery(index), danger: true }
+        ];
+        menuItems.forEach(item => {
+            const $item = $('<button>')
+                .addClass('ug-thumbnail-context-menu-item')
+                .text(item.text)
+                .toggleClass('danger', item.danger)
+                .on('click', (e) => {
+                    e.stopPropagation();
+                    item.action();
+                    ThumbnailStrip.hideContextMenu();
+                });
+            $menu.append($item);
+        });
+        $menu.css({
+            left: Math.min(x, window.innerWidth - 170) + 'px',
+            top: Math.min(y - 10, window.innerHeight - 200) + 'px'
+        });
+        $('body').append($menu);
+        setTimeout(() => $menu.addClass('show'), 10);
+    },
+    hideContextMenu: () => {
+        $('.ug-thumbnail-context-menu').removeClass('show');
+        setTimeout(() => {
+            $('.ug-thumbnail-context-menu').remove();
+        }, 200);
+    },
+    copyImageUrl: (index) => {
+        const mediaItem = state.fullSizeImageSrcs[index];
+        if (!mediaItem) return;
+        navigator.clipboard.writeText(mediaItem.src).then(() => {
+            state.notification = 'Image URL copied to clipboard';
+            state.notificationType = 'success';
+        }).catch(err => {
+            console.error('Failed to copy URL:', err);
+            state.notification = 'Failed to copy URL';
+            state.notificationType = 'error';
+        });
+    },
+    removeFromGallery: (index) => {
+        if (confirm('Are you sure you want to remove this image from the gallery?')) {
+            state.fullSizeImageSrcs.splice(index, 1);
+            state.originalImageSrcs.splice(index, 1);
+            Gallery._populateAllThumbnails(
+                galleryOverlay.find('.ug-gallery-thumbnail-grid'),
+                galleryOverlay.find('.ug-thumbnail-strip')
+            );
+            const $counter = galleryOverlay.find('.ug-gallery-counter');
+            $counter.text(`${state.currentGalleryIndex + 1} / ${state.fullSizeImageSrcs.length}`);
+            state.notification = 'Image removed from gallery';
+            state.notificationType = 'info';
+        }
+    },
+    updateThumbnailNumbers: () => {
+        galleryOverlay.find('.ug-thumbnail').each(function(index) {
+            const $number = $(this).find('.ug-thumbnail-number');
+            if ($number.length === 0) {
+                $(this).append(`<span class="ug-thumbnail-number">${index + 1}</span>`);
             } else {
                 if (state.galleryReady && state.fullSizeImageSrcs.length > 0) {
                     Gallery.createGallery();
@@ -2796,7 +2997,12 @@
                 await Utils.delay(delay);
                 return ImageLoader.fetchWithRetry(url, sessionId, retries - 1, delay * 1.5);
             }
-        },
+        } catch (error) {
+            console.error(`Preload failed for ${indexToPreload}`, error);
+        } finally {
+            delete Gallery._preloadingInProgress[indexToPreload];
+        }
+    },
 
         loadImageAndApplyToPage: async (linkElement, galleryIndex, posterHref, isUniqueForGallery, sessionId, itemData) => {
             const imgElement = linkElement.querySelector('img') || linkElement; // Fallback to link itself if it is an image
@@ -2806,10 +3012,33 @@
                 if (state.currentLoadSessionId === sessionId) state.loadedImages++;
                 return;
             }
+        });
+        $gridThumbnailsContainer[0].appendChild(gridFragment);
+        $stripThumbnailsContainer[0].appendChild(stripFragment);
+    },
 
             if (imgElement.tagName === 'IMG' && !imgElement.classList.contains('post__image')) {
                 imgElement.classList.add('post__image');
             }
+        }
+    },
+
+    toggleFullscreen: function () {
+        state.isFullscreen = !state.isFullscreen;
+    },
+
+    nextImage: function () {
+        if (state.fullSizeImageSrcs.length === 0) return;
+        let newIndex = (state.currentGalleryIndex + 1) % state.fullSizeImageSrcs.length;
+        Gallery.showExpandedView(newIndex);
+    },
+
+    prevImage: function () {
+        if (state.fullSizeImageSrcs.length === 0) return;
+        let newIndex = (state.currentGalleryIndex - 1 + state.fullSizeImageSrcs.length) % state.fullSizeImageSrcs.length;
+        Gallery.showExpandedView(newIndex);
+    }
+};
 
             const cacheKey = itemData.originalUrl;
             let blobUrlToUse = loadedBlobUrls.get(posterHref);
@@ -3314,6 +3543,8 @@
                         filesArea.addEventListener('click', PostActions.imageLinkClickHandler);
                         filesArea.dataset.ugLeftClickHandlerAttached = "true";
                     }
+                } catch (e) {
+                    console.warn(`Skipping ${item.src}`, e);
                 }
                 ImageLoader.loadImages();
                 state.postActionsInitialized = true;
@@ -3404,12 +3635,15 @@
                         state.notification = "Gallery content is still loading.";
                         state.notificationType = "info";
                     }
+                });
+                if (!filesArea.dataset.ugLeftClickHandlerAttached) {
+                    filesArea.addEventListener('click', PostActions.imageLinkClickHandler);
+                    filesArea.dataset.ugLeftClickHandlerAttached = "true";
                 }
-                return;
             }
             if (state.settingsOpen && event.key === 'Escape') {
                 event.preventDefault();
-                state.settingsOpen = false;
+                Gallery.closeGallery();
                 return;
             }
             if (state.isGalleryMode && galleryOverlay?.length) {
@@ -3478,7 +3712,8 @@
             } else {
                 if (lastProcessedUrl !== null) {
                     PostActions.cleanupPostActions();
-                    lastProcessedUrl = null;
+                    PostActions.initPostActions();
+                    lastProcessedUrl = currentUrl;
                 }
             }
         } catch (error) {
