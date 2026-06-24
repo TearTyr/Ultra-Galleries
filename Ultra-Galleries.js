@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Ultra Galleries (Fixed & Optimized)
+// @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1477603-%E3%83%A1%E3%83%AA%E3%83%BC
-// @version      3.6.0
+// @version      3.6.2
 // @description  Modern image gallery with highly efficient background zipping, video playback, browsing, fullscreen, and download features. Optimized, cleaned, and added Pawchive support.
 // @author       ntf (original), Meri/TearTyr (maintained)
 // @match        *://kemono.su/*
@@ -29,6 +29,8 @@
 // @require      https://cdn.jsdelivr.net/npm/sweetalert2@11
 // @require      https://unpkg.com/dexie@3.2.7/dist/dexie.min.js
 // @resource     mainCSS https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/refs/heads/main/Ultra-Galleries.css
+// @downloadURL  https://update.sleazyfork.org/scripts/537986/Ultra%20Galleries.user.js
+// @updateURL    https://update.sleazyfork.org/scripts/537986/Ultra%20Galleries.meta.js
 // ==/UserScript==
 (() => {
     'use strict';
@@ -101,18 +103,6 @@
             ZOOMED: 'zoomed',
             IS_TRANSITIONING: 'is-transitioning',
             IMAGE_ERROR_MSG: 'ug-image-error-message',
-        },
-        SETTINGS: {
-            OVERLAY: 'ug-settings-overlay',
-            CONTAINER: 'ug-settings-container',
-            HEADER: 'ug-settings-header',
-            BODY: 'ug-settings-body',
-            CLOSE_BTN: 'ug-settings-close-btn',
-            SECTION: 'ug-settings-section',
-            SECTION_HEADER: 'ug-settings-section-header',
-            LABEL: 'ug-settings-label',
-            INPUT: 'ug-settings-input',
-            CHECKBOX_LABEL: 'ug-settings-checkbox-label',
         }
     };
 
@@ -124,8 +114,6 @@
         ATTACHMENT_LINK: isNekohouse ? '.scrape__attachment-link' : '.post__attachment-link',
         POST_TITLE: isNekohouse ? '.scrape__title' : '.post__title',
         POST_USER_NAME: isNekohouse ? '.scrape__user-name' : '.post__user-name',
-        POST_IMAGE: 'img.post__image',
-        THUMBNAIL: isNekohouse ? '.scrape__thumbnail' : '.post__thumbnail',
         MAIN_THUMBNAIL: isNekohouse ? '.scrape__thumbnail:not(.scrape__thumbnail--attachment)' : '.post__thumbnail:not(.post__thumbnail--attachment)',
         POST_ACTIONS: isNekohouse ? '.scrape__actions' : '.post__actions',
         FILE_DIVS: isNekohouse ? '.scrape__thumbnail' : '.post__thumbnail',
@@ -137,8 +125,28 @@
     // Utility Functions
     // ====================================================
     const Utils = {
-        getExtension: filename => filename.split('.').pop().toLowerCase() || 'jpg',
         sanitizeFileName: name => name.replace(/[/\\:*?"<>|]/g, '-'),
+        getPostDate: (type = 'published') => {
+            let selector;
+            if (type === 'edited') selector = '.post__edited, .scrape__edited';
+            else if (type === 'added' || type === 'imported') selector = '.post__added, .scrape__added';
+            else selector = '.post__published, .scrape__published, time[datetime]'; // default to published
+
+            const timeEl = document.querySelector(selector);
+            if (timeEl) {
+                const dateStr = timeEl.getAttribute('datetime') || timeEl.textContent;
+                if (dateStr) {
+                    // Try to extract YYYY-MM-DD HH:MM:SS or YYYY-MM-DD or YYYY-MM
+                    const match = dateStr.match(/\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?|\d{4}-\d{2}/);
+                    if (match && match[0]) {
+                        // Sanitize for filename (replace spaces with _ and colons with -)
+                        return Utils.sanitizeFileName(match[0].replace(/[ T]/g, '_').replace(/:/g, '-'));
+                    }
+                    return Utils.sanitizeFileName(dateStr.replace(/.*?:\s*/, '').trim());
+                }
+            }
+            return 'UnknownDate';
+        },
         setImageStyle: (img, styles) => img && Object.assign(img.style, styles),
         isPostPage: () => {
             const hasImages = document.querySelector(SELECTORS.IMAGE_LINK) ||
@@ -590,34 +598,6 @@
     };
 
     const ZoomHelper = {
-        calculateCenterOffsets: (imgWidth, imgHeight, containerWidth, containerHeight, scale) => {
-            const w = imgWidth * scale;
-            const h = imgHeight * scale;
-            return {
-                x: (containerWidth - w) / 2,
-                y: (containerHeight - h) / 2
-            };
-        },
-
-        initializeImageWithFillHeight: (imageDOM, containerDOM) => {
-            if (!imageDOM || !containerDOM) return;
-            $(imageDOM).css({
-                maxWidth: '100%',
-                maxHeight: '100vh',
-                width: 'auto',
-                height: 'auto',
-                objectFit: 'contain',
-                display: 'block',
-                margin: '0 auto'
-            });
-            state.zoomScale = 1;
-            state.imageOffset = {
-                x: 0,
-                y: 0
-            };
-            Zoom.applyZoom();
-        },
-
         calculateBoundaryOffsets: (offsetX, offsetY, scale, containerRect, imageDOM) => {
             if (!imageDOM || !containerRect) return {
                 x: offsetX,
@@ -890,19 +870,17 @@
             notificationPosition: 'bottom',
             bottomStripeVisible: true,
             hideNavArrows: false,
-            hideRemoveButton: false,
             hideFullButton: false,
             hideDownloadButton: false,
             hideHeightButton: false,
             hideWidthButton: false,
             enablePersistentCaching: true,
-            optimizePngInZip: false,
             slideshowDelay: 3000,
             slideshowPauseOnHover: true,
             inertiaEnabled: true,
             maxZoomScale: 5,
-            zipFileNameFormat: '{title}-{artistName}.zip',
-            imageFileNameFormat: '{title}-{artistName}-{fileName}-{index}',
+            zipFileNameFormat: '{date_published}-{title}-{artistName}.zip',
+            imageFileNameFormat: '{date_published}-{title}-{artistName}-{fileName}-{index}',
             autoLoadOriginals: true
         },
 
@@ -974,14 +952,6 @@
                 console.error('Failed to import settings:', error);
                 state.notification = 'Failed to import settings: Invalid format';
                 state.notificationType = 'error';
-            }
-            return false;
-        },
-
-        updateSetting: (key, value) => {
-            if (SettingsManager.saveSetting(key, value)) {
-                state[key] = value;
-                return true;
             }
             return false;
         }
@@ -1059,14 +1029,6 @@
                 },
             });
         },
-        getStoredValue: (key, defaultValue) => {
-            try {
-                return GM_getValue(key, defaultValue);
-            } catch (e) {
-                console.error(`Error getting stored value for ${key}:`, e);
-                return defaultValue;
-            }
-        },
         setStoredValue: (key, value) => {
             try {
                 GM_setValue(key, value);
@@ -1077,8 +1039,8 @@
     };
 
     const state = StateManager.createReactiveState({
-        zipFileNameFormat: SettingsManager.loadSetting('zipFileNameFormat', '{title}-{artistName}.zip'),
-        imageFileNameFormat: SettingsManager.loadSetting('imageFileNameFormat', '{title}-{artistName}-{fileName}-{index}'),
+        zipFileNameFormat: SettingsManager.loadSetting('zipFileNameFormat', '{date_published}-{title}-{artistName}.zip'),
+        imageFileNameFormat: SettingsManager.loadSetting('imageFileNameFormat', '{date_published}-{title}-{artistName}-{fileName}-{index}'),
         galleryKey: SettingsManager.loadSetting('galleryKey', 'g'),
         galleryReady: false,
         galleryActive: false,
@@ -1086,28 +1048,21 @@
         isFullscreen: SettingsManager.loadSetting('isFullscreen', false),
         originalImageSrcs: [],
         fullSizeImageSrcs: [],
-        currentPostUrl: null,
         totalImages: 0,
         loadedImages: 0,
         isLoading: false,
         loadingMessage: null,
-        hasImages: false,
-        postActionsInitialized: false,
-        mediaLoaded: {},
         isGalleryMode: false,
         isDownloading: false,
         errorCount: 0,
         currentLoadSessionId: null,
         notificationsEnabled: SettingsManager.loadSetting('notificationsEnabled', true),
-        notificationAreaVisible: SettingsManager.loadSetting('notificationAreaVisible', true),
         notificationPosition: SettingsManager.loadSetting('notificationPosition', 'bottom'),
         animationsEnabled: SettingsManager.loadSetting('animationsEnabled', true),
-        optimizePngInZip: SettingsManager.loadSetting('optimizePngInZip', false),
         enablePersistentCaching: SettingsManager.loadSetting('enablePersistentCaching', true),
         notification: null,
         notificationType: 'info',
         hideNavArrows: SettingsManager.loadSetting('hideNavArrows', false),
-        hideRemoveButton: SettingsManager.loadSetting('hideRemoveButton', false),
         hideFullButton: SettingsManager.loadSetting('hideFullButton', false),
         hideDownloadButton: SettingsManager.loadSetting('hideDownloadButton', false),
         hideHeightButton: SettingsManager.loadSetting('hideHeightButton', false),
@@ -1117,7 +1072,6 @@
         nextImageKey: SettingsManager.loadSetting('nextImageKey', 'l'),
         bottomStripeVisible: SettingsManager.loadSetting('bottomStripeVisible', true),
         zoomEnabled: SettingsManager.loadSetting('zoomEnabled', true),
-        isZoomed: false,
         zoomScale: 1,
         controlsVisible: true,
         isDragging: false,
@@ -1143,7 +1097,6 @@
         initialScale: 1,
         zoomIndicatorVisible: true,
         inertiaEnabled: SettingsManager.loadSetting('inertiaEnabled', true),
-        inertiaActive: false,
         isSlideshowActive: false,
         autoLoadOriginals: SettingsManager.loadSetting('autoLoadOriginals', true),
     }, {
@@ -1172,7 +1125,6 @@
                 state.notificationType = 'info';
                 state.notification = `Loading media (${state.loadedImages}/${value})...`;
             }
-            state.hasImages = value > 0;
         }),
         isLoading: (value, oldValue) => {
             if (value && !oldValue) {
@@ -1181,11 +1133,6 @@
                 }
             } else if (!value && oldValue) {
                 UI.hideLoadingOverlay();
-            }
-        },
-        loadingMessage: (value) => {
-            if (state.isLoading && !state.autoLoadOriginals) {
-                UI.updateLoadingOverlayText(value);
             }
         },
         loadingMessage: (value) => {
@@ -1254,13 +1201,6 @@
                 const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
                 if ($container.length) {
                     $container.toggleClass(CSS.GALLERY.GRABBING, value);
-                    if (value && state.inertiaActive) {
-                        state.inertiaActive = false;
-                        if (state.inertiaAnimFrame) {
-                            cancelAnimationFrame(state.inertiaAnimFrame);
-                            state.inertiaAnimFrame = null;
-                        }
-                    }
                 }
             }
         },
@@ -1277,9 +1217,6 @@
             if (value && !db) {
                 initDexie();
             }
-        },
-        optimizePngInZip: (value) => {
-            SettingsManager.saveSetting('optimizePngInZip', value);
         },
     });
 
@@ -1309,6 +1246,7 @@
         } catch (e) {
             return 0;
         }
+    }
 
     async function storeImageInDexie(url, blob) {
         if (!db) return;
@@ -1344,6 +1282,7 @@
         } catch (e) {
             return null;
         }
+    }
 
     async function clearDexieCache() {
         if (!db) return;
@@ -1355,7 +1294,7 @@
             state.notification = "Error clearing cache.";
             state.notificationType = "error";
         }
-    },
+    }
 
     const Zoom = {
         _applyTransition: function($element, action) {
@@ -1375,6 +1314,8 @@
             if ($zoomDisplay.length) {
                 $zoomDisplay.text(`${Math.round(state.zoomScale * 100)}%`);
             }
+            $container.toggleClass(CSS.GALLERY.ZOOMED, state.zoomScale !== 1);
+        },
 
         handleWheelZoom: (event) => {
             if (!state.zoomEnabled || !galleryOverlay || !galleryOverlay.length) return;
@@ -2094,13 +2035,6 @@
                     title: 'Downloads',
                     key: 'optimizations',
                     settings: [{
-                            id: 'optimizePngToggle',
-                            label: 'Optimize PNGs in ZIP (Slower)',
-                            type: 'checkbox',
-                            stateKey: 'optimizePngInZip',
-                            gmKey: 'optimizePngInZip'
-                        },
-                        {
                             id: 'persistentCachingToggle',
                             label: 'Enable Persistent Image Caching',
                             type: 'checkbox',
@@ -2256,9 +2190,8 @@
                     lastFocusedElement?.focus();
                 }, 300);
             }
-        }, { passive: true });
-    }
-};
+        }
+    };
 
     let galleryOverlay = null;
     const Gallery = {
@@ -2277,9 +2210,9 @@
             BlobManager.revokeAll();
         },
 
-        Slideshow.interval = setInterval(() => {
-            Gallery.nextImage();
-        }, Slideshow.delay);
+        _fetchAndCacheImage: async function(indexToPreload, sessionId = null) {
+            if (indexToPreload < 0 || indexToPreload >= state.originalImageSrcs.length) return;
+            if (Gallery._preloadedImageCache[indexToPreload] || Gallery._preloadingInProgress[indexToPreload]) return;
 
             const mediaItem = state.originalImageSrcs[indexToPreload];
             if (!mediaItem || mediaItem.type !== 'image') return;
@@ -2313,13 +2246,6 @@
             galleryOverlay = $('<div>').attr('id', 'gallery-overlay').addClass(CSS.GALLERY.OVERLAY);
             const $container = $('<div>').addClass(CSS.GALLERY.CONTAINER).appendTo(galleryOverlay);
             return $container;
-        },
-
-        _createBaseLayout: function($galleryContentContainer) {
-            const $expandedView = $('<div>').addClass(CSS.GALLERY.EXPANDED_VIEW).addClass(CSS.GALLERY.HIDE).appendTo($galleryContentContainer);
-            return {
-                $expandedView
-            };
         },
 
         _createExpandedViewToolbar: function($expandedViewElement) {
@@ -2548,16 +2474,8 @@
             Gallery._createExpandedViewNavigationAndCounter($expandedView);
             const $stripThumbnailsContainer = Gallery._createExpandedViewThumbnailStrip($expandedView);
 
-                        state.notification = 'Image loaded successfully';
-                        state.notificationType = 'success';
-                    }
-                } catch (retryError) {
-                    ErrorHandler.handleImageError(retryError, url, element, context);
-                }
-            }, delay);
-        } else {
-            ErrorHandler.showErrorPlaceholder(element, url, context);
-            ErrorHandler.retryAttempts.delete(url);
+            fragment.appendChild(galleryOverlay[0]);
+            document.body.appendChild(fragment);
 
             Gallery._populateAllThumbnails($stripThumbnailsContainer);
             Gallery._setupGalleryInteractions($expandedView, $mainImageContainer);
@@ -2593,13 +2511,6 @@
                 );
                 return;
             }
-        } catch (error) {
-            console.error('Failed to import settings:', error);
-            state.notification = 'Failed to import settings: Invalid format';
-            state.notificationType = 'error';
-        }
-        return false;
-    },
 
             $mainMediaContainer.empty().removeClass(CSS.GALLERY.ZOOMED);
             Zoom.resetZoom();
@@ -2690,198 +2601,9 @@
             $(document).off('.galleryDrag');
         },
 
-        const eventOptions = { passive: false };
-        containerDOM.addEventListener('touchstart', handleTouchStart, eventOptions);
-        containerDOM.addEventListener('touchmove', handleTouchMove, eventOptions);
-        containerDOM.addEventListener('touchend', handleTouchEnd, eventOptions);
-        containerDOM.addEventListener('touchcancel', handleTouchEnd, eventOptions);
-    }
-};
-
-const ThumbnailStrip = {
-    init: () => {
-        if (!galleryOverlay) return;
-        const $strip = galleryOverlay.find('.ug-thumbnail-strip');
-        ThumbnailStrip.updateScrollIndicators();
-        ThumbnailStrip.setupKeyboardNavigation();
-        ThumbnailStrip.setupDragNavigation();
-        ThumbnailStrip.setupHoverPreview();
-        ThumbnailStrip.setupContextMenu();
-        $strip.on('scroll', Utils.throttle(() => {
-            ThumbnailStrip.updateScrollIndicators();
-        }, 100));
-    },
-    updateScrollIndicators: () => {
-        const $strip = galleryOverlay.find('.ug-thumbnail-strip');
-        const hasScroll = $strip[0].scrollWidth > $strip[0].clientWidth;
-        $strip.toggleClass('no-scroll', !hasScroll);
-    },
-    setupKeyboardNavigation: () => {
-        const $strip = galleryOverlay.find('.ug-thumbnail-strip');
-        $strip.on('keydown', (e) => {
-            const $focused = $(e.target);
-            if (!$focused.hasClass('ug-thumbnail')) return;
-            switch(e.key) {
-                case 'ArrowLeft':
-                    e.preventDefault();
-                    ThumbnailStrip.navigateThumbnails('prev');
-                    break;
-                case 'ArrowRight':
-                    e.preventDefault();
-                    ThumbnailStrip.navigateThumbnails('next');
-                    break;
-                case 'Enter':
-                case ' ':
-                    e.preventDefault();
-                    const index = parseInt($focused.data('index'));
-                    Gallery.showExpandedView(index);
-                    break;
-            }
-        });
-    },
-    navigateThumbnails: (direction) => {
-        const $strip = galleryOverlay.find('.ug-thumbnail-strip');
-        const $current = $strip.find('.ug-thumbnail.selected');
-        const $target = direction === 'next' ? $current.next() : $current.prev();
-        if ($target.length) {
-            $target[0].focus();
-            $target[0].scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-        }
-    },
-    setupDragNavigation: () => {
-        const $strip = galleryOverlay.find('.ug-thumbnail-strip');
-        let isDragging = false;
-        let startX = 0;
-        let scrollLeft = 0;
-        $strip.on('mousedown', (e) => {
-            if (e.button !== 0) return;
-            if (e.target.closest('.ug-thumbnail')) return;
-            isDragging = true;
-            startX = e.pageX - $strip.offset().left;
-            scrollLeft = $strip.scrollLeft();
-            $strip.css('cursor', 'grabbing');
-            $strip.addClass('ug-dragging');
-        });
-        $(document).on('mousemove.thumbnailstrip', (e) => {
-            if (!isDragging) return;
-            e.preventDefault();
-            const x = e.pageX - $strip.offset().left;
-            const walk = (x - startX) * 2;
-            $strip.scrollLeft(scrollLeft - walk);
-        });
-        $(document).on('mouseup.thumbnailstrip', () => {
-            isDragging = false;
-            $strip.css('cursor', '');
-            $strip.removeClass('ug-dragging');
-        });
-    },
-    setupHoverPreview: () => {
-        const $strip = galleryOverlay.find('.ug-thumbnail-strip');
-        let previewTimeout;
-        $strip.on('mouseenter', '.ug-thumbnail', function() {
-            const $thumb = $(this);
-            const index = parseInt($thumb.data('index'));
-            clearTimeout(previewTimeout);
-            previewTimeout = setTimeout(() => {
-                ThumbnailStrip.showZoomPreview($thumb, index);
-            }, 500);
-        });
-        $strip.on('mouseleave', '.ug-thumbnail', function() {
-            clearTimeout(previewTimeout);
-            ThumbnailStrip.hideZoomPreview();
-        });
-    },
-    showZoomPreview: ($thumb, index) => {
-        const mediaItem = state.fullSizeImageSrcs[index];
-        if (!mediaItem || mediaItem.type !== 'image') return;
-        const $preview = $('<div>').addClass('ug-thumbnail-zoom-preview');
-        $('<img>').attr('src', mediaItem.src).appendTo($preview);
-        $thumb.append($preview);
-        setTimeout(() => $preview.addClass('show'), 10);
-    },
-    hideZoomPreview: () => {
-        galleryOverlay.find('.ug-thumbnail-zoom-preview').removeClass('show');
-        setTimeout(() => {
-            galleryOverlay.find('.ug-thumbnail-zoom-preview').remove();
-        }, 300);
-    },
-    setupContextMenu: () => {
-        const $strip = galleryOverlay.find('.ug-thumbnail-strip');
-        $strip.on('contextmenu', '.ug-thumbnail', function(e) {
-            e.preventDefault();
-            const $thumb = $(this);
-            const index = parseInt($thumb.data('index'));
-            ThumbnailStrip.showContextMenu($thumb, index, e.pageX, e.pageY);
-        });
-        $(document).on('click.thumbnailstrip', () => {
-            ThumbnailStrip.hideContextMenu();
-        });
-    },
-    showContextMenu: ($thumb, index, x, y) => {
-        ThumbnailStrip.hideContextMenu();
-        const $menu = $('<div>').addClass('ug-thumbnail-context-menu');
-        const menuItems = [
-            { text: 'Open Image', action: () => Gallery.showExpandedView(index) },
-            { text: 'Download Image', action: () => DownloadManager.downloadImageByIndex(index) },
-            { text: 'Copy URL', action: () => ThumbnailStrip.copyImageUrl(index) },
-            { text: 'Remove from Gallery', action: () => ThumbnailStrip.removeFromGallery(index), danger: true }
-        ];
-        menuItems.forEach(item => {
-            const $item = $('<button>')
-                .addClass('ug-thumbnail-context-menu-item')
-                .text(item.text)
-                .toggleClass('danger', item.danger)
-                .on('click', (e) => {
-                    e.stopPropagation();
-                    item.action();
-                    ThumbnailStrip.hideContextMenu();
-                });
-            $menu.append($item);
-        });
-        $menu.css({
-            left: Math.min(x, window.innerWidth - 170) + 'px',
-            top: Math.min(y - 10, window.innerHeight - 200) + 'px'
-        });
-        $('body').append($menu);
-        setTimeout(() => $menu.addClass('show'), 10);
-    },
-    hideContextMenu: () => {
-        $('.ug-thumbnail-context-menu').removeClass('show');
-        setTimeout(() => {
-            $('.ug-thumbnail-context-menu').remove();
-        }, 200);
-    },
-    copyImageUrl: (index) => {
-        const mediaItem = state.fullSizeImageSrcs[index];
-        if (!mediaItem) return;
-        navigator.clipboard.writeText(mediaItem.src).then(() => {
-            state.notification = 'Image URL copied to clipboard';
-            state.notificationType = 'success';
-        }).catch(err => {
-            console.error('Failed to copy URL:', err);
-            state.notification = 'Failed to copy URL';
-            state.notificationType = 'error';
-        });
-    },
-    removeFromGallery: (index) => {
-        if (confirm('Are you sure you want to remove this image from the gallery?')) {
-            state.fullSizeImageSrcs.splice(index, 1);
-            state.originalImageSrcs.splice(index, 1);
-            Gallery._populateAllThumbnails(
-                galleryOverlay.find('.ug-gallery-thumbnail-grid'),
-                galleryOverlay.find('.ug-thumbnail-strip')
-            );
-            const $counter = galleryOverlay.find('.ug-gallery-counter');
-            $counter.text(`${state.currentGalleryIndex + 1} / ${state.fullSizeImageSrcs.length}`);
-            state.notification = 'Image removed from gallery';
-            state.notificationType = 'info';
-        }
-    },
-    updateThumbnailNumbers: () => {
-        galleryOverlay.find('.ug-thumbnail').each(function(index) {
-            const $number = $(this).find('.ug-thumbnail-number');
-            if ($number.length === 0) {
-                $(this).append(`<span class="ug-thumbnail-number">${index + 1}</span>`);
+        toggleGallery: function() {
+            if (state.isGalleryMode) {
+                Gallery.closeGallery();
             } else {
                 if (state.galleryReady && state.fullSizeImageSrcs.length > 0) {
                     Gallery.createGallery();
@@ -2997,12 +2719,7 @@ const ThumbnailStrip = {
                 await Utils.delay(delay);
                 return ImageLoader.fetchWithRetry(url, sessionId, retries - 1, delay * 1.5);
             }
-        } catch (error) {
-            console.error(`Preload failed for ${indexToPreload}`, error);
-        } finally {
-            delete Gallery._preloadingInProgress[indexToPreload];
-        }
-    },
+        },
 
         loadImageAndApplyToPage: async (linkElement, galleryIndex, posterHref, isUniqueForGallery, sessionId, itemData) => {
             const imgElement = linkElement.querySelector('img') || linkElement; // Fallback to link itself if it is an image
@@ -3012,33 +2729,10 @@ const ThumbnailStrip = {
                 if (state.currentLoadSessionId === sessionId) state.loadedImages++;
                 return;
             }
-        });
-        $gridThumbnailsContainer[0].appendChild(gridFragment);
-        $stripThumbnailsContainer[0].appendChild(stripFragment);
-    },
 
             if (imgElement.tagName === 'IMG' && !imgElement.classList.contains('post__image')) {
                 imgElement.classList.add('post__image');
             }
-        }
-    },
-
-    toggleFullscreen: function () {
-        state.isFullscreen = !state.isFullscreen;
-    },
-
-    nextImage: function () {
-        if (state.fullSizeImageSrcs.length === 0) return;
-        let newIndex = (state.currentGalleryIndex + 1) % state.fullSizeImageSrcs.length;
-        Gallery.showExpandedView(newIndex);
-    },
-
-    prevImage: function () {
-        if (state.fullSizeImageSrcs.length === 0) return;
-        let newIndex = (state.currentGalleryIndex - 1 + state.fullSizeImageSrcs.length) % state.fullSizeImageSrcs.length;
-        Gallery.showExpandedView(newIndex);
-    }
-};
 
             const cacheKey = itemData.originalUrl;
             let blobUrlToUse = loadedBlobUrls.get(posterHref);
@@ -3084,7 +2778,6 @@ const ThumbnailStrip = {
                         type: itemData.type,
                         fileName: linkElement.getAttribute('download') || cacheKey.split('/').pop()
                     };
-                    state.mediaLoaded[galleryIndex] = true;
                 }
                 state.loadedImages++;
 
@@ -3224,11 +2917,14 @@ const ThumbnailStrip = {
         },
 
         loadImages: async () => {
+            // FIX: More robust container selectors. Fallback to document.
             const postContainer = document.querySelector('section.site-section--post') ||
                 document.querySelector('section.site-section--scrape') ||
-                document.querySelector('.post__content');
+                document.querySelector('.post__body') ||
+                document.querySelector('.post__content') ||
+                document;
 
-            if (!postContainer || !Utils.isPostPage() || state.isLoading) return;
+            if (!Utils.isPostPage() || state.isLoading) return;
 
             const sessionId = StateManager.generateSessionId();
             state.currentLoadSessionId = sessionId;
@@ -3244,7 +2940,6 @@ const ThumbnailStrip = {
                     fullSizeImageSrcs: [],
                     originalImageSrcs: [],
                     loadedImages: 0,
-                    mediaLoaded: {},
                     errorCount: 0
                 });
 
@@ -3254,7 +2949,6 @@ const ThumbnailStrip = {
 
                 const uniqueItems = Array.from(uniqueGalleryItems.values());
                 state.totalImages = uniqueItems.length;
-                state.hasImages = state.totalImages > 0;
 
                 // Pre-populate the gallery arrays so the gallery is functional immediately
                 state.fullSizeImageSrcs = Array(uniqueItems.length).fill(null);
@@ -3339,6 +3033,12 @@ const ThumbnailStrip = {
             }
             const title = document.querySelector(SELECTORS.POST_TITLE)?.textContent?.trim() || 'Untitled';
             const artistName = document.querySelector(SELECTORS.POST_USER_NAME)?.textContent?.trim() || 'Unknown Artist';
+
+            // Fetch all date types
+            const datePublished = Utils.getPostDate('published');
+            const dateEdited = Utils.getPostDate('edited');
+            const dateImported = Utils.getPostDate('imported');
+
             const itemsToDownload = state.originalImageSrcs.filter(item => item && item.src);
             if (itemsToDownload.length === 0) {
                 state.notification = 'No media found to download.';
@@ -3375,7 +3075,13 @@ const ThumbnailStrip = {
                 } else if (type === 'complete') {
                     const sanitizedTitle = Utils.sanitizeFileName(title);
                     const sanitizedArtistName = Utils.sanitizeFileName(artistName);
-                    let zipFileName = state.zipFileNameFormat.replace('{artistName}', sanitizedArtistName).replace('{title}', sanitizedTitle);
+                    let zipFileName = state.zipFileNameFormat
+                        .replace(/{date_published}/gi, datePublished)
+                        .replace(/{date_edited}/gi, dateEdited)
+                        .replace(/{date_imported}/gi, dateImported)
+                        .replace(/{date}/gi, datePublished) // backward compatibility
+                        .replace('{artistName}', sanitizedArtistName)
+                        .replace('{title}', sanitizedTitle);
                     if (!zipFileName.toLowerCase().endsWith('.zip')) zipFileName += '.zip';
                     saveAs(zipBlob, zipFileName);
                     state.notification = 'Download complete!';
@@ -3404,7 +3110,15 @@ const ThumbnailStrip = {
                         if (blob) {
                             let correctExt = item.fileName.split('.').pop().toLowerCase() || 'jpg';
                             const fileNameWithoutExt = item.fileName.replace(/\.[^/.]+$/, "");
-                            let pathInZip = state.imageFileNameFormat.replace('{title}', title.replace(/[/\\:*?"<>|]/g, '-')).replace('{artistName}', artistName.replace(/[/\\:*?"<>|]/g, '-')).replace('{fileName}', fileNameWithoutExt.replace(/[/\\:*?"<>|]/g, '-')).replace('{index}', i + 1);
+                            let pathInZip = state.imageFileNameFormat
+                                .replace(/{date_published}/gi, datePublished)
+                                .replace(/{date_edited}/gi, dateEdited)
+                                .replace(/{date_imported}/gi, dateImported)
+                                .replace(/{date}/gi, datePublished) // backward compatibility
+                                .replace('{title}', title.replace(/[/\\:*?"<>|]/g, '-'))
+                                .replace('{artistName}', artistName.replace(/[/\\:*?"<>|]/g, '-'))
+                                .replace('{fileName}', fileNameWithoutExt.replace(/[/\\:*?"<>|]/g, '-'))
+                                .replace('{index}', i + 1);
                             if (!pathInZip.toLowerCase().endsWith(`.${correctExt}`)) pathInZip += `.${correctExt}`;
                             DownloadManager._worker.postMessage({
                                 type: 'addFile',
@@ -3435,8 +3149,28 @@ const ThumbnailStrip = {
                 let blob = await getImageFromDexie(item.src);
                 if (!blob) blob = await ImageLoader.fetchWithRetry(item.src, state.currentLoadSessionId);
                 if (blob) {
-                    const fileName = item.fileName || item.src.split('/').pop() || 'download.jpg';
-                    saveAs(blob, Utils.sanitizeFileName(fileName));
+                    let correctExt = item.fileName.split('.').pop().toLowerCase() || 'jpg';
+                    const fileNameWithoutExt = item.fileName.replace(/\.[^/.]+$/, "");
+
+                    // Fetch metadata for formatting
+                    const title = document.querySelector(SELECTORS.POST_TITLE)?.textContent?.trim() || 'Untitled';
+                    const artistName = document.querySelector(SELECTORS.POST_USER_NAME)?.textContent?.trim() || 'Unknown Artist';
+                    const datePublished = Utils.getPostDate('published');
+                    const dateEdited = Utils.getPostDate('edited');
+                    const dateImported = Utils.getPostDate('imported');
+
+                    let formattedName = state.imageFileNameFormat
+                        .replace(/{date_published}/gi, datePublished)
+                        .replace(/{date_edited}/gi, dateEdited)
+                        .replace(/{date_imported}/gi, dateImported)
+                        .replace(/{date}/gi, datePublished)
+                        .replace('{title}', title.replace(/[/\\:*?"<>|]/g, '-'))
+                        .replace('{artistName}', artistName.replace(/[/\\:*?"<>|]/g, '-'))
+                        .replace('{fileName}', fileNameWithoutExt.replace(/[/\\:*?"<>|]/g, '-'))
+                        .replace('{index}', index + 1);
+
+                    if (!formattedName.toLowerCase().endsWith(`.${correctExt}`)) formattedName += `.${correctExt}`;
+                    saveAs(blob, Utils.sanitizeFileName(formattedName));
                     state.notification = 'Download started';
                     state.notificationType = 'success';
                 }
@@ -3475,8 +3209,18 @@ const ThumbnailStrip = {
         },
         initPostActions: () => {
             try {
-                const postActionsContainer = document.querySelector(SELECTORS.POST_ACTIONS);
+                // FIX: Fallback for sites that removed the actions container
+                let postActionsContainer = document.querySelector(SELECTORS.POST_ACTIONS);
+                if (!postActionsContainer) {
+                    const fallbackContainer = document.querySelector('.post__body') || document.querySelector('.post__files');
+                    if (fallbackContainer) {
+                        postActionsContainer = document.createElement('div');
+                        postActionsContainer.className = 'post__actions ug-injected-ui';
+                        fallbackContainer.prepend(postActionsContainer);
+                    }
+                }
                 if (!postActionsContainer) return;
+
                 const globalButtons = document.createElement('div');
                 globalButtons.className = 'ug-injected-ui';
                 elements.galleryButton = UI.createToggleButton('Loading Gallery...', Gallery.toggleGallery, true);
@@ -3543,11 +3287,8 @@ const ThumbnailStrip = {
                         filesArea.addEventListener('click', PostActions.imageLinkClickHandler);
                         filesArea.dataset.ugLeftClickHandlerAttached = "true";
                     }
-                } catch (e) {
-                    console.warn(`Skipping ${item.src}`, e);
                 }
                 ImageLoader.loadImages();
-                state.postActionsInitialized = true;
                 state.currentPostUrl = window.location.href;
             } catch (error) {
                 console.error('Error initializing post actions:', error);
@@ -3595,13 +3336,10 @@ const ThumbnailStrip = {
             Object.assign(state, {
                 fullSizeImageSrcs: [],
                 originalImageSrcs: [],
-                currentPostUrl: null,
                 galleryReady: false,
                 loadedImages: 0,
                 totalImages: 0,
-                mediaLoaded: {},
                 errorCount: 0,
-                postActionsInitialized: false,
                 isLoading: false,
                 loadingMessage: null
             });
@@ -3635,15 +3373,12 @@ const ThumbnailStrip = {
                         state.notification = "Gallery content is still loading.";
                         state.notificationType = "info";
                     }
-                });
-                if (!filesArea.dataset.ugLeftClickHandlerAttached) {
-                    filesArea.addEventListener('click', PostActions.imageLinkClickHandler);
-                    filesArea.dataset.ugLeftClickHandlerAttached = "true";
                 }
+                return;
             }
             if (state.settingsOpen && event.key === 'Escape') {
                 event.preventDefault();
-                Gallery.closeGallery();
+                state.settingsOpen = false;
                 return;
             }
             if (state.isGalleryMode && galleryOverlay?.length) {
@@ -3676,14 +3411,6 @@ const ThumbnailStrip = {
                     }
                 }
             }
-        },
-        handleGlobalError: event => {
-            if (state.isGalleryMode || state.isLoading) {
-                console.error('Script error:', event.error);
-                state.notification = 'Encountered an error. Try refreshing page.';
-                state.notificationType = 'error';
-                state.isLoading = false;
-            }
         }
     };
 
@@ -3699,11 +3426,16 @@ const ThumbnailStrip = {
     const injectUI = () => {
         try {
             const onPostPage = Utils.isPostPage();
-            const postContainer = document.querySelector('section.site-section--post');
+            // FIX: Add more robust selectors to detect post pages correctly on updated layouts
+            const postContainer = document.querySelector('section.site-section--post') ||
+                document.querySelector('section.site-section--scrape') ||
+                document.querySelector('.post__body') ||
+                document.querySelector('.post__content');
             const currentUrl = window.location.href;
             if (onPostPage && postContainer) {
                 if (currentUrl !== lastProcessedUrl) {
-                    if (document.querySelector(SELECTORS.POST_ACTIONS)) {
+                    // FIX: Check for post__files or post__body if actions is missing
+                    if (document.querySelector(SELECTORS.POST_ACTIONS) || document.querySelector('.post__files') || document.querySelector('.post__body')) {
                         PostActions.cleanupPostActions();
                         PostActions.initPostActions();
                         lastProcessedUrl = currentUrl;
@@ -3712,8 +3444,7 @@ const ThumbnailStrip = {
             } else {
                 if (lastProcessedUrl !== null) {
                     PostActions.cleanupPostActions();
-                    PostActions.initPostActions();
-                    lastProcessedUrl = currentUrl;
+                    lastProcessedUrl = null;
                 }
             }
         } catch (error) {
