@@ -31,7 +31,7 @@ This userscript provides a seamless and efficient way to interact with image and
 
 -   **Individual Media Download:** Download single images or videos with a click.
 -   **Batch Downloading:** Download all images and videos from a post, packaged in a single zip archive.
--   **Custom Naming:** Configurable naming patterns for zip archives and individual images.
+-   **Custom Naming & Date Archiving:** Configurable naming patterns for zip archives and individual images. Supports dynamic date placeholders (`{date_published}`, `{date_edited}`, `{date_imported}`) to cleanly sort and archive your downloads.
 -   **CORS Bypass:** Includes universal `@connect` permissions to effortlessly download assets hosted on external CDNs or dynamic subdomains (like `file.pawchive.st`).
 
 ### Performance and User Experience
@@ -41,10 +41,16 @@ This userscript provides a seamless and efficient way to interact with image and
 -   **Optimized Caching:** Dexie.js (IndexedDB) integration stores fetched image blobs persistently, resulting in instantaneous load times when revisiting previous posts.
 -   **Dynamic Notifications:** A redesigned, non-intrusive notification system provides real-time feedback that resets and updates correctly as you navigate.
 -   **Mobile Support:** Touch-friendly interface with pinch-to-zoom, double-tap interactions, and smooth swipe-to-pan.
+-   **Auto-Updating:** Integrated `@updateURL` and `@downloadURL` metadata ensures your script manager automatically fetches the latest fixes and features.
 
 ## Version History
 
-### Version 3.6.0 (Current)
+### Version 3.6.2 (Current)
+-   **Dynamic Date Formatting:** Added support for `{date_published}`, `{date_edited}`, and `{date_imported}` placeholders in file naming settings. Dates are automatically cleaned (e.g., `2023-10-25_14-30-00`) for safe archiving.
+-   **Layout Robustness:** Improved DOM container selectors to gracefully handle recent site HTML updates. The script will now fall back to `.post__body` or `.post__files` if standard containers are modified.
+-   **Auto-Update Support:** Added SleazyFork `@downloadURL` and `@updateURL` for seamless automatic updates.
+
+### Version 3.6.0
 -   **Pawchive.st Support:** Added full compatibility for the new `pawchive.st` platform. 
 -   **Lazy-Load Bypass:** Added logic to extract true image URLs from lazy-loaded `data-src` elements.
 -   **HTMX Compatibility:** Fortified UI observers and element cleanup protocols to properly handle HTMX/history navigation without duplicating buttons.
@@ -75,7 +81,7 @@ After installation, navigate to a post on `kemono.su`, `coomer.su`, `nekohouse.s
 
 - Use the **`DL ALL`** button to initiate a background batch download of all media in the post. 
 - The **`GALLERY`** button opens the immersive gallery view. Alternatively, press the configured gallery hotkey (default **`g`**) to quickly open it.
-- **`⚙️ (Settings)`** opens the configuration menu where you can toggle caching, modify slideshow speed, change the download naming schema, and manage UI button visibility.
+- **`⚙️ (Settings)`** opens the configuration menu where you can toggle caching, modify slideshow speed, change the download naming schema (including the new date variables), and manage UI button visibility.
 
 **Within the gallery view:** 
 Click any thumbnail in the bottom strip to view it. Navigate using the **`k`** (previous) and **`l`** (next) keys, the arrow keys, or the on-screen navigation buttons. 
@@ -97,4 +103,4 @@ To zoom in on an image, use the mouse wheel, the zoom buttons in the toolbar, or
 
 ## Version
 
-Current version: **3.6.0**
+Current version: **3.6.2**
