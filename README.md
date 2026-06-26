@@ -19,7 +19,7 @@ This userscript provides a seamless and efficient way to interact with image and
     -   Full resolution (`FULL`)
 -   **Gallery View:** A modern, feature-rich gallery view for easier browsing of images within a post. Grid view has been removed for a cleaner, unified presentation.
 -   **Slideshow Mode:** Automatically cycle through gallery media with customizable delays and pause-on-hover capabilities.
--   **Zoom & Pan:** Advanced zooming with mouse wheel, buttons, and double-click support, plus smooth, inertia-based panning capabilities.
+-   **Zoom & Pan:** Advanced zooming with mouse wheel, buttons, and double-click support, plus smooth, inertia-based panning capabilities. *Optimized to prevent layout thrashing and ensure 60fps rendering.*
 
 ### Video Handling
 
@@ -30,7 +30,7 @@ This userscript provides a seamless and efficient way to interact with image and
 ### Downloading
 
 -   **Individual Media Download:** Download single images or videos with a click.
--   **Batch Downloading:** Download all images and videos from a post, packaged in a single zip archive.
+-   **Batch Downloading:** Download all images and videos from a post, packaged in a single zip archive. *Utilizes Web Workers for highly efficient, non-blocking background zipping.*
 -   **Custom Naming & Date Archiving:** Configurable naming patterns for zip archives and individual images. Supports dynamic date placeholders (`{date_published}`, `{date_edited}`, `{date_imported}`) to cleanly sort and archive your downloads.
 -   **CORS Bypass:** Includes universal `@connect` permissions to effortlessly download assets hosted on external CDNs or dynamic subdomains (like `file.pawchive.st`).
 
@@ -38,14 +38,21 @@ This userscript provides a seamless and efficient way to interact with image and
 
 -   **HTMX & SPA Navigation Safety:** Robust UI injection and cleanup logic ensures the script works flawlessly on modern Single-Page Applications and sites utilizing `hx-boost` (like Pawchive). 
 -   **Lazy-Load Bypass:** Automatically resolves `data-src` placeholder attributes to extract the true image path without requiring you to scroll down the page.
--   **Optimized Caching:** Dexie.js (IndexedDB) integration stores fetched image blobs persistently, resulting in instantaneous load times when revisiting previous posts.
+-   **True LRU Caching:** Dexie.js (IndexedDB) integration stores fetched image blobs persistently. Implements a true Least Recently Used (LRU) algorithm, updating cache timestamps on access to ensure your favorite media stays cached the longest.
+-   **Decoupled High-Frequency State:** Zooming and panning math are decoupled from the reactive Proxy state, caching DOM nodes during animations to eliminate performance drops on large images.
 -   **Dynamic Notifications:** A redesigned, non-intrusive notification system provides real-time feedback that resets and updates correctly as you navigate.
 -   **Mobile Support:** Touch-friendly interface with pinch-to-zoom, double-tap interactions, and smooth swipe-to-pan.
 -   **Auto-Updating:** Integrated `@updateURL` and `@downloadURL` metadata ensures your script manager automatically fetches the latest fixes and features.
 
 ## Version History
 
-### Version 3.6.2 (Current)
+### Version 3.6.3 (Current)
+-   **Performance Overhaul:** Decoupled high-frequency view state (`zoomScale`, `imageOffset`) from the reactive state Proxy to eliminate overhead during `requestAnimationFrame` loops.
+-   **Smooth Dragging & Panning:** Cached DOM nodes during pan/zoom operations to prevent layout thrashing, drastically reducing CPU usage and ensuring buttery-smooth 60fps image dragging.
+-   **True LRU Cache:** Updated the Dexie/IndexedDB caching logic to refresh the `cachedAt` timestamp upon image access, implementing a proper Least Recently Used eviction strategy.
+-   **Memory Leak Fixes:** Hardened Blob URL revocation and Web Worker cleanup during SPA navigation to prevent memory bloating over long browsing sessions.
+
+### Version 3.6.2
 -   **Dynamic Date Formatting:** Added support for `{date_published}`, `{date_edited}`, and `{date_imported}` placeholders in file naming settings. Dates are automatically cleaned (e.g., `2023-10-25_14-30-00`) for safe archiving.
 -   **Layout Robustness:** Improved DOM container selectors to gracefully handle recent site HTML updates. The script will now fall back to `.post__body` or `.post__files` if standard containers are modified.
 -   **Auto-Update Support:** Added SleazyFork `@downloadURL` and `@updateURL` for seamless automatic updates.
@@ -90,11 +97,11 @@ To zoom in on an image, use the mouse wheel, the zoom buttons in the toolbar, or
 
 ## Dependencies
 
--   [jQuery](https://jquery.com/) (v3.6.0)
--   [JSZip](https://stuk.github.io/jszip/) (v3.9.1)
--   [FileSaver.js](https://github.com/eligrey/FileSaver.js/) (v1.3.2)
+-   [jQuery](https://jquery.com/) (v3.7.1)
+-   [JSZip](https://stuk.github.io/jszip/) (v3.10.1)
+-   [FileSaver.js](https://github.com/eligrey/FileSaver.js/) (v2.0.5)
 -   [SweetAlert2](https://sweetalert2.github.io/) (v11)
--   [Dexie.js](https://dexie.org/) (v3.2.7)
+-   [Dexie.js](https://dexie.org/) (v4.0.8)
 
 ## Acknowledgments
 
@@ -103,4 +110,4 @@ To zoom in on an image, use the mouse wheel, the zoom buttons in the toolbar, or
 
 ## Version
 
-Current version: **3.6.2**
+Current version: **3.6.3**
