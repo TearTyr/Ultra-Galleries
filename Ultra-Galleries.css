@@ -1,5 +1,5 @@
 /* ====================================================
-                    Ultra Galleries v3.5.1
+                    Ultra Galleries v3.6.4
    ==================================================== */
 
 /* ------------------- THEME & VARIABLES ------------------- */
@@ -60,6 +60,14 @@
     --ug-duration-fast: 150ms;
     --ug-duration-normal: 250ms;
     --ug-duration-slow: 400ms;
+    
+    /* Buttons */
+    --ug-text-primary: var(--ug-text);
+    --ug-bg-hover: oklch(100% 0 0 / 0.12);
+    --ug-bg-active: oklch(100% 0 0 / 0.18);
+    --ug-transition-fast: var(--ug-duration-fast) var(--ug-ease-smooth);
+    --ug-accent-color: var(--ug-accent);
+    --ug-accent-color-translucent: var(--ug-accent-glow);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -68,6 +76,16 @@
         --ug-duration-normal: 0ms;
         --ug-duration-slow: 0ms;
     }
+}
+
+/* Patched: Disable all animations/transitions when setting is turned off in script */
+body.ug-animations-disabled *,
+body.ug-animations-disabled *::before,
+body.ug-animations-disabled *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
 }
 
 /* ------------------- GLOBAL RESETS ------------------- */
@@ -260,9 +278,9 @@
 .ug-gallery-toolbar.ug-controls-hidden {
     opacity: 0;
     pointer-events: none;
-    transform: translate(-50%, -16px);
+    transform: translate(-50%, -20px);
 }
-.ug-gallery-toolbar.ug-controls-hidden { opacity: 0; pointer-events: none; transform: translate(-50%, -20px); }
+
 .ug-toolbar-button {
     background: transparent;
     border: none;
@@ -364,18 +382,23 @@
     overflow: hidden;
 }
 
+/* Patched: Moved inline JS styles to CSS */
 .ug-ambient-background {
     position: absolute;
-    inset: -40px;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     background-size: cover;
     background-position: center;
-    filter: blur(60px) brightness(0.25) saturate(1.3);
+    filter: blur(15px) brightness(0.4);
     z-index: 0;
     pointer-events: none;
     transition: background-image var(--ug-duration-slow) var(--ug-ease-smooth);
     opacity: 1;
 }
 
+/* Patched: Moved inline JS styles to CSS */
 .ug-main-image-container {
     position: absolute !important;
     inset: 0;
@@ -397,15 +420,22 @@
     cursor: grab;
 }
 
+/* Patched: Moved inline JS styles to CSS */
 .ug-main-image {
+    opacity: 0;
+    transition: opacity 0.3s ease, box-shadow var(--ug-duration-normal) var(--ug-ease-smooth);
+    position: relative;
+    display: block;
     border-radius: 4px;
     box-shadow: 0 8px 40px oklch(0% 0 0 / 0.6);
-    transition: box-shadow var(--ug-duration-normal) var(--ug-ease-smooth);
 }
 
+/* Patched: Moved inline JS styles to CSS */
 .ug-main-video {
     max-width: 100%;
     max-height: 100%;
+    width: auto;
+    height: auto;
     border-radius: 6px;
     box-shadow: 0 8px 40px oklch(0% 0 0 / 0.6);
 }
@@ -420,9 +450,6 @@
     pointer-events: none;
     z-index: 10;
 }
-.ug-main-image-container.ug-grabbing { cursor: grabbing !important; }
-.ug-main-image { border-radius: 4px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); transition: box-shadow 0.3s ease; }
-.ug-main-video { max-width: 100%; max-height: 100%; border-radius: 4px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
 
 /* ------------------- NAVIGATION ARROWS ------------------- */
 .ug-gallery-nav-container {
@@ -464,15 +491,13 @@
 }
 
 .ug-gallery-nav:hover {
-    background: oklch(100% 0 0 / 0.2);
-    transform: scale(1.08);
+    background-color: rgba(255, 255, 255, 0.2);
+    transform: scale(1.1);
 }
 
 .ug-gallery-nav:active {
     transform: scale(0.92);
 }
-.ug-gallery-overlay:hover .ug-gallery-nav { opacity: 1; transform: scale(1); }
-.ug-gallery-nav:hover { background-color: rgba(255, 255, 255, 0.2); transform: scale(1.1); }
 
 /* Counter badge */
 .ug-gallery-counter {
@@ -511,7 +536,7 @@
 .ug-controls-hidden .ug-gallery-thumbnail-strip-container {
     transform: translateY(100%);
 }
-.ug-controls-hidden .ug-gallery-thumbnail-strip-container { transform: translateY(100%); }
+
 .ug-thumbnail-strip {
     display: flex;
     overflow-x: auto;
@@ -635,8 +660,6 @@
     opacity: 1;
     transform: translateX(-50%) translateY(0);
 }
-.ug-thumbnail:hover { opacity: 1; transform: scale(1.05); }
-.ug-thumbnail.selected { opacity: 1; border-color: var(--ug-accent-color); box-shadow: 0 0 15px var(--ug-accent-color-translucent); }
 
 .ug-thumbnail-zoom-preview img {
     width: 100%;
@@ -691,7 +714,6 @@
 .ug-thumbnail-context-menu-item.danger {
     color: var(--ug-error);
 }
-#ug-notification-close:hover { color: #fff; }
 
 .ug-thumbnail-context-menu-item.danger:hover {
     background: oklch(65% 0.25 25 / 0.12);
@@ -764,8 +786,6 @@
     background: var(--ug-success);
     box-shadow: 0 0 8px oklch(72% 0.2 155 / 0.4);
 }
-.ug-button:active { background-color: var(--ug-bg-active); transform: translateY(0); }
-.ug-button.disabled { opacity: 0.4; cursor: not-allowed; background-color: transparent; transform: none; box-shadow: none !important; }
 
 .ug-notification-container.error::before {
     background: var(--ug-error);
@@ -1193,6 +1213,12 @@
     box-shadow: none !important;
 }
 
+/* Patched: Force default cursor on loaded images to fix hover pointer bug */
+.ug-image-loaded,
+a:has(.ug-image-loaded) {
+    cursor: default !important;
+}
+
 /* ------------------- ERROR PLACEHOLDER ------------------- */
 .ug-image-error-message {
     position: absolute;
@@ -1280,6 +1306,22 @@
 
 .ug-slideshow-stop:hover {
     color: var(--ug-error);
+}
+
+/* ------------------- TOOLTIP ------------------- */
+/* Patched: Moved inline JS styles to CSS */
+.zoom-tooltip {
+    position: absolute;
+    bottom: 120px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 10px 15px;
+    border-radius: 5px;
+    z-index: 100;
+    pointer-events: none;
+    transition: opacity 0.5s ease;
 }
 
 /* ------------------- SWEETALERT THEME ------------------- */
