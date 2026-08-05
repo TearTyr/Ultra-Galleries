@@ -1,52 +1,84 @@
 /* ====================================================
-                    Ultra Galleries v3.5.1
+                    Ultra Galleries v3.6.5
    ==================================================== */
-
 /* ------------------- THEME & VARIABLES ------------------- */
 :root {
-    /* Color Palette */
-    --ug-accent: oklch(65% 0.2 260);
-    --ug-accent-hover: oklch(58% 0.22 260);
-    --ug-accent-glow: oklch(65% 0.2 260 / 0.3);
-    --ug-accent-subtle: oklch(65% 0.2 260 / 0.08);
+    color-scheme: dark;
+
+    /* Fallback accent palette */
+    --ug-accent: #6f5fff;
+    --ug-accent-hover: #5b49f5;
+    --ug-accent-glow: rgba(111, 95, 255, 0.3);
+    --ug-accent-subtle: rgba(111, 95, 255, 0.08);
 
     /* Typography */
     --ug-font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     --ug-font-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", monospace;
-    --ug-text: oklch(95% 0.005 260);
-    --ug-text-secondary: oklch(65% 0.015 260);
-    --ug-text-muted: oklch(50% 0.015 260);
-    --ug-text-inverse: oklch(15% 0.01 260);
+
+    --ug-text: #f2f3f7;
+    --ug-text-secondary: #a5a8b5;
+    --ug-text-muted: #7d8090;
+    --ug-text-inverse: #141419;
 
     /* Surfaces */
-    --ug-surface-0: oklch(10% 0.01 260);         
-    --ug-surface-1: oklch(14% 0.012 260);        
-    --ug-surface-2: oklch(18% 0.015 260);          
-    --ug-surface-3: oklch(22% 0.015 260);           
-    --ug-surface-glass: oklch(14% 0.012 260 / 0.7);
-    --ug-surface-glass-heavy: oklch(10% 0.01 260 / 0.88);
+    --ug-surface-0: #101014;
+    --ug-surface-1: #16161c;
+    --ug-surface-2: #1d1d25;
+    --ug-surface-3: #24242e;
+    --ug-surface-glass: rgba(16, 16, 22, 0.7);
+    --ug-surface-glass-heavy: rgba(10, 10, 14, 0.88);
 
     /* Borders */
-    --ug-border: oklch(100% 0 0 / 0.06);
-    --ug-border-strong: oklch(100% 0 0 / 0.12);
+    --ug-border: rgba(255, 255, 255, 0.06);
+    --ug-border-strong: rgba(255, 255, 255, 0.12);
     --ug-border-focus: var(--ug-accent);
 
-    /* Shadows — layered for realism */
-    --ug-shadow-sm: 0 1px 2px oklch(0% 0 0 / 0.3);
-    --ug-shadow-md: 0 4px 12px oklch(0% 0 0 / 0.35), 0 1px 3px oklch(0% 0 0 / 0.2);
-    --ug-shadow-lg: 0 12px 40px oklch(0% 0 0 / 0.45), 0 4px 12px oklch(0% 0 0 / 0.25);
-    --ug-shadow-xl: 0 24px 80px oklch(0% 0 0 / 0.55), 0 8px 24px oklch(0% 0 0 / 0.3);
+    /* Shadows */
+    --ug-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --ug-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.2);
+    --ug-shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.45), 0 4px 12px rgba(0, 0, 0, 0.25);
+    --ug-shadow-xl: 0 24px 80px rgba(0, 0, 0, 0.55), 0 8px 24px rgba(0, 0, 0, 0.3);
 
     /* Status */
-    --ug-success: oklch(72% 0.2 155);
-    --ug-error: oklch(65% 0.25 25);
-    --ug-warning: oklch(78% 0.15 80);
+    --ug-success: #43d17c;
+    --ug-error: #ff5f5f;
+    --ug-warning: #ffc861;
     --ug-info: var(--ug-accent);
+
+    --ug-error-text: #ff9d9d;
+    --ug-error-border: rgba(255, 95, 95, 0.2);
+    --ug-success-glow: rgba(67, 209, 124, 0.4);
+    --ug-error-glow: rgba(255, 95, 95, 0.4);
+    --ug-warning-glow: rgba(255, 200, 97, 0.4);
+
+    --ug-danger-strong: rgba(255, 95, 95, 0.85);
+    --ug-danger-subtle: rgba(255, 95, 95, 0.12);
+
+    /* Overlay / translucent white helpers */
+    --ug-overlay-white-02: rgba(255, 255, 255, 0.02);
+    --ug-overlay-white-04: rgba(255, 255, 255, 0.04);
+    --ug-overlay-white-05: rgba(255, 255, 255, 0.05);
+    --ug-overlay-white-06: rgba(255, 255, 255, 0.06);
+    --ug-overlay-white-08: rgba(255, 255, 255, 0.08);
+    --ug-overlay-white-10: rgba(255, 255, 255, 0.1);
+    --ug-overlay-white-12: rgba(255, 255, 255, 0.12);
+    --ug-overlay-white-18: rgba(255, 255, 255, 0.18);
+    --ug-overlay-white-20: rgba(255, 255, 255, 0.2);
+
+    /* Special backgrounds */
+    --ug-scrim: rgba(0, 0, 0, 0.55);
+    --ug-tooltip-bg: rgba(0, 0, 0, 0.7);
+    --ug-play-bg: rgba(0, 0, 0, 0.55);
+    --ug-media-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+    --ug-selected-shadow:
+        0 0 0 3px var(--ug-accent-glow),
+        0 4px 12px rgba(0, 0, 0, 0.3);
 
     /* Sizing */
     --ug-thumb-size: 140px;
     --ug-thumb-strip-size: 64px;
     --ug-strip-height: 76px;
+
     --ug-radius-sm: 6px;
     --ug-radius-md: 12px;
     --ug-radius-lg: 16px;
@@ -57,9 +89,78 @@
     --ug-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
     --ug-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
     --ug-ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+
     --ug-duration-fast: 150ms;
     --ug-duration-normal: 250ms;
     --ug-duration-slow: 400ms;
+
+    /* Buttons */
+    --ug-text-primary: var(--ug-text);
+    --ug-bg-hover: var(--ug-overlay-white-12);
+    --ug-bg-active: var(--ug-overlay-white-18);
+    --ug-transition-fast: var(--ug-duration-fast) var(--ug-ease-smooth);
+
+    --ug-accent-color: var(--ug-accent);
+    --ug-accent-color-translucent: var(--ug-accent-glow);
+}
+
+@supports (color: oklch(0% 0 0)) {
+    :root {
+        --ug-accent: oklch(65% 0.2 260);
+        --ug-accent-hover: oklch(58% 0.22 260);
+        --ug-accent-glow: oklch(65% 0.2 260 / 0.3);
+        --ug-accent-subtle: oklch(65% 0.2 260 / 0.08);
+
+        --ug-text: oklch(95% 0.005 260);
+        --ug-text-secondary: oklch(65% 0.015 260);
+        --ug-text-muted: oklch(50% 0.015 260);
+        --ug-text-inverse: oklch(15% 0.01 260);
+
+        --ug-surface-0: oklch(10% 0.01 260);
+        --ug-surface-1: oklch(14% 0.012 260);
+        --ug-surface-2: oklch(18% 0.015 260);
+        --ug-surface-3: oklch(22% 0.015 260);
+        --ug-surface-glass: oklch(14% 0.012 260 / 0.7);
+        --ug-surface-glass-heavy: oklch(10% 0.01 260 / 0.88);
+
+        --ug-border: oklch(100% 0 0 / 0.06);
+        --ug-border-strong: oklch(100% 0 0 / 0.12);
+
+        --ug-shadow-sm: 0 1px 2px oklch(0% 0 0 / 0.3);
+        --ug-shadow-md: 0 4px 12px oklch(0% 0 0 / 0.35), 0 1px 3px oklch(0% 0 0 / 0.2);
+        --ug-shadow-lg: 0 12px 40px oklch(0% 0 0 / 0.45), 0 4px 12px oklch(0% 0 0 / 0.25);
+        --ug-shadow-xl: 0 24px 80px oklch(0% 0 0 / 0.55), 0 8px 24px oklch(0% 0 0 / 0.3);
+
+        --ug-success: oklch(72% 0.2 155);
+        --ug-error: oklch(65% 0.25 25);
+        --ug-warning: oklch(78% 0.15 80);
+
+        --ug-error-text: oklch(80% 0.05 25);
+        --ug-error-border: oklch(65% 0.25 25 / 0.2);
+        --ug-success-glow: oklch(72% 0.2 155 / 0.4);
+        --ug-error-glow: oklch(65% 0.25 25 / 0.4);
+        --ug-warning-glow: oklch(78% 0.15 80 / 0.4);
+
+        --ug-danger-strong: oklch(55% 0.2 25 / 0.85);
+        --ug-danger-subtle: oklch(65% 0.25 25 / 0.12);
+
+        --ug-overlay-white-02: oklch(100% 0 0 / 0.02);
+        --ug-overlay-white-04: oklch(100% 0 0 / 0.04);
+        --ug-overlay-white-05: oklch(100% 0 0 / 0.05);
+        --ug-overlay-white-06: oklch(100% 0 0 / 0.06);
+        --ug-overlay-white-08: oklch(100% 0 0 / 0.08);
+        --ug-overlay-white-10: oklch(100% 0 0 / 0.1);
+        --ug-overlay-white-12: oklch(100% 0 0 / 0.12);
+        --ug-overlay-white-18: oklch(100% 0 0 / 0.18);
+        --ug-overlay-white-20: oklch(100% 0 0 / 0.2);
+
+        --ug-scrim: oklch(0% 0 0 / 0.55);
+        --ug-play-bg: oklch(0% 0 0 / 0.55);
+        --ug-media-shadow: 0 8px 40px oklch(0% 0 0 / 0.6);
+        --ug-selected-shadow:
+            0 0 0 3px var(--ug-accent-glow),
+            0 4px 12px oklch(0% 0 0 / 0.3);
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -68,6 +169,16 @@
         --ug-duration-normal: 0ms;
         --ug-duration-slow: 0ms;
     }
+}
+
+/* Patched: Disable all animations/transitions when setting is turned off in script */
+body.ug-animations-disabled *,
+body.ug-animations-disabled *::before,
+body.ug-animations-disabled *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
 }
 
 /* ------------------- GLOBAL RESETS ------------------- */
@@ -105,14 +216,14 @@
 .ug-thumbnail-strip::-webkit-scrollbar-thumb,
 .ug-settings-body::-webkit-scrollbar-thumb,
 .ug-settings-sidebar::-webkit-scrollbar-thumb {
-    background: oklch(100% 0 0 / 0.1);
+    background: var(--ug-overlay-white-10);
     border-radius: var(--ug-radius-full);
 }
 
 .ug-thumbnail-strip::-webkit-scrollbar-thumb:hover,
 .ug-settings-body::-webkit-scrollbar-thumb:hover,
 .ug-settings-sidebar::-webkit-scrollbar-thumb:hover {
-    background: oklch(100% 0 0 / 0.2);
+    background: var(--ug-overlay-white-20);
 }
 
 /* Focus ring */
@@ -175,11 +286,35 @@
     50% { box-shadow: 0 0 0 6px transparent; }
 }
 
-.ug-fade-in { animation: ug-fade-in var(--ug-duration-normal) var(--ug-ease-out) forwards; }
-.ug-fade-out { animation: ug-fade-out var(--ug-duration-fast) var(--ug-ease-smooth) forwards; }
-.ug-slide-in { animation: ug-slide-up var(--ug-duration-slow) var(--ug-ease-out) forwards; }
-.ug-slide-out { animation: ug-fade-out var(--ug-duration-normal) var(--ug-ease-smooth) forwards; }
-.is-transitioning { transition: transform var(--ug-duration-normal) var(--ug-ease-out); }
+.ug-fade-in {
+    animation: ug-fade-in var(--ug-duration-normal) var(--ug-ease-out) forwards;
+}
+
+.ug-fade-out {
+    animation: ug-fade-out var(--ug-duration-fast) var(--ug-ease-smooth) forwards;
+}
+
+.ug-slide-in {
+    animation: ug-slide-up var(--ug-duration-slow) var(--ug-ease-out) forwards;
+}
+
+.ug-slide-out {
+    animation: ug-fade-out var(--ug-duration-normal) var(--ug-ease-smooth) forwards;
+}
+
+/* Kept for compatibility, but the actual transformed element is usually img/video */
+.is-transitioning {
+    transition: transform var(--ug-duration-normal) var(--ug-ease-out);
+}
+
+/* Corrected: animate the actual transformed media element */
+.is-transitioning .ug-main-image,
+.is-transitioning .ug-main-video {
+    transition:
+        transform var(--ug-duration-normal) var(--ug-ease-out),
+        opacity 0.3s ease,
+        box-shadow var(--ug-duration-normal) var(--ug-ease-smooth);
+}
 
 /* ------------------- GALLERY OVERLAY ------------------- */
 .ug-gallery-overlay {
@@ -193,12 +328,18 @@
     backdrop-filter: blur(32px) saturate(1.6) brightness(0.7);
     -webkit-backdrop-filter: blur(32px) saturate(1.6) brightness(0.7);
     animation: ug-fade-in var(--ug-duration-normal) var(--ug-ease-out);
+    overscroll-behavior: none;
 }
+
 .ug-gallery-overlay.ug-fullscreen-overlay {
     background-color: #000;
     backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
-.ug-fullscreen { overflow: hidden !important; }
+
+.ug-fullscreen {
+    overflow: hidden !important;
+}
 
 .ug-gallery-container {
     position: relative;
@@ -214,6 +355,7 @@
     overflow: hidden;
     animation: ug-scale-in var(--ug-duration-slow) var(--ug-ease-spring);
 }
+
 .ug-gallery-overlay.ug-fullscreen-overlay .ug-gallery-container {
     width: 100vw;
     height: 100vh;
@@ -233,6 +375,12 @@
     min-height: 0;
     overflow: hidden;
     background: #000;
+}
+
+/* Corrected: missing hide utility used by JS */
+.ug-gallery-expanded-view.ug-gallery-hide,
+.ug-gallery-counter.ug-gallery-hide {
+    display: none !important;
 }
 
 /* ------------------- TOOLBAR ------------------- */
@@ -260,9 +408,9 @@
 .ug-gallery-toolbar.ug-controls-hidden {
     opacity: 0;
     pointer-events: none;
-    transform: translate(-50%, -16px);
+    transform: translate(-50%, -20px);
 }
-.ug-gallery-toolbar.ug-controls-hidden { opacity: 0; pointer-events: none; transform: translate(-50%, -20px); }
+
 .ug-toolbar-button {
     background: transparent;
     border: none;
@@ -285,19 +433,24 @@
 }
 
 .ug-toolbar-button:hover {
-    background: oklch(100% 0 0 / 0.12);
+    background: var(--ug-overlay-white-12);
     color: #fff;
 }
 
 .ug-toolbar-button:active {
     transform: scale(0.94);
-    background: oklch(100% 0 0 / 0.18);
+    background: var(--ug-overlay-white-18);
 }
 
 .ug-toolbar-button svg {
     width: 18px;
     height: 18px;
     flex-shrink: 0;
+}
+
+/* Fullscreen toolbar button has no unique visual requirement, but keep it explicit */
+.ug-gallery-fullscreen {
+    /* Styled by .ug-toolbar-button */
 }
 
 /* Zoom controls cluster */
@@ -346,7 +499,7 @@
 }
 
 .ug-gallery-close-button:hover {
-    background: oklch(55% 0.2 25 / 0.85);
+    background: var(--ug-danger-strong);
     color: #fff;
     border-color: transparent;
     transform: rotate(90deg) scale(1.05);
@@ -366,10 +519,13 @@
 
 .ug-ambient-background {
     position: absolute;
-    inset: -40px;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     background-size: cover;
     background-position: center;
-    filter: blur(60px) brightness(0.25) saturate(1.3);
+    filter: blur(15px) brightness(0.4);
     z-index: 0;
     pointer-events: none;
     transition: background-image var(--ug-duration-slow) var(--ug-ease-smooth);
@@ -387,6 +543,8 @@
     display: flex;
     justify-content: center;
     align-items: center;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .ug-main-image-container.ug-grabbing {
@@ -397,17 +555,44 @@
     cursor: grab;
 }
 
+.ug-main-image,
+.ug-main-video {
+    transform-origin: 0 0;
+}
+
 .ug-main-image {
+    opacity: 0;
+    transition:
+        opacity 0.3s ease,
+        box-shadow var(--ug-duration-normal) var(--ug-ease-smooth);
+    position: relative;
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
     border-radius: 4px;
-    box-shadow: 0 8px 40px oklch(0% 0 0 / 0.6);
-    transition: box-shadow var(--ug-duration-normal) var(--ug-ease-smooth);
+    box-shadow: var(--ug-media-shadow);
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .ug-main-video {
     max-width: 100%;
     max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
     border-radius: 6px;
-    box-shadow: 0 8px 40px oklch(0% 0 0 / 0.6);
+    box-shadow: var(--ug-media-shadow);
+}
+
+.ug-main-image-container.ug-grabbing .ug-main-image,
+.ug-main-image-container.ug-grabbing .ug-main-video,
+.ug-main-image-container.zoomed .ug-main-image,
+.ug-main-image-container.zoomed .ug-main-video {
+    will-change: transform;
 }
 
 /* Pan indicator */
@@ -420,9 +605,6 @@
     pointer-events: none;
     z-index: 10;
 }
-.ug-main-image-container.ug-grabbing { cursor: grabbing !important; }
-.ug-main-image { border-radius: 4px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); transition: box-shadow 0.3s ease; }
-.ug-main-video { max-width: 100%; max-height: 100%; border-radius: 4px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
 
 /* ------------------- NAVIGATION ARROWS ------------------- */
 .ug-gallery-nav-container {
@@ -435,7 +617,9 @@
     pointer-events: none;
     padding: 0 8px;
     z-index: 10;
+    transition: opacity var(--ug-duration-normal) var(--ug-ease-out);
 }
+
 .ug-gallery-nav {
     background: var(--ug-surface-glass);
     backdrop-filter: blur(12px);
@@ -458,21 +642,30 @@
         background var(--ug-duration-fast) var(--ug-ease-smooth);
 }
 
-.ug-gallery-overlay:hover .ug-gallery-nav {
+.ug-gallery-overlay:hover .ug-gallery-nav,
+.ug-gallery-overlay:focus-within .ug-gallery-nav {
     opacity: 1;
     transform: scale(1);
 }
 
 .ug-gallery-nav:hover {
-    background: oklch(100% 0 0 / 0.2);
-    transform: scale(1.08);
+    background-color: var(--ug-overlay-white-20);
+    transform: scale(1.1);
 }
 
 .ug-gallery-nav:active {
     transform: scale(0.92);
 }
-.ug-gallery-overlay:hover .ug-gallery-nav { opacity: 1; transform: scale(1); }
-.ug-gallery-nav:hover { background-color: rgba(255, 255, 255, 0.2); transform: scale(1.1); }
+
+.ug-gallery-expanded-view.ug-controls-hidden .ug-gallery-nav-container,
+.ug-gallery-expanded-view.ug-controls-hidden .ug-gallery-counter {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.ug-gallery-expanded-view.ug-controls-hidden .ug-gallery-nav {
+    pointer-events: none;
+}
 
 /* Counter badge */
 .ug-gallery-counter {
@@ -490,6 +683,15 @@
     border-radius: var(--ug-radius-full);
     border: 1px solid var(--ug-border);
     pointer-events: none;
+    transition: opacity var(--ug-duration-normal) var(--ug-ease-out);
+}
+
+/* Corrected for touch devices where hover does not exist */
+@media (hover: none), (pointer: coarse) {
+    .ug-gallery-nav {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
 /* ------------------- THUMBNAIL STRIP ------------------- */
@@ -508,10 +710,11 @@
     transition: transform var(--ug-duration-slow) var(--ug-ease-out);
 }
 
-.ug-controls-hidden .ug-gallery-thumbnail-strip-container {
+.ug-controls-hidden .ug-gallery-thumbnail-strip-container,
+.ug-gallery-expanded-view.ug-controls-hidden .ug-gallery-thumbnail-strip-container {
     transform: translateY(100%);
 }
-.ug-controls-hidden .ug-gallery-thumbnail-strip-container { transform: translateY(100%); }
+
 .ug-thumbnail-strip {
     display: flex;
     overflow-x: auto;
@@ -520,8 +723,10 @@
     height: 100%;
     padding: 0 12px;
     gap: 8px;
-    scroll-behavior: smooth;
+    scroll-behavior: auto;
     scroll-snap-type: x proximity;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
 }
 
 .ug-thumbnail-strip.no-scroll {
@@ -562,9 +767,7 @@
     opacity: 1 !important;
     filter: saturate(1) brightness(1) !important;
     border-color: var(--ug-accent) !important;
-    box-shadow:
-        0 0 0 3px var(--ug-accent-glow),
-        0 4px 12px oklch(0% 0 0 / 0.3) !important;
+    box-shadow: var(--ug-selected-shadow) !important;
     transform: translateY(-2px) !important;
 }
 
@@ -573,6 +776,7 @@
     height: 100%;
     object-fit: cover;
     display: block;
+    border-radius: var(--ug-radius-sm);
     transition: transform var(--ug-duration-normal) var(--ug-ease-out);
 }
 
@@ -588,14 +792,14 @@
     transform: translate(-50%, -50%);
     width: 32px;
     height: 32px;
-    background: oklch(0% 0 0 / 0.55);
+    background: var(--ug-play-bg);
     backdrop-filter: blur(8px);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     pointer-events: none;
-    border: 1px solid oklch(100% 0 0 / 0.1);
+    border: 1px solid var(--ug-overlay-white-10);
     z-index: 2;
     transition: background var(--ug-duration-fast) var(--ug-ease-smooth);
 }
@@ -611,7 +815,12 @@
     margin-left: 2px;
 }
 
-/* Thumbnail zoom preview */
+/*
+   Thumbnail zoom preview.
+   Note: For reliable unclipped rendering, JS should append this element to <body>
+   and position it with getBoundingClientRect(). If it remains inside the thumbnail,
+   overflow clipping may still hide part of it.
+*/
 .ug-thumbnail-zoom-preview {
     position: absolute;
     bottom: calc(100% + 10px);
@@ -621,7 +830,7 @@
     background: var(--ug-surface-1);
     border: 1px solid var(--ug-border-strong);
     border-radius: var(--ug-radius-md);
-    z-index: 1000;
+    z-index: 10000;
     pointer-events: none;
     opacity: 0;
     transition:
@@ -635,8 +844,6 @@
     opacity: 1;
     transform: translateX(-50%) translateY(0);
 }
-.ug-thumbnail:hover { opacity: 1; transform: scale(1.05); }
-.ug-thumbnail.selected { opacity: 1; border-color: var(--ug-accent-color); box-shadow: 0 0 15px var(--ug-accent-color-translucent); }
 
 .ug-thumbnail-zoom-preview img {
     width: 100%;
@@ -685,19 +892,28 @@
 }
 
 .ug-thumbnail-context-menu-item:hover {
-    background: oklch(100% 0 0 / 0.08);
+    background: var(--ug-overlay-white-08);
 }
 
 .ug-thumbnail-context-menu-item.danger {
     color: var(--ug-error);
 }
-#ug-notification-close:hover { color: #fff; }
 
 .ug-thumbnail-context-menu-item.danger:hover {
-    background: oklch(65% 0.25 25 / 0.12);
+    background: var(--ug-danger-subtle);
 }
 
-/* Suppress site thumbnail hover effects when gallery is open */
+/*
+   Suppress site thumbnail hover effects when gallery is open.
+   The old sibling selector was unreliable because the overlay is usually appended
+   at the end of <body>. These selectors are safer where supported.
+*/
+body:has(#gallery-overlay) .post__thumbnail:hover,
+body:has(#gallery-overlay) .scrape__thumbnail:hover,
+body:has(#gallery-overlay) [class*="thumb"]:hover,
+body.ug-gallery-open .post__thumbnail:hover,
+body.ug-gallery-open .scrape__thumbnail:hover,
+body.ug-gallery-open [class*="thumb"]:hover,
 .ug-gallery-overlay ~ * .post__thumbnail:hover,
 .ug-gallery-overlay ~ * .scrape__thumbnail:hover,
 .ug-gallery-overlay ~ * [class*="thumb"]:hover {
@@ -714,10 +930,10 @@
     z-index: 10000;
     left: 50%;
     transform: translateX(-50%);
-    bottom: 20px;
+    bottom: 10px;
     pointer-events: none;
     width: max-content;
-    max-width: 90vw;
+    max-width: 92vw;
 }
 
 .ug-notification-area[style*="top"] {
@@ -740,6 +956,7 @@
     font-size: 13px;
     font-weight: 500;
     white-space: nowrap;
+    max-width: min(92vw, 640px);
 }
 
 .ug-notification-container.ug-update {
@@ -762,23 +979,25 @@
 
 .ug-notification-container.success::before {
     background: var(--ug-success);
-    box-shadow: 0 0 8px oklch(72% 0.2 155 / 0.4);
+    box-shadow: 0 0 8px var(--ug-success-glow);
 }
-.ug-button:active { background-color: var(--ug-bg-active); transform: translateY(0); }
-.ug-button.disabled { opacity: 0.4; cursor: not-allowed; background-color: transparent; transform: none; box-shadow: none !important; }
 
 .ug-notification-container.error::before {
     background: var(--ug-error);
-    box-shadow: 0 0 8px oklch(65% 0.25 25 / 0.4);
+    box-shadow: 0 0 8px var(--ug-error-glow);
 }
 
 .ug-notification-container.warning::before {
     background: var(--ug-warning);
-    box-shadow: 0 0 8px oklch(78% 0.15 80 / 0.4);
+    box-shadow: 0 0 8px var(--ug-warning-glow);
 }
 
 #ug-notification-text {
-    flex-grow: 1;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 #ug-notification-close {
@@ -791,6 +1010,7 @@
     padding: 2px;
     display: flex;
     align-items: center;
+    flex-shrink: 0;
     transition: color var(--ug-duration-fast) var(--ug-ease-smooth);
 }
 
@@ -804,6 +1024,7 @@
     text-decoration: none;
     padding: 2px 6px;
     border-radius: var(--ug-radius-sm);
+    flex-shrink: 0;
     transition:
         color var(--ug-duration-fast) var(--ug-ease-smooth),
         background var(--ug-duration-fast) var(--ug-ease-smooth);
@@ -863,7 +1084,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    background: oklch(0% 0 0 / 0.55);
+    background: var(--ug-scrim);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     animation: ug-fade-in var(--ug-duration-normal) var(--ug-ease-out);
@@ -930,7 +1151,7 @@
 }
 
 .ug-sidebar-button:hover {
-    background: oklch(100% 0 0 / 0.05);
+    background: var(--ug-overlay-white-05);
     color: var(--ug-text);
 }
 
@@ -984,7 +1205,7 @@
 }
 
 .ug-settings-close-btn:hover {
-    background: oklch(100% 0 0 / 0.08);
+    background: var(--ug-overlay-white-08);
     color: var(--ug-text);
     border-color: var(--ug-border-strong);
 }
@@ -1042,7 +1263,7 @@
     display: flex;
     align-items: center;
     padding: 10px 12px;
-    background: oklch(100% 0 0 / 0.02);
+    background: var(--ug-overlay-white-02);
     border: 1px solid transparent;
     border-radius: var(--ug-radius-sm);
     cursor: pointer;
@@ -1052,7 +1273,7 @@
 }
 
 .ug-settings-checkbox-label:hover {
-    background: oklch(100% 0 0 / 0.04);
+    background: var(--ug-overlay-white-04);
     border-color: var(--ug-border);
 }
 
@@ -1086,7 +1307,7 @@
     top: 1px;
     width: 5px;
     height: 9px;
-    border: solid oklch(15% 0 0);
+    border: solid var(--ug-text-inverse);
     border-width: 0 2px 2px 0;
     transform: rotate(45deg);
 }
@@ -1101,7 +1322,7 @@
     color: var(--ug-text);
 }
 
-/* Settings buttons (export/import/reset) */
+/* Settings buttons */
 .ug-settings-body .ug-button.ug-settings-input {
     background: var(--ug-surface-2);
     border: 1px solid var(--ug-border-strong);
@@ -1193,18 +1414,24 @@
     box-shadow: none !important;
 }
 
+/* Patched: Force default cursor on loaded images to fix hover pointer bug */
+.ug-image-loaded,
+a:has(.ug-image-loaded) {
+    cursor: default !important;
+}
+
 /* ------------------- ERROR PLACEHOLDER ------------------- */
 .ug-image-error-message {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    color: oklch(80% 0.05 25);
+    color: var(--ug-error-text);
     background: var(--ug-surface-glass-heavy);
     backdrop-filter: blur(12px);
     padding: 12px 20px;
     border-radius: var(--ug-radius-md);
-    border: 1px solid oklch(65% 0.25 25 / 0.2);
+    border: 1px solid var(--ug-error-border);
     z-index: 5;
     font-size: 13px;
 }
@@ -1247,6 +1474,12 @@
     border-color: var(--ug-accent);
 }
 
+/* Optional helper states used by JS error/retry paths */
+img.retrying,
+img.loading {
+    opacity: 0.65;
+}
+
 /* ------------------- SLIDESHOW INDICATOR ------------------- */
 .ug-slideshow-indicator {
     display: flex;
@@ -1280,6 +1513,21 @@
 
 .ug-slideshow-stop:hover {
     color: var(--ug-error);
+}
+
+/* ------------------- TOOLTIP ------------------- */
+.zoom-tooltip {
+    position: absolute;
+    bottom: 120px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--ug-tooltip-bg);
+    color: white;
+    padding: 10px 15px;
+    border-radius: 5px;
+    z-index: 100;
+    pointer-events: none;
+    transition: opacity 0.5s ease;
 }
 
 /* ------------------- SWEETALERT THEME ------------------- */
@@ -1326,8 +1574,18 @@
 }
 
 /* ------------------- HIDDEN / UTILITY ------------------- */
-.ug-gallery-grid-view { display: none !important; }
-.ug-thumbnail-number { display: none !important; }
+.ug-gallery-grid-view {
+    display: none !important;
+}
+
+.ug-thumbnail-number {
+    display: none !important;
+}
+
+/* Corrected: generic hide utility used by JS */
+.ug-gallery-hide {
+    display: none !important;
+}
 
 /* ------------------- LOADING OVERLAY ------------------- */
 .loading-overlay {
