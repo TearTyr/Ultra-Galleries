@@ -1,6 +1,7 @@
 /* ====================================================
-                    Ultra Galleries v3.6.5
+                    Ultra Galleries v3.6.6
    ==================================================== */
+
 /* ------------------- THEME & VARIABLES ------------------- */
 :root {
     color-scheme: dark;
@@ -171,7 +172,6 @@
     }
 }
 
-/* Patched: Disable all animations/transitions when setting is turned off in script */
 body.ug-animations-disabled *,
 body.ug-animations-disabled *::before,
 body.ug-animations-disabled *::after {
@@ -446,11 +446,6 @@ body.ug-animations-disabled *::after {
     width: 18px;
     height: 18px;
     flex-shrink: 0;
-}
-
-/* Fullscreen toolbar button has no unique visual requirement, but keep it explicit */
-.ug-gallery-fullscreen {
-    /* Styled by .ug-toolbar-button */
 }
 
 /* Zoom controls cluster */
@@ -1587,6 +1582,10 @@ img.loading {
     display: none !important;
 }
 
+.ug-hidden {
+    display: none !important;
+}
+
 /* ------------------- LOADING OVERLAY ------------------- */
 .loading-overlay {
     position: fixed;
@@ -1612,6 +1611,55 @@ img.loading {
 .ug-thumbnail-strip.ug-dragging {
     cursor: grabbing !important;
     scroll-behavior: auto;
+}
+
+/* ------------------- USER-INITIATED PLAYBACK OVERLAY ------------------- */
+.ug-video-play-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    border: 1px solid var(--ug-border-strong);
+    background: var(--ug-play-bg);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 5;
+    transition:
+        background var(--ug-duration-fast) var(--ug-ease-smooth),
+        transform var(--ug-duration-fast) var(--ug-ease-spring);
+}
+
+.ug-video-play-overlay:hover {
+    background: var(--ug-accent-glow);
+    transform: translate(-50%, -50%) scale(1.06);
+}
+
+.ug-video-play-overlay svg {
+    width: 32px;
+    height: 32px;
+    fill: currentColor;
+    margin-left: 4px;
+}
+
+.ug-video-play-overlay.ug-hidden {
+    display: none;
+}
+
+/* ------------------- SLIDESHOW BUTTON STATES ------------------- */
+#slideshow-btn.slideshow-running {
+    color: var(--ug-success);
+}
+
+#slideshow-btn.slideshow-paused {
+    color: var(--ug-warning);
 }
 
 /* ------------------- RESPONSIVE ------------------- */
@@ -1697,6 +1745,16 @@ img.loading {
     .ug-thumbnail-strip .ug-thumbnail-container {
         width: 48px;
         height: 48px;
+    }
+
+    .ug-video-play-overlay {
+        width: 56px;
+        height: 56px;
+    }
+
+    .ug-video-play-overlay svg {
+        width: 24px;
+        height: 24px;
     }
 }
 
