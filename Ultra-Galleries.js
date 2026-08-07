@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1477603-%E3%83%A1%E3%83%AA%E3%83%BC
-// @version      3.6.5
+// @version      3.6.6 
 // @description  Modern image gallery with highly efficient background zipping, video playback, browsing, fullscreen, and download features. Optimized, cleaned, and added Pawchive support.
 // @author       ntf (original), Meri/TearTyr (maintained)
 // @match        *://kemono.su/*
@@ -36,7 +36,7 @@
 // @require      https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js
 // @require      https://cdn.jsdelivr.net/npm/sweetalert2@11
 // @require      https://unpkg.com/dexie@4.0.8/dist/dexie.min.js
-// @resource     mainCSS https://raw.githubusercontent.com/TearTyr/Ultra-Galleries/refs/heads/TestingBranch/Ultra-Galleries.css
+// @resource     mainCSS https://cdn.jsdelivr.net/gh/TearTyr/Ultra-Galleries@TestingBranch/Ultra-Galleries.css
 // @downloadURL  https://update.sleazyfork.org/scripts/537986/Ultra%20Galleries.user.js
 // @updateURL    https://update.sleazyfork.org/scripts/537986/Ultra%20Galleries.meta.js
 // @noframes
@@ -751,18 +751,15 @@
 
         start: () => {
             if (Slideshow.isActive) return;
-
             Slideshow.isActive = true;
             state.isSlideshowActive = true;
             Slideshow.interval = setInterval(() => Gallery.nextImage(), Slideshow.delay);
-
             Slideshow.showIndicator();
-
             if (Slideshow.pauseOnHover && galleryOverlay && galleryOverlay.length) {
                 galleryOverlay.on('mouseenter.slideshow', () => Slideshow.pause());
                 galleryOverlay.on('mouseleave.slideshow', () => Slideshow.resume());
             }
-
+            Slideshow.syncControls();
             Accessibility.announce('Slideshow started');
             state.notificationType = 'info';
             state.notification = 'Slideshow started';
@@ -770,20 +767,17 @@
 
         stop: () => {
             if (!Slideshow.isActive) return;
-
             Slideshow.isActive = false;
             state.isSlideshowActive = false;
-
             if (Slideshow.interval) {
                 clearInterval(Slideshow.interval);
                 Slideshow.interval = null;
             }
-
             if (galleryOverlay && galleryOverlay.length) {
                 Slideshow.hideIndicator();
                 galleryOverlay.off('.slideshow');
             }
-
+            Slideshow.syncControls();
             Accessibility.announce('Slideshow stopped');
             state.notificationType = 'info';
             state.notification = 'Slideshow stopped';
@@ -794,6 +788,7 @@
                 clearInterval(Slideshow.interval);
                 Slideshow.interval = null;
                 Slideshow.updateIndicator(true);
+                Slideshow.syncControls();
             }
         },
 
@@ -801,20 +796,45 @@
             if (!Slideshow.interval && Slideshow.isActive) {
                 Slideshow.interval = setInterval(() => Gallery.nextImage(), Slideshow.delay);
                 Slideshow.updateIndicator(false);
+                Slideshow.syncControls();
             }
         },
 
         toggle: () => Slideshow.isActive ? Slideshow.stop() : Slideshow.start(),
 
+        handleButton: () => {
+            if (!Slideshow.isActive) Slideshow.start();
+            else if (Slideshow.interval) Slideshow.pause();
+            else Slideshow.resume();
+        },
+
+        syncControls: () => {
+            if (!galleryOverlay || !galleryOverlay.length) return;
+            const $btn = galleryOverlay.find('#slideshow-btn');
+            if (!$btn.length) return;
+            if (!Slideshow.isActive) {
+                $btn.html('▶')
+                    .attr('title', 'Start Slideshow (Space)')
+                    .removeClass('slideshow-running slideshow-paused');
+            } else if (Slideshow.interval) {
+                $btn.html('❚❚')
+                    .attr('title', 'Pause Slideshow')
+                    .addClass('slideshow-running')
+                    .removeClass('slideshow-paused');
+            } else {
+                $btn.html('▶')
+                    .attr('title', 'Resume Slideshow')
+                    .addClass('slideshow-paused')
+                    .removeClass('slideshow-running');
+            }
+        },
+
         showIndicator: () => {
             if (!galleryOverlay || !galleryOverlay.length) return;
             if (galleryOverlay.find('.ug-slideshow-indicator').length) return;
-
             const $indicator = $('<div>').addClass('ug-slideshow-indicator');
-
             $('<span>').addClass('ug-slideshow-icon').text('▶').appendTo($indicator);
             $('<span>').addClass('ug-slideshow-text').text('Slideshow').appendTo($indicator);
-
             $('<button>')
                 .addClass('ug-slideshow-stop')
                 .attr('title', 'Stop slideshow')
@@ -824,7 +844,6 @@
                     Slideshow.stop();
                 })
                 .appendTo($indicator);
-
             galleryOverlay.find('.ug-gallery-toolbar').append($indicator);
         },
 
@@ -836,10 +855,8 @@
 
         updateIndicator: (isPaused) => {
             if (!galleryOverlay || !galleryOverlay.length) return;
-
             const $indicator = galleryOverlay.find('.ug-slideshow-indicator');
             const $icon = $indicator.find('.ug-slideshow-icon');
-
             if (isPaused) {
                 $icon.text('❚❚');
                 $indicator.addClass('paused');
@@ -852,7 +869,6 @@
         setDelay: (delay) => {
             Slideshow.delay = delay;
             SettingsManager.saveSetting('slideshowDelay', delay);
-
             if (Slideshow.isActive) {
                 Slideshow.stop();
                 Slideshow.start();
@@ -1673,59 +1689,48 @@
 
         init: () => {
             $(document).off('.thumbnailstrip');
-
             if (!galleryOverlay) return;
-
             const $strip = galleryOverlay.find('.ug-thumbnail-strip');
-
             ThumbnailStrip.updateScrollIndicators();
             ThumbnailStrip.setupKeyboardNavigation();
             ThumbnailStrip.setupDragNavigation();
             ThumbnailStrip.setupHoverPreview();
             ThumbnailStrip.setupContextMenu();
-
             $strip.on('scroll', Utils.throttle(() => ThumbnailStrip.updateScrollIndicators(), 100));
         },
 
         cleanup: () => {
             $(document).off('.thumbnailstrip');
-
             ThumbnailStrip.hideContextMenu();
             $('.ug-thumbnail-zoom-preview').remove();
-
             if (galleryOverlay && galleryOverlay.length) {
                 galleryOverlay.find('.ug-slideshow-indicator').remove();
+                galleryOverlay.find('.ug-thumbnail-strip').off('.virtual');
             }
         },
 
         updateScrollIndicators: () => {
             if (!galleryOverlay) return;
-
             const $strip = galleryOverlay.find('.ug-thumbnail-strip');
             if (!$strip.length) return;
-
             const hasScroll = $strip[0].scrollWidth > $strip[0].clientWidth;
             $strip.toggleClass('no-scroll', !hasScroll);
         },
 
         setupKeyboardNavigation: () => {
             const $strip = galleryOverlay.find('.ug-thumbnail-strip');
-
             $strip.on('keydown', function (e) {
                 const $focused = $(e.target).closest(`.${CSS.GALLERY.THUMBNAIL_WRAPPER}`);
                 if (!$focused.length) return;
-
                 switch (e.key) {
                     case 'ArrowLeft':
                         e.preventDefault();
                         ThumbnailStrip.navigateThumbnails('prev');
                         break;
-
                     case 'ArrowRight':
                         e.preventDefault();
                         ThumbnailStrip.navigateThumbnails('next');
                         break;
-
                     case 'Enter':
                     case ' ':
                         e.preventDefault();
@@ -1738,45 +1743,40 @@
         navigateThumbnails: (direction) => {
             const $strip = galleryOverlay.find('.ug-thumbnail-strip');
             const $current = $strip.find(`.${CSS.GALLERY.THUMBNAIL_WRAPPER}.selected`);
-            const $target = direction === 'next' ? $current.next() : $current.prev();
-
+            const currentIndex = $current.length
+                ? parseInt($current.attr('data-index'), 10)
+                : state.currentGalleryIndex;
+            const total = state.fullSizeImageSrcs.length;
+            if (!total) return;
+            const target = Math.max(0, Math.min(total - 1, currentIndex + (direction === 'next' ? 1 : -1)));
+            const $target = $strip.find(`[data-index="${target}"]`);
             if ($target.length) {
                 $target[0].focus();
-                $target[0].scrollIntoView({
-                    behavior: 'smooth',
-                    inline: 'center',
-                    block: 'nearest'
-                });
+                $target[0].scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+            } else {
+                Gallery.showExpandedView(target);
             }
         },
 
         setupDragNavigation: () => {
             const $strip = galleryOverlay.find('.ug-thumbnail-strip');
-
             let isDragging = false;
             let startX = 0;
             let scrollLeft = 0;
-
             $strip.on('mousedown', (e) => {
                 if (e.button !== 0) return;
                 if ($(e.target).closest(`.${CSS.GALLERY.THUMBNAIL_WRAPPER}`).length) return;
-
                 isDragging = true;
                 startX = e.pageX - $strip.offset().left;
                 scrollLeft = $strip.scrollLeft();
-
                 $strip.css('cursor', 'grabbing').addClass('ug-dragging');
             });
-
             $(document).on('mousemove.thumbnailstrip', (e) => {
                 if (!isDragging) return;
-
                 e.preventDefault();
-
                 const x = e.pageX - $strip.offset().left;
                 $strip.scrollLeft(scrollLeft - (x - startX) * 2);
             });
-
             $(document).on('mouseup.thumbnailstrip', () => {
                 isDragging = false;
                 $strip.css('cursor', '').removeClass('ug-dragging');
@@ -1786,15 +1786,12 @@
         setupHoverPreview: () => {
             const $strip = galleryOverlay.find('.ug-thumbnail-strip');
             let previewTimeout;
-
             $strip.on('mouseenter', `.${CSS.GALLERY.THUMBNAIL_WRAPPER}`, function () {
                 const $thumb = $(this);
                 const index = parseInt($thumb.data('index'));
-
                 clearTimeout(previewTimeout);
                 previewTimeout = setTimeout(() => ThumbnailStrip.showZoomPreview($thumb, index), 500);
             });
-
             $strip.on('mouseleave', `.${CSS.GALLERY.THUMBNAIL_WRAPPER}`, function () {
                 clearTimeout(previewTimeout);
                 ThumbnailStrip.hideZoomPreview();
@@ -1804,32 +1801,23 @@
         showZoomPreview: ($thumb, index) => {
             const mediaItem = state.fullSizeImageSrcs[index];
             if (!mediaItem) return;
-
             $('.ug-thumbnail-zoom-preview').remove();
-
             const thumbImgSrc = $thumb.find('img').attr('src');
             const src = mediaItem.type === 'video'
                 ? (mediaItem.poster || thumbImgSrc)
                 : (thumbImgSrc || mediaItem.src);
-
             if (!src) return;
-
             const $preview = $('<div>').addClass('ug-thumbnail-zoom-preview');
             $('<img>').attr('src', src).appendTo($preview);
-
             $('body').append($preview);
-
             const rect = $thumb[0].getBoundingClientRect();
             const previewWidth = 220;
-
             const left = Math.min(
                 Math.max(rect.left + rect.width / 2, previewWidth / 2 + 8),
                 window.innerWidth - previewWidth / 2 - 8
             );
-
             let top;
             let transform;
-
             if (rect.top > 240) {
                 top = rect.top - 10;
                 transform = 'translate(-50%, -100%)';
@@ -1837,7 +1825,6 @@
                 top = rect.bottom + 10;
                 transform = 'translate(-50%, 0)';
             }
-
             $preview.css({
                 position: 'fixed',
                 left: `${left}px`,
@@ -1846,29 +1833,22 @@
                 transform,
                 zIndex: 10000
             });
-
             setTimeout(() => $preview.addClass('show'), 10);
         },
 
         hideZoomPreview: () => {
             const $preview = $('.ug-thumbnail-zoom-preview');
             if (!$preview.length) return;
-
             $preview.removeClass('show');
-
-            setTimeout(() => {
-                $preview.remove();
-            }, 300);
+            setTimeout(() => { $preview.remove(); }, 300);
         },
 
         setupContextMenu: () => {
             const $strip = galleryOverlay.find('.ug-thumbnail-strip');
-
             $strip.on('contextmenu', `.${CSS.GALLERY.THUMBNAIL_WRAPPER}`, function (e) {
                 e.preventDefault();
                 ThumbnailStrip.showContextMenu($(this), parseInt($(this).data('index')), e.pageX, e.pageY);
             });
-
             $(document).on('click.thumbnailstrip', () => ThumbnailStrip.hideContextMenu());
         },
 
@@ -1877,31 +1857,14 @@
                 clearTimeout(ThumbnailStrip._contextMenuTimeout);
                 ThumbnailStrip._contextMenuTimeout = null;
             }
-
             $('.ug-thumbnail-context-menu').remove();
-
             const $menu = $('<div>').addClass('ug-thumbnail-context-menu');
-
             const menuItems = [
-                {
-                    text: 'Open Image',
-                    action: () => Gallery.showExpandedView(index)
-                },
-                {
-                    text: 'Download Image',
-                    action: () => DownloadManager.downloadImageByIndex(index)
-                },
-                {
-                    text: 'Copy URL',
-                    action: () => ThumbnailStrip.copyImageUrl(index)
-                },
-                {
-                    text: 'Remove from Gallery',
-                    action: () => ThumbnailStrip.removeFromGallery(index),
-                    danger: true
-                }
+                { text: 'Open Image', action: () => Gallery.showExpandedView(index) },
+                { text: 'Download Image', action: () => DownloadManager.downloadImageByIndex(index) },
+                { text: 'Copy URL', action: () => ThumbnailStrip.copyImageUrl(index) },
+                { text: 'Remove from Gallery', action: () => ThumbnailStrip.removeFromGallery(index), danger: true }
             ];
-
             menuItems.forEach(item => {
                 $('<button>')
                     .addClass('ug-thumbnail-context-menu-item')
@@ -1914,38 +1877,29 @@
                     })
                     .appendTo($menu);
             });
-
             $menu.css({
                 left: Math.min(x, window.innerWidth - 170) + 'px',
                 top: Math.min(y - 10, window.innerHeight - 200) + 'px'
             });
-
             $('body').append($menu);
-
             setTimeout(() => $menu.addClass('show'), 10);
         },
 
         hideContextMenu: () => {
             const $menu = $('.ug-thumbnail-context-menu');
             $menu.removeClass('show');
-
             if (ThumbnailStrip._contextMenuTimeout) clearTimeout(ThumbnailStrip._contextMenuTimeout);
-
-            ThumbnailStrip._contextMenuTimeout = setTimeout(() => {
-                $menu.remove();
-            }, CONFIG.CONTEXT_MENU_HIDE_DELAY);
+            ThumbnailStrip._contextMenuTimeout = setTimeout(() => { $menu.remove(); }, CONFIG.CONTEXT_MENU_HIDE_DELAY);
         },
 
         copyImageUrl: (index) => {
             const mediaItem = state.fullSizeImageSrcs[index];
             if (!mediaItem) return;
-
             navigator.clipboard.writeText(mediaItem.src).then(() => {
                 state.notificationType = 'success';
                 state.notification = 'Image URL copied to clipboard';
             }).catch(err => {
                 console.error('Failed to copy URL:', err);
-
                 state.notificationType = 'error';
                 state.notification = 'Failed to copy URL';
             });
@@ -1955,32 +1909,23 @@
             const doRemove = () => {
                 state.fullSizeImageSrcs.splice(index, 1);
                 state.originalImageSrcs.splice(index, 1);
-
                 Gallery._clearPreloadCache();
-
                 if (state.fullSizeImageSrcs.length === 0) {
                     Gallery.closeGallery();
                     return;
                 }
-
                 if (index < state.currentGalleryIndex) state.currentGalleryIndex--;
-
                 if (state.currentGalleryIndex >= state.fullSizeImageSrcs.length) {
                     state.currentGalleryIndex = state.fullSizeImageSrcs.length - 1;
                 }
-
                 if (state.currentGalleryIndex < 0) state.currentGalleryIndex = 0;
-
                 Gallery._populateAllThumbnails(galleryOverlay.find(`.${CSS.GALLERY.THUMBNAIL_STRIP}`));
                 Gallery.showExpandedView(state.currentGalleryIndex);
-
                 ThumbnailStrip.updateThumbnailNumbers();
                 ThumbnailStrip.updateScrollIndicators();
-
                 state.notificationType = 'info';
                 state.notification = 'Image removed from gallery';
             };
-
             if (typeof Swal !== 'undefined') {
                 Swal.fire({
                     title: 'Remove from gallery?',
@@ -1988,9 +1933,7 @@
                     icon: 'question',
                     showCancelButton: true,
                     confirmButtonText: 'Remove'
-                }).then(({ isConfirmed }) => {
-                    if (isConfirmed) doRemove();
-                });
+                }).then(({ isConfirmed }) => { if (isConfirmed) doRemove(); });
             } else if (confirm('Are you sure you want to remove this image from the gallery?')) {
                 doRemove();
             }
@@ -1998,10 +1941,9 @@
 
         updateThumbnailNumbers: () => {
             if (!galleryOverlay) return;
-
-            galleryOverlay.find(`.${CSS.GALLERY.THUMBNAIL_WRAPPER}`).each(function (index) {
+            galleryOverlay.find(`.${CSS.GALLERY.THUMBNAIL_WRAPPER}`).each(function () {
+                const index = parseInt($(this).attr('data-index'), 10);
                 const $number = $(this).find('.ug-thumbnail-number');
-
                 if ($number.length === 0) {
                     $(this).append(`<span class="ug-thumbnail-number">${index + 1}</span>`);
                 } else {
@@ -2743,12 +2685,10 @@
         _clearPreloadCache: function () {
             for (const index in Gallery._preloadedImageCache) {
                 const cachedItem = Gallery._preloadedImageCache[index];
-
                 if (typeof cachedItem === 'string' && cachedItem.startsWith('blob:')) {
                     BlobManager.revokeUrl(cachedItem);
                 }
             }
-
             Gallery._preloadedImageCache = {};
             Gallery._preloadingInProgress = {};
         },
@@ -2756,20 +2696,14 @@
         _fetchAndCacheImage: async function (indexToPreload, sessionId = null) {
             if (indexToPreload < 0 || indexToPreload >= state.originalImageSrcs.length) return;
             if (Gallery._preloadedImageCache[indexToPreload] || Gallery._preloadingInProgress[indexToPreload]) return;
-
             const mediaItem = state.originalImageSrcs[indexToPreload];
             if (!mediaItem || mediaItem.type !== 'image') return;
-
             if (sessionId !== null && state.currentLoadSessionId !== sessionId) return;
-
             const originalImageUrl = mediaItem.src;
             if (!originalImageUrl) return;
-
             Gallery._preloadingInProgress[indexToPreload] = true;
-
             try {
                 const blob = await ImageLoader.fetchWithRetry(originalImageUrl, sessionId);
-
                 if (blob) {
                     Gallery._preloadedImageCache[indexToPreload] = BlobManager.createUrl(blob);
                 }
@@ -2783,31 +2717,66 @@
         _preloadAdjacentImages: function (currentIndex) {
             const sessionId = state.currentLoadSessionId;
             const maxKeep = CONFIG.PRELOAD_COUNT + CONFIG.PRELOAD_WINDOW_BUFFER;
-
             for (const indexStr in Gallery._preloadedImageCache) {
                 const index = parseInt(indexStr);
-
                 if (Math.abs(index - currentIndex) > maxKeep) {
                     if (typeof Gallery._preloadedImageCache[indexStr] === 'string') {
                         BlobManager.revokeUrl(Gallery._preloadedImageCache[indexStr]);
                     }
-
                     delete Gallery._preloadedImageCache[indexStr];
                 }
             }
-
             for (let i = 1; i <= CONFIG.PRELOAD_COUNT; i++) {
                 Gallery._fetchAndCacheImage(currentIndex + i, sessionId);
             }
-
             Gallery._fetchAndCacheImage(currentIndex - 1, sessionId);
+        },
+
+        _releaseVideo: (video) => {
+            if (!video || video.tagName !== 'VIDEO') return;
+            try {
+                video.pause();
+                video.removeAttribute('src');
+                video.load();
+            } catch (e) { /* ignore */ }
+        },
+
+        _releaseMediaElements: ($scope) => {
+            if (!$scope || !$scope.length) return;
+            $scope.find('video').each(function () { Gallery._releaseVideo(this); });
+        },
+
+        safePlay: (video) => {
+            if (!video) return;
+            try {
+                const p = video.play();
+                if (p && typeof p.catch === 'function') {
+                    p.catch(err => console.warn('Ultra Galleries: playback blocked:', err));
+                }
+            } catch (e) {
+                console.warn('Ultra Galleries: playback error:', e);
+            }
+        },
+
+        _attachVideoPlayOverlay: (video, $container) => {
+            const $overlay = $('<button>')
+                .addClass('ug-video-play-overlay')
+                .attr({ 'aria-label': 'Play video', title: 'Play video' })
+                .html('<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>');
+            const hide = () => $overlay.addClass('ug-hidden');
+            $overlay.on('click', (e) => {
+                e.stopPropagation();
+                Gallery.safePlay(video);
+                hide();
+            });
+            video.addEventListener('play', hide, { once: true });
+            $container.append($overlay);
         },
 
         _createGalleryOverlayAndContainer: function () {
             galleryOverlay = $('<div>')
                 .attr('id', 'gallery-overlay')
                 .addClass(CSS.GALLERY.OVERLAY);
-
             return $('<div>')
                 .addClass(CSS.GALLERY.CONTAINER)
                 .appendTo(galleryOverlay);
@@ -2819,64 +2788,46 @@
                 .on('mousedown', e => e.stopPropagation());
 
             $('<button>')
-                .attr({
-                    id: 'reset-btn',
-                    title: 'Reset Zoom & Position'
-                })
+                .attr({ id: 'reset-btn', title: 'Reset Zoom & Position' })
                 .addClass(CSS.GALLERY.TOOLBAR_BTN)
                 .text('Reset')
                 .on('click', Zoom.resetZoom)
                 .appendTo($toolbar);
 
             const $zoomControls = $('<div>').addClass('zoom-controls').appendTo($toolbar);
-
             $('<button>')
-                .attr({
-                    id: 'zoom-out-btn',
-                    title: 'Zoom Out'
-                })
+                .attr({ id: 'zoom-out-btn', title: 'Zoom Out' })
                 .addClass(CSS.GALLERY.TOOLBAR_BTN)
                 .html('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="8" y1="11" x2="14" y2="11"></line><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>')
                 .on('click', () => Zoom.zoom(-CONFIG.ZOOM_STEP))
                 .appendTo($zoomControls);
-
             $('<span>')
                 .attr('id', 'zoom-level')
                 .addClass('zoom-level')
                 .text('100%')
                 .appendTo($zoomControls);
-
             $('<button>')
-                .attr({
-                    id: 'zoom-in-btn',
-                    title: 'Zoom In'
-                })
+                .attr({ id: 'zoom-in-btn', title: 'Zoom In' })
                 .addClass(CSS.GALLERY.TOOLBAR_BTN)
                 .html('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>')
                 .on('click', () => Zoom.zoom(CONFIG.ZOOM_STEP))
                 .appendTo($zoomControls);
 
             $('<button>')
-                .attr({
-                    id: 'slideshow-btn',
-                    title: 'Start Slideshow'
-                })
+                .attr({ id: 'slideshow-btn', title: 'Start Slideshow (Space)' })
                 .addClass(CSS.GALLERY.TOOLBAR_BTN)
                 .html('▶')
-                .on('click', Slideshow.toggle)
+                .on('click', Slideshow.handleButton)
                 .appendTo($toolbar);
+            Slideshow.syncControls();
 
             $('<button>')
-                .attr({
-                    id: 'ug-fill-height-btn',
-                    'aria-label': 'Fill Height'
-                })
+                .attr({ id: 'ug-fill-height-btn', 'aria-label': 'Fill Height' })
                 .text(BUTTONS.HEIGHT)
                 .addClass(CSS.GALLERY.TOOLBAR_BTN)
                 .on('click', () => {
                     const $container = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
                     const $media = $container.find('img, video');
-
                     if ($media.length) ImageSizing.applyFillHeight($media[0]);
                 })
                 .appendTo($toolbar);
@@ -2890,7 +2841,6 @@
                 .appendTo($toolbar);
 
             $expandedViewElement.append($toolbar);
-
             $expandedViewElement.append(
                 $('<button>')
                     .addClass('ug-gallery-close-button')
@@ -2904,31 +2854,20 @@
             const $zoomContainer = $('<div>')
                 .addClass(CSS.GALLERY.ZOOM_CONTAINER)
                 .appendTo($expandedViewElement);
-
-            $('<div>')
-                .addClass('ug-ambient-background')
-                .appendTo($zoomContainer);
-
+            $('<div>').addClass('ug-ambient-background').appendTo($zoomContainer);
             const $mainImageContainer = $('<div>')
                 .addClass(CSS.GALLERY.MAIN_IMG_CONTAINER)
                 .addClass('image-container')
                 .appendTo($zoomContainer);
-
-            const $panIndicator = $('<div>')
-                .addClass('pan-indicator')
-                .appendTo($mainImageContainer);
-
+            const $panIndicator = $('<div>').addClass('pan-indicator').appendTo($mainImageContainer);
             $panIndicator.append(
                 $('<svg>').attr({
                     xmlns: 'http://www.w3.org/2000/svg',
-                    width: '30',
-                    height: '30',
+                    width: '30', height: '30',
                     viewBox: '0 0 24 24',
-                    fill: 'white',
-                    opacity: '0.7'
+                    fill: 'white', opacity: '0.7'
                 }).html('<path d="M10 9h4V6h3l-5-5-5 5h3v3zm-1 1H6V7l-5 5 5 5v-3h3v-4zm14 2l-5-5v3h-3v4h3v3l5-5zm-9 3h-4v3H7l5 5 5-5h-3v-3z"/>')
             );
-
             return { $mainImageContainer };
         },
 
@@ -2936,16 +2875,13 @@
             const $navContainer = $('<div>')
                 .addClass(CSS.GALLERY.NAV_CONTAINER)
                 .on('mousedown', e => e.stopPropagation());
-
             if (!state.hideNavArrows) {
                 $navContainer.append(
                     UI.createNavigationButton('prev'),
                     UI.createNavigationButton('next')
                 );
             }
-
             $expandedViewElement.append($navContainer);
-
             $('<div>')
                 .addClass(CSS.GALLERY.COUNTER)
                 .addClass(CSS.GALLERY.HIDE)
@@ -2958,7 +2894,6 @@
                 .css('display', state.bottomStripeVisible ? 'flex' : 'none')
                 .on('mousedown', e => e.stopPropagation())
                 .appendTo($expandedViewElement);
-
             return $('<div>')
                 .addClass(CSS.GALLERY.THUMBNAIL_STRIP)
                 .appendTo($thumbnailStripContainer);
@@ -2966,17 +2901,11 @@
 
         _populateAllThumbnails: function ($stripThumbnailsContainer) {
             $stripThumbnailsContainer.empty();
-
             const stripFragment = document.createDocumentFragment();
-
             state.fullSizeImageSrcs.forEach((mediaItem, index) => {
                 if (!mediaItem) return;
-
                 const thumbSrc = mediaItem.type === 'video' ? mediaItem.poster : mediaItem.src;
-
-                const $stripContainer = $('<div>')
-                    .addClass(CSS.GALLERY.THUMBNAIL_WRAPPER);
-
+                const $stripContainer = $('<div>').addClass(CSS.GALLERY.THUMBNAIL_WRAPPER);
                 if (mediaItem.type === 'video') {
                     $stripContainer.append(
                         $('<div>')
@@ -2984,28 +2913,22 @@
                             .html('<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>')
                     );
                 }
-
                 $stripContainer.append(
                     $('<img>')
-                        .attr({
-                            src: thumbSrc,
-                            loading: 'lazy'
-                        })
+                        .attr({ src: thumbSrc, loading: 'lazy', decoding: 'async' })
                         .addClass(CSS.GALLERY.THUMBNAIL)
                 );
-
                 $stripContainer
-                    .data('index', index)
-                    .on('click', () => Gallery.showExpandedView(index))
                     .attr({
+                        'data-index': index,
                         'aria-label': `Thumbnail ${index + 1}`,
                         tabindex: 0,
                         role: 'button'
-                    });
-
+                    })
+                    .data('index', index)
+                    .on('click', () => Gallery.showExpandedView(index));
                 stripFragment.appendChild($stripContainer[0]);
             });
-
             $stripThumbnailsContainer[0].appendChild(stripFragment);
         },
 
@@ -3017,24 +2940,18 @@
 
             $expandedViewElement.on('mousedown', e => {
                 const currentItem = state.fullSizeImageSrcs[state.currentGalleryIndex];
-
                 if (currentItem && currentItem.type === 'image') {
                     if (
                         $(e.target).closest(
                             `.${CSS.GALLERY.TOOLBAR}, .${CSS.GALLERY.NAV_CONTAINER}, .${CSS.GALLERY.STRIP_CONTAINER}`
-                        ).length ||
-                        e.button === 2
-                    ) {
-                        return;
-                    }
-
+                        ).length || e.button === 2
+                    ) { return; }
                     DragHandler.startDrag(e);
                 }
             });
 
             $mainImageContainerElement.on('dblclick', e => {
                 const currentItem = state.fullSizeImageSrcs[state.currentGalleryIndex];
-
                 if (currentItem && currentItem.type === 'image' && e.button === 0) {
                     if (viewState.zoomScale > 1) {
                         Zoom.resetZoom();
@@ -3042,28 +2959,17 @@
                         const rect = $mainImageContainerElement[0].getBoundingClientRect();
                         const clickX = e.clientX - rect.left;
                         const clickY = e.clientY - rect.top;
-
                         viewState.zoomOrigin = { x: clickX, y: clickY };
-
                         const newScale = 2.5;
-
                         const imageX = (clickX - viewState.imageOffset.x) / viewState.zoomScale;
                         const imageY = (clickY - viewState.imageOffset.y) / viewState.zoomScale;
-
                         const newOffsetX = clickX - (imageX * newScale);
                         const newOffsetY = clickY - (imageY * newScale);
-
                         const mainImageDOM = $mainImageContainerElement.find(`.${CSS.GALLERY.MAIN_IMG}`)[0];
                         if (!mainImageDOM) return;
-
                         const boundedOffset = ZoomHelper.calculateHardBoundaryOffsets(
-                            newOffsetX,
-                            newOffsetY,
-                            newScale,
-                            rect,
-                            mainImageDOM
+                            newOffsetX, newOffsetY, newScale, rect, mainImageDOM
                         );
-
                         Zoom._applyTransition($mainImageContainerElement, () => {
                             viewState.imageOffset.x = boundedOffset.x;
                             viewState.imageOffset.y = boundedOffset.y;
@@ -3075,10 +2981,8 @@
             });
 
             let controlsTimeout;
-
             $expandedViewElement.on('mousemove', () => {
                 state.controlsVisible = true;
-
                 clearTimeout(controlsTimeout);
                 controlsTimeout = setTimeout(() => {
                     if (!state.isDragging && !viewState.pinchZoomActive) {
@@ -3086,9 +2990,7 @@
                     }
                 }, CONFIG.CONTROLS_HIDE_DELAY);
             });
-
             state.controlsVisible = true;
-
             clearTimeout(controlsTimeout);
             controlsTimeout = setTimeout(() => {
                 if (!state.isDragging && !viewState.pinchZoomActive) {
@@ -3097,7 +2999,6 @@
             }, CONFIG.CONTROLS_HIDE_DELAY);
 
             Zoom.setupTouchEvents();
-
             $(document).on('mousemove.galleryDrag', DragHandler.dragImage);
             $(document).on('mouseup.galleryDrag', DragHandler.endDrag);
         },
@@ -3108,103 +3009,94 @@
                 state.isGalleryMode = true;
                 return;
             }
-
             const fragment = document.createDocumentFragment();
             const $galleryContentContainer = Gallery._createGalleryOverlayAndContainer();
-
             const $expandedView = $('<div>')
                 .addClass(CSS.GALLERY.EXPANDED_VIEW)
                 .addClass(CSS.GALLERY.HIDE)
                 .appendTo($galleryContentContainer);
-
             Gallery._createExpandedViewToolbar($expandedView);
-
             const { $mainImageContainer } = Gallery._createExpandedViewMainImageArea($expandedView);
-
             Gallery._createExpandedViewNavigationAndCounter($expandedView);
-
             const $stripThumbnailsContainer = Gallery._createExpandedViewThumbnailStrip($expandedView);
-
             fragment.appendChild(galleryOverlay[0]);
             document.body.appendChild(fragment);
-
             if (state.isFullscreen) {
                 document.body.classList.add('ug-fullscreen');
                 galleryOverlay.addClass(CSS.GALLERY.FULLSCREEN_OVERLAY);
             }
-
             Gallery._populateAllThumbnails($stripThumbnailsContainer);
             Gallery._setupGalleryInteractions($expandedView, $mainImageContainer);
             Gallery.showExpandedView(0);
-
             state.isGalleryMode = true;
             Accessibility.init();
         },
 
         showExpandedView: function (index) {
             if (!galleryOverlay || !galleryOverlay.length || index < 0) return;
-
             let mediaItem = state.fullSizeImageSrcs[index];
             if (!mediaItem && state.originalImageSrcs[index]) {
                 mediaItem = state.originalImageSrcs[index];
             }
-
             const $mainMediaContainer = galleryOverlay.find(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`);
             const $ambientBackground = galleryOverlay.find('.ug-ambient-background');
             const $counter = galleryOverlay.find(`.${CSS.GALLERY.COUNTER}`);
             const $zoomControls = galleryOverlay.find('.zoom-controls');
             const $resetBtn = galleryOverlay.find('#reset-btn');
             const $fillHeightBtn = galleryOverlay.find('#ug-fill-height-btn');
-
             if (!$mainMediaContainer.length) return;
 
             state.currentGalleryIndex = index;
 
             if (!mediaItem || !mediaItem.src) {
+                Gallery._releaseMediaElements($mainMediaContainer);
                 $mainMediaContainer.empty().append(
                     $('<div>').addClass(CSS.GALLERY.IMAGE_ERROR_MSG).text('Loading media data...')
                 );
-
                 galleryOverlay.find(`.${CSS.GALLERY.EXPANDED_VIEW}`).removeClass(CSS.GALLERY.HIDE);
                 return;
             }
 
-            $mainMediaContainer.empty().removeClass(CSS.GALLERY.ZOOMED);
+            // Release old video decoders before clearing
+            Gallery._releaseMediaElements($mainMediaContainer);
 
+            if (DragHandler.inertiaAnimation) {
+                cancelAnimationFrame(DragHandler.inertiaAnimation);
+                DragHandler.inertiaAnimation = null;
+            }
+            if (DragHandler.animationFrame) {
+                cancelAnimationFrame(DragHandler.animationFrame);
+                DragHandler.animationFrame = null;
+            }
+
+            $mainMediaContainer.empty().removeClass(CSS.GALLERY.ZOOMED);
+            viewState.zoomScale = 1;
+            viewState.imageOffset = { x: 0, y: 0 };
             DragHandler.cachedImgEl = null;
             DragHandler.cachedZoomEl = null;
-
-            Zoom.resetZoom();
 
             if (mediaItem.type === 'image' || !mediaItem.type) {
                 $zoomControls.show();
                 $resetBtn.show();
                 $fillHeightBtn.hide();
-
                 const imageUrlToLoad = Gallery._preloadedImageCache[index] || mediaItem.src;
-
                 if ($ambientBackground.length) {
                     $ambientBackground.css('background-image', `url("${imageUrlToLoad}")`);
                 }
-
                 const $mainImage = $('<img>')
                     .addClass(CSS.GALLERY.MAIN_IMG)
+                    .attr({ decoding: 'async' })
                     .on('dragstart', e => e.preventDefault())
                     .appendTo($mainMediaContainer);
 
                 $mainImage.on('load', function () {
                     $(this).css('opacity', 1);
-
                     this.style.transformOrigin = '0 0';
-
                     ImageSizing.applyBestFit(this);
-
                     DragHandler.cachedImgEl = this;
                     DragHandler.cachedZoomEl = document.getElementById('zoom-level');
-
                     viewState.zoomScale = 1;
                     viewState.imageOffset = { x: 0, y: 0 };
-
                     Zoom.applyZoom();
                     Gallery._preloadAdjacentImages(index);
                 }).on('error', function () {
@@ -3213,50 +3105,50 @@
                         this.src = mediaItem.src;
                         return;
                     }
-
                     $mainMediaContainer.append(
                         $('<div>').addClass(CSS.GALLERY.IMAGE_ERROR_MSG).text('Failed to load image')
                     );
                 });
-
                 $mainImage.attr('src', imageUrlToLoad);
+
             } else if (mediaItem.type === 'video') {
                 $zoomControls.hide();
                 $resetBtn.hide();
                 $fillHeightBtn.show();
-
                 const $mainVideo = $('<video>')
                     .addClass(CSS.GALLERY.MAIN_VIDEO)
                     .attr({
                         src: mediaItem.src,
                         poster: mediaItem.poster,
                         controls: true,
-                        loop: true
+                        loop: true,
+                        preload: 'metadata',
+                        playsinline: true
                     })
                     .on('dragstart', e => e.preventDefault())
                     .appendTo($mainMediaContainer);
 
                 $mainVideo.on('loadedmetadata', function () {
                     this.style.transformOrigin = '0 0';
-
-                    ImageSizing.applyBestFit(this);
-
+                    Utils.setImageStyle(this, {
+                        width: '100%', height: '100%',
+                        maxWidth: '100%', maxHeight: '100%',
+                        objectFit: 'contain'
+                    });
                     DragHandler.cachedImgEl = this;
                     DragHandler.cachedZoomEl = document.getElementById('zoom-level');
                 });
+                Gallery._attachVideoPlayOverlay($mainVideo[0], $mainMediaContainer);
             }
 
             $counter
                 .text(`${index + 1} / ${state.fullSizeImageSrcs.length}`)
                 .removeClass(CSS.GALLERY.HIDE);
-
             galleryOverlay.find(`.${CSS.GALLERY.EXPANDED_VIEW}`).removeClass(CSS.GALLERY.HIDE);
 
             const $strip = galleryOverlay.find(`.${CSS.GALLERY.THUMBNAIL_STRIP}`);
             $strip.find('.selected').removeClass('selected');
-
             const $activeThumb = $strip.find(`[data-index="${index}"]`).addClass('selected');
-
             if ($activeThumb.length) {
                 $strip.animate({
                     scrollLeft: $activeThumb.position().left + $strip.scrollLeft() - ($strip.width() / 2)
@@ -3274,39 +3166,29 @@
             if (!galleryOverlay || !galleryOverlay.length) {
                 state.isGalleryMode = false;
                 state.isFullscreen = false;
-
                 Slideshow.stop();
-
                 $(document).off('.galleryDrag');
                 ThumbnailStrip.cleanup();
-
                 return;
             }
-
             state.isGalleryMode = false;
             state.isFullscreen = false;
-
             Slideshow.stop();
-
             Gallery._clearPreloadCache();
             ThumbnailStrip.cleanup();
-
             if (DragHandler.inertiaAnimation) {
                 cancelAnimationFrame(DragHandler.inertiaAnimation);
                 DragHandler.inertiaAnimation = null;
             }
-
             if (DragHandler.animationFrame) {
                 cancelAnimationFrame(DragHandler.animationFrame);
                 DragHandler.animationFrame = null;
             }
-
+            Gallery._releaseMediaElements(galleryOverlay);
             galleryOverlay.remove();
             galleryOverlay = null;
-
             DragHandler.cachedImgEl = null;
             DragHandler.cachedZoomEl = null;
-
             $(document).off('.galleryDrag');
         },
 
@@ -3319,7 +3201,6 @@
                 } else {
                     if (Utils.isPostPage()) {
                         ImageLoader.loadImages();
-
                         state.notificationType = 'info';
                         state.notification = 'Refreshing gallery list...';
                     } else {
@@ -3349,6 +3230,8 @@
 
     const ImageLoader = {
         imageActions: ImageActionHandler.imageActions,
+        _lazyObserver: null,
+        _previousBlobUrls: null,
 
         simulateScrollDown: async () => {
             return new Promise(resolve => {
@@ -3358,26 +3241,17 @@
                     '.post__content img',
                     '.post__body img'
                 ];
-
                 const images = document.querySelectorAll(selectors.join(', '));
-
-                if (images.length === 0) {
-                    resolve();
-                    return;
-                }
-
+                if (images.length === 0) { resolve(); return; }
                 let loadedCount = 0;
-
                 const checkAllLoaded = () => {
                     loadedCount++;
-
                     if (loadedCount >= images.length) {
                         clearTimeout(timeout);
                         observer.disconnect();
                         resolve();
                     }
                 };
-
                 const observer = new IntersectionObserver(entries => {
                     entries.forEach(entry => {
                         if (entry.isIntersecting) {
@@ -3386,9 +3260,7 @@
                         }
                     });
                 });
-
                 images.forEach(img => observer.observe(img));
-
                 const dynamicTimeout = Math.max(CONFIG.SCROLL_SIMULATION_BASE_TIMEOUT, images.length * 200);
                 const timeout = setTimeout(() => {
                     observer.disconnect();
@@ -3399,18 +3271,15 @@
 
         fetchWithRetry: async (url, sessionId, retries = CONFIG.MAX_RETRIES, delay = CONFIG.RETRY_DELAY) => {
             if (state.currentLoadSessionId !== sessionId) return null;
-
             try {
                 if (state.enablePersistentCaching && db) {
                     const cachedBlob = await getImageFromDexie(url);
                     if (cachedBlob) return cachedBlob;
                 }
-
                 return await new Promise((resolve, reject) => {
                     if (state.currentLoadSessionId !== sessionId) {
                         reject(new Error('Stale session'));
                     }
-
                     GM.xmlHttpRequest({
                         method: 'GET',
                         url: url,
@@ -3419,11 +3288,9 @@
                         onload: async (response) => {
                             if (response.status === 200 || response.status === 206) {
                                 const blob = response.response;
-
                                 if (state.enablePersistentCaching && db) {
                                     await storeImageInDexie(url, blob);
                                 }
-
                                 resolve(blob);
                             } else {
                                 const err = new Error(`HTTP ${response.status}`);
@@ -3439,7 +3306,6 @@
                 if (err.message === 'Stale session') throw err;
                 if (err.status && err.status >= 400 && err.status < 500 && err.status !== 429) throw err;
                 if (retries <= 0) throw err;
-
                 await Utils.delay(delay);
                 return ImageLoader.fetchWithRetry(url, sessionId, retries - 1, delay * 1.5);
             }
@@ -3451,7 +3317,6 @@
                     const cachedBlob = await getImageFromDexie(url);
                     if (cachedBlob) return cachedBlob;
                 }
-
                 return await new Promise((resolve, reject) => {
                     GM.xmlHttpRequest({
                         method: 'GET',
@@ -3461,11 +3326,9 @@
                         onload: async (response) => {
                             if (response.status === 200 || response.status === 206) {
                                 const blob = response.response;
-
                                 if (state.enablePersistentCaching && db) {
                                     await storeImageInDexie(url, blob);
                                 }
-
                                 resolve(blob);
                             } else {
                                 const err = new Error(`HTTP ${response.status}`);
@@ -3480,7 +3343,6 @@
             } catch (err) {
                 if (err.status && err.status >= 400 && err.status < 500 && err.status !== 429) throw err;
                 if (retries <= 0) throw err;
-
                 await Utils.delay(delay);
                 return ImageLoader.fetchBlobDirect(url, retries - 1, delay * 1.5);
             }
@@ -3488,89 +3350,57 @@
 
         loadImageAndApplyToPage: async (linkElement, galleryIndex, posterHref, isUniqueForGallery, sessionId, itemData) => {
             const imgElement = linkElement.querySelector('img') || linkElement;
-
             if (!imgElement) {
                 if (state.currentLoadSessionId === sessionId) state.loadedImages++;
                 return;
             }
-
             if (imgElement.tagName === 'IMG' && !imgElement.classList.contains('post__image')) {
                 imgElement.classList.add('post__image');
             }
-
             const cacheKey = itemData.originalUrl;
             let blobUrlToUse = loadedBlobUrls.get(posterHref);
-
             try {
                 if (!blobUrlToUse) {
                     if (itemData.type === 'video') {
                         const posterBlob = await ImageLoader.fetchWithRetry(posterHref, sessionId);
                         if (state.currentLoadSessionId !== sessionId) return;
-
                         if (!posterBlob) throw new Error('Failed to fetch poster blob');
-
                         blobUrlToUse = BlobManager.createUrl(posterBlob);
                     } else {
                         let blob = await ImageLoader.fetchWithRetry(cacheKey, sessionId);
                         if (state.currentLoadSessionId !== sessionId) return;
-
                         if (!blob) throw new Error('Failed to fetch blob');
-
                         blobUrlToUse = BlobManager.createUrl(blob);
                     }
-
                     loadedBlobUrls.set(posterHref, blobUrlToUse);
                 }
-
                 if (state.currentLoadSessionId !== sessionId) return;
-
                 if (imgElement.tagName === 'IMG') {
                     imgElement.src = blobUrlToUse;
                     imgElement.dataset.originalSrc = cacheKey;
                     imgElement.classList.add('ug-image-loaded');
                     imgElement.style.cursor = 'default';
-
                     const parentLink = imgElement.closest('a');
                     if (parentLink) parentLink.style.cursor = 'default';
-
                     ImageLoader.imageActions[state.currentResizeMode](imgElement);
                 }
-
                 if (isUniqueForGallery) {
                     state.fullSizeImageSrcs[galleryIndex] = itemData.type === 'video'
-                        ? {
-                            type: 'video',
-                            src: cacheKey,
-                            poster: blobUrlToUse
-                        }
-                        : {
-                            type: 'image',
-                            src: cacheKey,
-                            originalSrc: cacheKey
-                        };
-
+                        ? { type: 'video', src: cacheKey, poster: blobUrlToUse }
+                        : { type: 'image', src: cacheKey, originalSrc: cacheKey };
                     state.originalImageSrcs[galleryIndex] = {
                         src: cacheKey,
                         type: itemData.type,
                         fileName: linkElement.getAttribute('download') || cacheKey.split('/').pop()
                     };
                 }
-
                 state.loadedImages++;
             } catch (error) {
                 ErrorHandler.handleImageError(
-                    error,
-                    cacheKey,
+                    error, cacheKey,
                     imgElement.tagName === 'IMG' ? imgElement : null,
-                    {
-                        linkElement,
-                        galleryIndex,
-                        posterHref,
-                        isUniqueForGallery,
-                        itemData
-                    }
+                    { linkElement, galleryIndex, posterHref, isUniqueForGallery, itemData }
                 );
-
                 if (state.currentLoadSessionId === sessionId) {
                     state.loadedImages++;
                     state.errorCount++;
@@ -3580,142 +3410,80 @@
 
         collectUniqueMediaItems: (postContainer) => {
             const uniqueGalleryItems = new Map();
-
             const targets = postContainer.querySelectorAll(
                 `${SELECTORS.IMAGE_LINK}, ${SELECTORS.ATTACHMENT_LINK}, ${SELECTORS.VIDEO_LINK}, ${SELECTORS.GENERIC_IMAGE_LINK}`
             );
-
             targets.forEach(linkElement => {
                 if (
                     linkElement.closest('.post__user-profile') ||
                     linkElement.closest('.scrape__user-profile')
-                ) {
-                    return;
-                }
-
+                ) { return; }
                 if (linkElement.classList.contains('user-header__avatar')) return;
-
                 const isVideo =
                     linkElement.matches(SELECTORS.VIDEO_LINK) ||
                     linkElement.href?.match(/\.(mp4|webm|mov)$/i);
-
                 let url;
                 let poster;
                 let type = 'image';
-
                 if (isVideo) {
                     type = 'video';
-
                     url = linkElement.getAttribute('href')?.split('?')[0];
                     poster = linkElement.querySelector('img, video')?.getAttribute('poster') ||
                         (linkElement.querySelector('img')?.getAttribute('data-src') || linkElement.querySelector('img')?.src);
-
                     if (!url) return;
                     if (!poster) poster = 'https://pawchive.pw/static/menu/recent.svg';
-
                     if (!uniqueGalleryItems.has(url)) {
                         uniqueGalleryItems.set(url, {
-                            linkElement,
-                            originalUrl: url,
-                            posterUrl: poster,
-                            type: 'video',
+                            linkElement, originalUrl: url, posterUrl: poster, type: 'video',
                             fileName: linkElement.getAttribute('download') || url.split('/').pop()
                         });
                     }
                 } else {
                     url = Utils.handleMediaSrc(linkElement);
-
-                    if (!url && linkElement.href) {
-                        url = linkElement.href.split('?')[0];
-                    }
-
+                    if (!url && linkElement.href) { url = linkElement.href.split('?')[0]; }
                     if (!url || !/\.(jpe?g|png|gif|webp|bmp)$/i.test(url)) return;
-
                     if (!uniqueGalleryItems.has(url)) {
                         uniqueGalleryItems.set(url, {
-                            linkElement,
-                            originalUrl: url,
-                            posterUrl: url,
-                            type: 'image',
+                            linkElement, originalUrl: url, posterUrl: url, type: 'image',
                             fileName: linkElement.getAttribute('download') || url.split('/').pop()
                         });
                     }
                 }
             });
-
             postContainer.querySelectorAll('video').forEach(videoEl => {
                 let url = videoEl.getAttribute('src') || videoEl.querySelector('source')?.getAttribute('src');
-
                 if (url) {
                     url = url.split('?')[0];
-
                     if (!uniqueGalleryItems.has(url)) {
                         let poster = videoEl.getAttribute('poster') || 'https://pawchive.pw/static/menu/recent.svg';
-
                         uniqueGalleryItems.set(url, {
-                            linkElement: videoEl,
-                            originalUrl: url,
-                            posterUrl: poster,
-                            type: 'video',
+                            linkElement: videoEl, originalUrl: url, posterUrl: poster, type: 'video',
                             fileName: url.split('/').pop()
                         });
                     }
                 }
             });
-
             return uniqueGalleryItems;
         },
 
         _concurrentRunner: (items, sessionId) => {
             const concurrencyLimit = CONFIG.MAX_CONCURRENT_FETCHES;
-
             const tasks = items.map((item, index) => () => ImageLoader.loadImageAndApplyToPage(
-                item.linkElement,
-                index,
-                item.posterUrl,
-                true,
-                sessionId,
-                item
+                item.linkElement, index, item.posterUrl, true, sessionId, item
             ));
-
             return new Promise((resolve) => {
                 let running = 0;
                 let index = 0;
                 const total = tasks.length;
-
-                if (total === 0) {
-                    resolve();
-                    return;
-                }
-
+                if (total === 0) { resolve(); return; }
                 const next = () => {
-                    if (state.currentLoadSessionId !== sessionId) {
-                        resolve();
-                        return;
-                    }
-
-                    if (index >= total) {
-                        if (running === 0) resolve();
-                        return;
-                    }
-
+                    if (state.currentLoadSessionId !== sessionId) { resolve(); return; }
+                    if (index >= total) { if (running === 0) resolve(); return; }
                     const task = tasks[index++];
                     running++;
-
-                    task()
-                        .then(() => {
-                            running--;
-                            next();
-                        })
-                        .catch(() => {
-                            running--;
-                            next();
-                        });
+                    task().then(() => { running--; next(); }).catch(() => { running--; next(); });
                 };
-
-                for (let i = 0; i < concurrencyLimit && i < total; i++) {
-                    next();
-                }
+                for (let i = 0; i < concurrencyLimit && i < total; i++) { next(); }
             });
         },
 
@@ -3726,84 +3494,60 @@
                 document.querySelector('.post__body') ||
                 document.querySelector('.post__content') ||
                 document;
-
             if (!Utils.isPostPage() || state.isLoading) return;
-
             const sessionId = StateManager.generateSessionId();
             state.currentLoadSessionId = sessionId;
-
             try {
                 state.isLoading = true;
-
                 await Utils.delay(16);
                 if (state.currentLoadSessionId !== sessionId) return;
-
                 const previousBlobUrls = new Map(loadedBlobUrls);
                 loadedBlobUrls.clear();
-
                 Object.assign(state, {
                     fullSizeImageSrcs: [],
                     originalImageSrcs: [],
                     loadedImages: 0,
                     errorCount: 0
                 });
-
                 const uniqueGalleryItems = ImageLoader.collectUniqueMediaItems(postContainer);
                 if (state.currentLoadSessionId !== sessionId) return;
-
                 const uniqueItems = Array.from(uniqueGalleryItems.values());
-
                 state.totalImages = uniqueItems.length;
                 state.fullSizeImageSrcs = Array(uniqueItems.length).fill(null);
                 state.originalImageSrcs = Array(uniqueItems.length).fill(null);
-
                 uniqueItems.forEach((item, index) => {
                     if (item.type === 'video') {
                         state.fullSizeImageSrcs[index] = {
-                            type: 'video',
-                            src: item.originalUrl,
-                            poster: item.posterUrl
+                            type: 'video', src: item.originalUrl, poster: item.posterUrl
                         };
                     } else {
                         state.fullSizeImageSrcs[index] = {
-                            type: 'image',
-                            src: item.originalUrl,
-                            originalSrc: item.originalUrl
+                            type: 'image', src: item.originalUrl, originalSrc: item.originalUrl
                         };
                     }
-
                     state.originalImageSrcs[index] = {
-                        src: item.originalUrl,
-                        type: item.type,
-                        fileName: item.fileName
+                        src: item.originalUrl, type: item.type, fileName: item.fileName
                     };
                 });
-
                 state.galleryReady = true;
                 updateGalleryButton(true);
-
                 if (state.autoLoadOriginals) {
                     await ImageLoader.simulateScrollDown();
                     Utils.ensureThumbnailsExist();
-
                     await ImageLoader._concurrentRunner(uniqueItems, sessionId);
                     if (state.currentLoadSessionId !== sessionId) return;
-
                     previousBlobUrls.forEach((url, key) => {
                         if (loadedBlobUrls.has(key)) BlobManager.revokeUrl(url);
                     });
-
                     ImageLoader.updateFinalStatus();
                     ImageActionHandler.applyDefaultSizingToLoadedImages();
                 } else {
                     state.notificationType = 'success';
                     state.notification = `Gallery Ready (${state.totalImages} items).`;
                 }
-
                 state.isLoading = false;
             } catch (error) {
                 console.error('Critical Error in ImageLoader.loadImages:', error);
-
                 state.isLoading = false;
                 state.galleryReady = true;
                 updateGalleryButton(true);
@@ -4609,36 +4353,29 @@
     const init = async () => {
         try {
             const cssText = GM_getResourceText('mainCSS');
-               if (cssText) {
-                   const styleNode = GM_addStyle(cssText);
-                   // Pawchive's htmx swap script strips any <style> in <head> without 'data-keep'.
-                   if (styleNode && styleNode.setAttribute) {
-                       styleNode.setAttribute('data-keep', '');
-                   } else {
-                       // Fallback for script managers that don't return the node
-                       const lastStyle = document.head.querySelector('style:last-of-type');
-                       if (lastStyle) lastStyle.setAttribute('data-keep', '');
-                   }
-               } else {
-                   console.warn('Ultra Galleries: Failed to load main CSS resource.');
+            if (cssText) {
+                const styleNode = GM_addStyle(cssText);
+                // Pawchive's htmx swap script strips any <style> in <head> without 'data-keep'.
+                if (styleNode && styleNode.setAttribute) {
+                    styleNode.setAttribute('data-keep', '');
+                } else {
+                    const lastStyle = document.head.querySelector('style:last-of-type');
+                    if (lastStyle) lastStyle.setAttribute('data-keep', '');
+                }
+            } else {
+                console.warn('Ultra Galleries: Failed to load main CSS resource.');
             }
-            Slideshow.init();
 
+            Slideshow.init();
             const allSettings = SettingsManager.loadAllSettings();
             Object.assign(state, allSettings);
-
             document.body.classList.toggle('ug-animations-disabled', !state.animationsEnabled);
-
             updateButtonLabels();
-
             state.notification = null;
-
             if (state.enablePersistentCaching) {
                 initDexie();
             }
-
             CONFIG.MAX_SCALE = SettingsManager.loadSetting('maxZoomScale', CONFIG.MAX_SCALE);
-
             document.addEventListener('keydown', EventHandlers.handleGlobalKeyDown);
             window.addEventListener('beforeunload', fullCleanup);
 
@@ -4648,29 +4385,20 @@
                 originalPushState.apply(this, arguments);
                 window.dispatchEvent(new Event('ug-locationchange'));
             };
-
             const originalReplaceState = history.replaceState;
             history.replaceState = function () {
                 originalReplaceState.apply(this, arguments);
                 window.dispatchEvent(new Event('ug-locationchange'));
             };
-
             window.addEventListener('popstate', () => {
                 window.dispatchEvent(new Event('ug-locationchange'));
             });
-
             window.addEventListener('ug-locationchange', Utils.debounce(injectUI, 150));
 
             const debouncedInject = Utils.debounce(injectUI, 150);
-
             uiObserver = new MutationObserver(debouncedInject);
-            uiObserver.observe(document.body, {
-                childList: true,
-                subtree: true
-            });
-
+            uiObserver.observe(document.body, { childList: true, subtree: true });
             injectUI();
-
             setTimeout(() => ThumbnailStrip.updateThumbnailNumbers(), 50);
         } catch (error) {
             console.error('Error in init:', error);
