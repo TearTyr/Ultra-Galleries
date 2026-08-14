@@ -184,7 +184,8 @@ body.ug-animations-disabled *::after {
 /* ------------------- GLOBAL RESETS ------------------- */
 .ug-gallery-overlay,
 .ug-settings-overlay,
-.ug-notification-container {
+.ug-notification-container,
+.ug-modal-overlay {
     font-family: var(--ug-font);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -193,7 +194,8 @@ body.ug-animations-disabled *::after {
 
 .ug-gallery-overlay *,
 .ug-settings-overlay *,
-.ug-notification-container * {
+.ug-notification-container *,
+.ug-modal-overlay * {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
@@ -228,7 +230,8 @@ body.ug-animations-disabled *::after {
 
 /* Focus ring */
 .ug-gallery-overlay :focus-visible,
-.ug-settings-overlay :focus-visible {
+.ug-settings-overlay :focus-visible,
+.ug-modal-overlay :focus-visible {
     outline: 2px solid var(--ug-accent);
     outline-offset: 2px;
 }
@@ -302,12 +305,10 @@ body.ug-animations-disabled *::after {
     animation: ug-fade-out var(--ug-duration-normal) var(--ug-ease-smooth) forwards;
 }
 
-/* Kept for compatibility, but the actual transformed element is usually img/video */
 .is-transitioning {
     transition: transform var(--ug-duration-normal) var(--ug-ease-out);
 }
 
-/* Corrected: animate the actual transformed media element */
 .is-transitioning .ug-main-image,
 .is-transitioning .ug-main-video {
     transition:
@@ -377,7 +378,6 @@ body.ug-animations-disabled *::after {
     background: #000;
 }
 
-/* Corrected: missing hide utility used by JS */
 .ug-gallery-expanded-view.ug-gallery-hide,
 .ug-gallery-counter.ug-gallery-hide {
     display: none !important;
@@ -681,7 +681,6 @@ body.ug-animations-disabled *::after {
     transition: opacity var(--ug-duration-normal) var(--ug-ease-out);
 }
 
-/* Corrected for touch devices where hover does not exist */
 @media (hover: none), (pointer: coarse) {
     .ug-gallery-nav {
         opacity: 1;
@@ -810,12 +809,7 @@ body.ug-animations-disabled *::after {
     margin-left: 2px;
 }
 
-/*
-   Thumbnail zoom preview.
-   Note: For reliable unclipped rendering, JS should append this element to <body>
-   and position it with getBoundingClientRect(). If it remains inside the thumbnail,
-   overflow clipping may still hide part of it.
-*/
+/* Thumbnail zoom preview */
 .ug-thumbnail-zoom-preview {
     position: absolute;
     bottom: calc(100% + 10px);
@@ -898,11 +892,6 @@ body.ug-animations-disabled *::after {
     background: var(--ug-danger-subtle);
 }
 
-/*
-   Suppress site thumbnail hover effects when gallery is open.
-   The old sibling selector was unreliable because the overlay is usually appended
-   at the end of <body>. These selectors are safer where supported.
-*/
 body:has(#gallery-overlay) .post__thumbnail:hover,
 body:has(#gallery-overlay) .scrape__thumbnail:hover,
 body:has(#gallery-overlay) [class*="thumb"]:hover,
@@ -1409,7 +1398,6 @@ body.ug-gallery-open [class*="thumb"]:hover,
     box-shadow: none !important;
 }
 
-/* Patched: Force default cursor on loaded images to fix hover pointer bug */
 .ug-image-loaded,
 a:has(.ug-image-loaded) {
     cursor: default !important;
@@ -1469,7 +1457,6 @@ a:has(.ug-image-loaded) {
     border-color: var(--ug-accent);
 }
 
-/* Optional helper states used by JS error/retry paths */
 img.retrying,
 img.loading {
     opacity: 0.65;
@@ -1525,8 +1512,162 @@ img.loading {
     transition: opacity 0.5s ease;
 }
 
-/* ------------------- SWEETALERT THEME ------------------- */
+/* ------------------- NATIVE MODAL / DIALOG ------------------- */
+.ug-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10005;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--ug-scrim);
+    backdrop-filter: blur(12px) saturate(1.2);
+    -webkit-backdrop-filter: blur(12px) saturate(1.2);
+    opacity: 0;
+    transition: opacity var(--ug-duration-fast) var(--ug-ease-smooth);
+}
+
+.ug-modal-overlay.show {
+    opacity: 1;
+}
+
+.ug-modal-container {
+    width: 440px;
+    max-width: 90vw;
+    background: var(--ug-surface-1);
+    border: 1px solid var(--ug-border-strong);
+    border-radius: var(--ug-radius-lg);
+    box-shadow: var(--ug-shadow-xl);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    transform: scale(0.92) translateY(10px);
+    transition: transform var(--ug-duration-normal) var(--ug-ease-spring);
+}
+
+.ug-modal-overlay.show .ug-modal-container {
+    transform: scale(1) translateY(0);
+}
+
+.ug-modal-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+}
+
+.ug-modal-icon svg {
+    width: 28px;
+    height: 28px;
+}
+
+.ug-modal-icon.question {
+    background: var(--ug-accent-subtle);
+    color: var(--ug-accent);
+    border: 1px solid var(--ug-accent-glow);
+}
+
+.ug-modal-icon.warning {
+    background: rgba(255, 200, 97, 0.1);
+    color: var(--ug-warning);
+    border: 1px solid var(--ug-warning-glow);
+}
+
+.ug-modal-icon.info {
+    background: var(--ug-overlay-white-05);
+    color: var(--ug-text);
+    border: 1px solid var(--ug-border-strong);
+}
+
+.ug-modal-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--ug-text);
+    margin-bottom: 8px;
+    letter-spacing: -0.01em;
+}
+
+.ug-modal-text {
+    font-size: 14px;
+    color: var(--ug-text-secondary);
+    line-height: 1.5;
+    margin-bottom: 24px;
+}
+
+.ug-modal-actions {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+    justify-content: center;
+}
+
+.ug-modal-btn {
+    padding: 9px 20px;
+    border-radius: var(--ug-radius-sm);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    font-family: inherit;
+    transition:
+        background var(--ug-duration-fast) var(--ug-ease-smooth),
+        transform var(--ug-duration-fast) var(--ug-ease-spring),
+        box-shadow var(--ug-duration-fast) var(--ug-ease-smooth);
+    min-width: 100px;
+}
+
+.ug-modal-confirm {
+    background: var(--ug-accent);
+    color: var(--ug-text-inverse);
+}
+
+.ug-modal-confirm:hover {
+    background: var(--ug-accent-hover);
+    box-shadow: 0 0 12px var(--ug-accent-glow);
+    transform: translateY(-1px);
+}
+
+.ug-modal-cancel {
+    background: var(--ug-surface-3);
+    color: var(--ug-text);
+    border: 1px solid var(--ug-border);
+}
+
+.ug-modal-cancel:hover {
+    background: var(--ug-surface-2);
+    color: #fff;
+}
+
+.ug-modal-btn:active {
+    transform: scale(0.96);
+}
+
+/* ------------------- SWEETALERT FALLBACK ------------------- */
+.swal2-container {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 10010 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: var(--ug-scrim) !important;
+    backdrop-filter: blur(8px) !important;
+    padding: 10px !important;
+}
+
 .swal2-popup {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    width: 440px !important;
+    max-width: 90vw !important;
+    padding: 24px !important;
     background: var(--ug-surface-1) !important;
     border: 1px solid var(--ug-border-strong) !important;
     border-radius: var(--ug-radius-lg) !important;
@@ -1543,16 +1684,46 @@ img.loading {
     color: var(--ug-text-secondary) !important;
 }
 
-.swal2-confirm {
-    background: var(--ug-accent) !important;
-    border-radius: var(--ug-radius-sm) !important;
-    font-weight: 500 !important;
+.swal2-icon {
+    width: 48px !important;
+    height: 48px !important;
+    border-radius: 50% !important;
+    border: 2px solid var(--ug-accent) !important;
+    color: var(--ug-accent) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 24px !important;
+    margin: 0 auto 16px !important;
 }
 
-.swal2-cancel {
+.swal2-actions {
+    display: flex !important;
+    gap: 10px !important;
+    justify-content: center !important;
+    margin-top: 20px !important;
+    width: 100% !important;
+}
+
+.swal2-styled.swal2-confirm {
+    background: var(--ug-accent) !important;
+    color: var(--ug-text-inverse) !important;
+    padding: 9px 20px !important;
+    border-radius: var(--ug-radius-sm) !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    border: none !important;
+}
+
+.swal2-styled.swal2-cancel {
     background: var(--ug-surface-3) !important;
     color: var(--ug-text) !important;
+    border: 1px solid var(--ug-border) !important;
+    padding: 9px 20px !important;
     border-radius: var(--ug-radius-sm) !important;
+    font-size: 13px !important;
+    cursor: pointer !important;
 }
 
 /* ------------------- ACCESSIBILITY ------------------- */
@@ -1577,7 +1748,6 @@ img.loading {
     display: none !important;
 }
 
-/* Corrected: generic hide utility used by JS */
 .ug-gallery-hide {
     display: none !important;
 }
@@ -1602,12 +1772,10 @@ img.loading {
     animation: ug-fade-in var(--ug-duration-normal) var(--ug-ease-out);
 }
 
-/* Long press indicator */
 .ug-long-press {
     opacity: 0.7;
 }
 
-/* Dragging state for thumbnail strip */
 .ug-thumbnail-strip.ug-dragging {
     cursor: grabbing !important;
     scroll-behavior: auto;
