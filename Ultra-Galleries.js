@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1477603-%E3%83%A1%E3%83%AA%E3%83%BC
-// @version      4.0.1
+// @version      4.1.1
 // @description  Modern image gallery with highly efficient background zipping, video playback, browsing, fullscreen, and download features. Native DOM, unified pointer gestures, and zero external UI dependencies.
 // @author       ntf (original), Meri/TearTyr (maintained)
 // @match        *://kemono.su/*
@@ -60,6 +60,80 @@
         PRELOAD_WINDOW_BUFFER: 4,
         PROGRESS_NOTIFY_INTERVAL: 250
     };
+
+    // ====================================================
+    // Pawchive Compliance Configuration & Pacer
+    // ====================================================
+    const PAWCHIVE_CONFIG = {
+        USER_AGENT: 'UltraGalleries/4.1.1 (+https://github.com/TearTyr/Ultra-Galleries; contact: Meri/TearTyr)',
+        MIN_REQUEST_INTERVAL: 1050 // Enforces <= 1 request/second
+    };
+
+    const isPawchiveHost = (url = '') => {
+        const currentHost = window.location.hostname;
+        return /pawchive\.(st|pw)/i.test(currentHost) || /pawchive\.(st|pw)/i.test(url);
+    };
+
+    const RequestPacer = {
+        lastRequestTime: 0,
+        queue: Promise.resolve(),
+
+        async throttle(url) {
+            if (!isPawchiveHost(url)) return; // Only throttles Pawchive to maintain speed elsewhere
+            return (this.queue = this.queue.catch(() => {}).then(async () => {
+                const now = Date.now();
+                const elapsed = now - this.lastRequestTime;
+                if (elapsed < PAWCHIVE_CONFIG.MIN_REQUEST_INTERVAL) {
+                    await Utils.delay(PAWCHIVE_CONFIG.MIN_REQUEST_INTERVAL - elapsed);
+                }
+                this.lastRequestTime = Date.now();
+            }));
+        },
+
+        getHeaders(url) {
+            const headers = {};
+            if (isPawchiveHost(url)) {
+                headers['User-Agent'] = PAWCHIVE_CONFIG.USER_AGENT;
+            }
+            return headers;
+        }
+    };
+
+    // Tracks in-flight GM.xmlHttpRequest handles so they can be aborted on session change.
+    const ActiveRequests = {
+        bySession: new Map(),
+
+        add(sessionId, handle) {
+            if (!sessionId || !handle) return;
+            if (!this.bySession.has(sessionId)) this.bySession.set(sessionId, new Set());
+            this.bySession.get(sessionId).add(handle);
+        },
+
+        remove(sessionId, handle) {
+            if (!sessionId) return;
+            const set = this.bySession.get(sessionId);
+            if (set) set.delete(handle);
+        },
+
+        abortSession(sessionId) {
+            if (!sessionId) return;
+            const set = this.bySession.get(sessionId);
+            if (!set) return;
+            set.forEach(h => { try { h.abort(); } catch { /* ignore */ } });
+            this.bySession.delete(sessionId);
+        },
+
+        abortAll() {
+            for (const set of this.bySession.values()) {
+                set.forEach(h => { try { h.abort(); } catch { /* ignore */ } });
+            }
+            this.bySession.clear();
+        }
+    };
+
+    const FALLBACK_POSTER = 'data:image/svg+xml;base64,' + btoa(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 24 24" fill="#666"><path d="M8 5v14l11-7z"/></svg>'
+    );
 
     const BUTTONS = {
         DOWNLOAD: '【DOWNLOAD】',
@@ -191,7 +265,7 @@
     };
 
     // ====================================================
-    // Built-in Native Modal System (Replaces SweetAlert2)
+    // Built-in Native Modal System
     // ====================================================
     const UGModal = {
         confirm({ title, text, confirmText = 'Confirm', cancelText = 'Cancel', icon = 'question' }) {
@@ -201,24 +275,29 @@
                 const iconSvgs = {
                     question: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
                     warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
-                    info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>'
+                    info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12.01" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>'
                 };
 
-                const actions = [];
+                const opener = document.activeElement;
+                const prevOverflow = document.body.style.overflow;
+                document.body.style.overflow = 'hidden';
+
+                const focusables = [];
                 const confirmBtn = DOM.create('button', {
                     className: 'ug-modal-btn ug-modal-confirm',
                     text: confirmText,
                     onclick: () => close(true)
                 });
-                actions.push(confirmBtn);
+                focusables.push(confirmBtn);
 
+                let cancelBtn = null;
                 if (cancelText) {
-                    const cancelBtn = DOM.create('button', {
+                    cancelBtn = DOM.create('button', {
                         className: 'ug-modal-btn ug-modal-cancel',
                         text: cancelText,
                         onclick: () => close(false)
                     });
-                    actions.push(cancelBtn);
+                    focusables.push(cancelBtn);
                 }
 
                 const overlay = DOM.create('div', { className: 'ug-modal-overlay' }, [
@@ -226,7 +305,7 @@
                         DOM.create('div', { className: `ug-modal-icon ${icon}`, html: iconSvgs[icon] || iconSvgs.info }),
                         DOM.create('h3', { className: 'ug-modal-title', text: title }),
                         DOM.create('p', { className: 'ug-modal-text', text: text }),
-                        DOM.create('div', { className: 'ug-modal-actions' }, actions)
+                        DOM.create('div', { className: 'ug-modal-actions' }, focusables)
                     ])
                 ]);
 
@@ -238,17 +317,42 @@
                     if (e.key === 'Escape') {
                         e.preventDefault();
                         close(false);
-                    } else if (e.key === 'Enter') {
-                        e.preventDefault();
-                        close(true);
+                        return;
+                    }
+                    if (e.key === 'Enter') {
+                        const t = e.target;
+                        const isSafeTarget = t === confirmBtn || (cancelBtn && t === cancelBtn) || t === overlay || t === document.body;
+                        if (isSafeTarget && !(t instanceof HTMLTextAreaElement)) {
+                            e.preventDefault();
+                            close(true);
+                        }
+                        return;
+                    }
+                    if (e.key === 'Tab') {
+                        const first = focusables[0];
+                        const last = focusables[focusables.length - 1];
+                        if (e.shiftKey && document.activeElement === first) {
+                            last.focus();
+                            e.preventDefault();
+                        } else if (!e.shiftKey && document.activeElement === last) {
+                            first.focus();
+                            e.preventDefault();
+                        }
                     }
                 };
                 window.addEventListener('keydown', onKey);
 
+                let closed = false;
                 function close(result) {
+                    if (closed) return;
+                    closed = true;
                     window.removeEventListener('keydown', onKey);
                     overlay.classList.remove('show');
-                    setTimeout(() => overlay.remove(), 200);
+                    document.body.style.overflow = prevOverflow;
+                    setTimeout(() => {
+                        overlay.remove();
+                        try { opener?.focus?.(); } catch { /* ignore */ }
+                    }, 200);
                     resolve({ isConfirmed: result });
                 }
             });
@@ -256,11 +360,85 @@
 
         alert(title, text, icon = 'info') {
             return UGModal.confirm({ title, text, confirmText: 'OK', cancelText: null, icon });
+        },
+
+        choose({ title, text, icon = 'question', options }) {
+            return new Promise((resolve) => {
+                DOM.$('.ug-modal-overlay')?.remove();
+
+                const iconSvgs = {
+                    question: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
+                    warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
+                    info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12.01" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>'
+                };
+
+                const opener = document.activeElement;
+                const prevOverflow = document.body.style.overflow;
+                document.body.style.overflow = 'hidden';
+
+                const focusables = [];
+                const buttons = options.map(opt => {
+                    const btn = DOM.create('button', {
+                        className: `ug-modal-btn ${opt.primary ? 'ug-modal-confirm' : 'ug-modal-cancel'}`,
+                        text: opt.label,
+                        onclick: () => close(opt.value)
+                    });
+                    focusables.push(btn);
+                    return btn;
+                });
+
+                const overlay = DOM.create('div', { className: 'ug-modal-overlay' }, [
+                    DOM.create('div', { className: 'ug-modal-container' }, [
+                        DOM.create('div', { className: `ug-modal-icon ${icon}`, html: iconSvgs[icon] || iconSvgs.info }),
+                        DOM.create('h3', { className: 'ug-modal-title', text: title }),
+                        DOM.create('p', { className: 'ug-modal-text', text: text }),
+                        DOM.create('div', { className: 'ug-modal-actions' }, buttons)
+                    ])
+                ]);
+
+                document.body.appendChild(overlay);
+                requestAnimationFrame(() => overlay.classList.add('show'));
+                focusables[0]?.focus();
+
+                const onKey = (e) => {
+                    if (e.key === 'Escape') {
+                        e.preventDefault();
+                        close(null);
+                        return;
+                    }
+                    if (e.key === 'Tab') {
+                        const first = focusables[0];
+                        const last = focusables[focusables.length - 1];
+                        if (e.shiftKey && document.activeElement === first) {
+                            last.focus();
+                            e.preventDefault();
+                        } else if (!e.shiftKey && document.activeElement === last) {
+                            first.focus();
+                            e.preventDefault();
+                        }
+                    }
+                };
+                window.addEventListener('keydown', onKey);
+
+                let closed = false;
+                function close(value) {
+                    if (closed) return;
+                    closed = true;
+                    window.removeEventListener('keydown', onKey);
+                    overlay.classList.remove('show');
+                    document.body.style.overflow = prevOverflow;
+                    setTimeout(() => {
+                        overlay.remove();
+                        try { opener?.focus?.(); } catch { /* ignore */ }
+                    }, 200);
+                    resolve({ value });
+                }
+            });
         }
     };
 
     // ====================================================
-    // Native IndexedDB Cache Manager (Replaces Dexie)
+    // Native IndexedDB Cache Manager
     // ====================================================
     const ImageCacheDB = {
         DB_NAME: 'UltraGalleriesCache',
@@ -366,7 +544,7 @@
     // ====================================================
     let galleryOverlay = null;
     let loadedBlobUrls = new Map();
-    let elements = {
+    const elements = {
         galleryButton: null,
         settingsButton: null
     };
@@ -671,7 +849,7 @@
 
             if (PointerEngine.activePointers.size === 1) {
                 const now = Date.now();
-                if (now - PointerEngine.lastTapTime < CONFIG.DOUBLE_TAP_THRESHOLD) {
+                if (e.pointerType === 'touch' && now - PointerEngine.lastTapTime < CONFIG.DOUBLE_TAP_THRESHOLD) {
                     PointerEngine.handleDoubleTap(e);
                     PointerEngine.lastTapTime = 0;
                     return;
@@ -736,7 +914,7 @@
                 if (viewState.initialTouchDistance === 0) return;
 
                 const scaleFactor = currentDistance / viewState.initialTouchDistance;
-                const newScale = Math.max(CONFIG.MIN_SCALE, Math.min(viewState.initialScale * scaleFactor, CONFIG.MAX_SCALE));
+                const newScale = Math.max(CONFIG.MIN_SCALE, Math.min(viewState.initialScale * scaleFactor, state.maxZoomScale));
 
                 const imageX = (viewState.zoomOrigin.x - viewState.imageOffset.x) / viewState.zoomScale;
                 const imageY = (viewState.zoomOrigin.y - viewState.imageOffset.y) / viewState.zoomScale;
@@ -811,7 +989,7 @@
         enforceBoundaries() {
             if (!galleryOverlay) return;
             const containerDOM = DOM.$(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`, galleryOverlay);
-            const imageDOM = DOM.$(`.${CSS.GALLERY.MAIN_IMG}`, containerDOM);
+            const imageDOM = DOM.$(`.${CSS.GALLERY.MAIN_IMG}, .${CSS.GALLERY.MAIN_VIDEO}`, containerDOM);
             if (!containerDOM || !imageDOM) return;
 
             const containerRect = containerDOM.getBoundingClientRect();
@@ -891,8 +1069,8 @@
         pauseOnHover: true,
 
         init() {
-            Slideshow.delay = SettingsManager.loadSetting('slideshowDelay', CONFIG.SLIDESHOW_DELAY);
-            Slideshow.pauseOnHover = SettingsManager.loadSetting('slideshowPauseOnHover', true);
+            Slideshow.delay = state.slideshowDelay || CONFIG.SLIDESHOW_DELAY;
+            Slideshow.pauseOnHover = state.slideshowPauseOnHover !== false;
         },
 
         start() {
@@ -1148,7 +1326,8 @@
             heightBtnText: '【FILL HEIGHT】',
             widthBtnText: '【FILL WIDTH】',
             galleryBtnText: '【GALLERY】',
-            currentResizeMode: 'height'
+            currentResizeMode: 'height',
+            fullscreenMode: 'native'
         },
 
         saveSetting: (key, value) => {
@@ -1213,6 +1392,8 @@
                     return (typeof value === 'string' && value.length === 1) ? value : def;
                 case 'notificationPosition':
                     return ['top', 'bottom'].includes(value) ? value : 'bottom';
+                case 'fullscreenMode':
+                    return ['native', 'css', 'ask'].includes(value) ? value : 'native';
                 case 'zipFileNameFormat':
                 case 'imageFileNameFormat':
                     return (typeof value === 'string' && value.trim()) ? value : def;
@@ -1273,7 +1454,9 @@
 
         announce(message) {
             const sr = DOM.$('.ug-sr-only');
-            if (sr) sr.textContent = message;
+            if (!sr) return;
+            sr.textContent = '';
+            requestAnimationFrame(() => { sr.textContent = message; });
         }
     };
 
@@ -1351,7 +1534,9 @@
         galleryReady: false,
         currentGalleryIndex: 0,
         currentResizeMode: SettingsManager.loadSetting('currentResizeMode', 'height'),
-        isFullscreen: SettingsManager.loadSetting('isFullscreen', false),
+        isFullscreen: false,
+        currentPostUrl: null,
+        maxZoomScale: SettingsManager.loadSetting('maxZoomScale', 5),
         originalImageSrcs: [],
         fullSizeImageSrcs: [],
         totalImages: 0,
@@ -1391,7 +1576,8 @@
         widthBtnText: SettingsManager.loadSetting('widthBtnText', '【FILL WIDTH】'),
         galleryBtnText: SettingsManager.loadSetting('galleryBtnText', '【GALLERY】'),
         slideshowDelay: SettingsManager.loadSetting('slideshowDelay', CONFIG.SLIDESHOW_DELAY),
-        slideshowPauseOnHover: SettingsManager.loadSetting('slideshowPauseOnHover', true)
+        slideshowPauseOnHover: SettingsManager.loadSetting('slideshowPauseOnHover', true),
+        fullscreenMode: SettingsManager.loadSetting('fullscreenMode', 'native')
     }, {
         controlsVisible(value) {
             if (galleryOverlay) {
@@ -1427,11 +1613,8 @@
         },
 
         notificationType(value) {
-            const container = document.getElementById(CSS.NOTIF_CONTAINER);
-            if (container && state.notification && container.style.display === 'flex') {
-                container.classList.remove('info', 'success', 'error', 'warning');
-                container.classList.add(value);
-            }
+            // Class is applied by UI.showNotification; this callback is intentionally a no-op.
+            void value;
         },
 
         settingsOpen(value) {
@@ -1439,13 +1622,16 @@
         },
 
         isFullscreen(value) {
-            SettingsManager.saveSetting('isFullscreen', value);
             if (value) {
                 document.body.classList.add('ug-fullscreen');
                 galleryOverlay?.classList.add(CSS.GALLERY.FULLSCREEN_OVERLAY);
             } else {
                 document.body.classList.remove('ug-fullscreen');
                 galleryOverlay?.classList.remove(CSS.GALLERY.FULLSCREEN_OVERLAY);
+            }
+            if (galleryOverlay) {
+                const btn = DOM.$(`.${CSS.GALLERY.FULLSCREEN}`, galleryOverlay);
+                if (btn) btn.classList.toggle('active', Boolean(value));
             }
         },
 
@@ -1566,7 +1752,7 @@
             const delta = event.deltaY;
 
             const zoomFactor = delta > 0 ? (1 - CONFIG.ZOOM_STEP) : (1 + CONFIG.ZOOM_STEP);
-            const newScale = Math.max(CONFIG.MIN_SCALE, Math.min(viewState.zoomScale * zoomFactor, CONFIG.MAX_SCALE));
+            const newScale = Math.max(CONFIG.MIN_SCALE, Math.min(viewState.zoomScale * zoomFactor, state.maxZoomScale));
 
             if (newScale === viewState.zoomScale) return;
 
@@ -1601,7 +1787,7 @@
             const centerX = rect.width / 2;
             const centerY = rect.height / 2;
 
-            const newScale = Math.max(CONFIG.MIN_SCALE, Math.min(viewState.zoomScale + step, CONFIG.MAX_SCALE));
+            const newScale = Math.max(CONFIG.MIN_SCALE, Math.min(viewState.zoomScale + step, state.maxZoomScale));
 
             if (viewState.zoomScale !== newScale) {
                 const imageX = (centerX - viewState.imageOffset.x) / viewState.zoomScale;
@@ -1625,21 +1811,30 @@
     // ====================================================
     const ThumbnailStrip = {
         _contextMenuTimeout: null,
+        _abortController: null,
 
         init() {
             if (!galleryOverlay) return;
             const strip = DOM.$('.ug-thumbnail-strip', galleryOverlay);
             if (!strip) return;
 
+            // Tear down previous run before wiring up new listeners.
+            ThumbnailStrip._abortController?.abort();
+            ThumbnailStrip._abortController = new AbortController();
+            const signal = ThumbnailStrip._abortController.signal;
+
             ThumbnailStrip.updateScrollIndicators();
             ThumbnailStrip.setupKeyboardNavigation();
-            ThumbnailStrip.setupDragNavigation();
-            ThumbnailStrip.setupHoverPreview();
-            ThumbnailStrip.setupContextMenu();
-            strip.addEventListener('scroll', Utils.throttle(ThumbnailStrip.updateScrollIndicators, 100));
+            ThumbnailStrip.setupDragNavigation(signal);
+            ThumbnailStrip.setupHoverPreview(signal);
+            ThumbnailStrip.setupContextMenu(signal);
+
+            strip.addEventListener('scroll', Utils.throttle(ThumbnailStrip.updateScrollIndicators, 100), { signal, passive: true });
         },
 
         cleanup() {
+            ThumbnailStrip._abortController?.abort();
+            ThumbnailStrip._abortController = null;
             ThumbnailStrip.hideContextMenu();
             DOM.$('.ug-thumbnail-zoom-preview')?.remove();
             DOM.$('.ug-slideshow-indicator', galleryOverlay)?.remove();
@@ -1695,7 +1890,7 @@
             }
         },
 
-        setupDragNavigation() {
+        setupDragNavigation(signal) {
             const strip = DOM.$('.ug-thumbnail-strip', galleryOverlay);
             if (!strip) return;
 
@@ -1703,21 +1898,21 @@
             let startX = 0;
             let scrollLeft = 0;
 
-            strip.onmousedown = (e) => {
+            strip.addEventListener('mousedown', (e) => {
                 if (e.button !== 0 || e.target.closest(`.${CSS.GALLERY.THUMBNAIL_WRAPPER}`)) return;
                 isDragging = true;
                 startX = e.pageX - strip.offsetLeft;
                 scrollLeft = strip.scrollLeft;
                 strip.style.cursor = 'grabbing';
                 strip.classList.add('ug-dragging');
-            };
+            }, { signal });
 
             window.addEventListener('mousemove', (e) => {
-                if (!isDragging) return;
+                if (!isDragging || !strip.isConnected) return;
                 e.preventDefault();
                 const x = e.pageX - strip.offsetLeft;
                 strip.scrollLeft = scrollLeft - (x - startX) * 2;
-            });
+            }, { signal });
 
             window.addEventListener('mouseup', () => {
                 if (isDragging) {
@@ -1725,10 +1920,10 @@
                     strip.style.cursor = '';
                     strip.classList.remove('ug-dragging');
                 }
-            });
+            }, { signal });
         },
 
-        setupHoverPreview() {
+        setupHoverPreview(signal) {
             const strip = DOM.$('.ug-thumbnail-strip', galleryOverlay);
             if (!strip) return;
 
@@ -1741,14 +1936,14 @@
                     const index = parseInt(thumb.dataset.index, 10);
                     ThumbnailStrip.showZoomPreview(thumb, index);
                 }, 500);
-            });
+            }, { signal });
 
             strip.addEventListener('mouseout', (e) => {
                 if (e.target.closest(`.${CSS.GALLERY.THUMBNAIL_WRAPPER}`)) {
                     clearTimeout(previewTimeout);
                     ThumbnailStrip.hideZoomPreview();
                 }
-            });
+            }, { signal });
         },
 
         showZoomPreview(thumb, index) {
@@ -1801,18 +1996,18 @@
             setTimeout(() => preview.remove(), 300);
         },
 
-        setupContextMenu() {
+        setupContextMenu(signal) {
             const strip = DOM.$('.ug-thumbnail-strip', galleryOverlay);
             if (!strip) return;
 
-            strip.oncontextmenu = (e) => {
+            strip.addEventListener('contextmenu', (e) => {
                 const thumb = e.target.closest(`.${CSS.GALLERY.THUMBNAIL_WRAPPER}`);
                 if (!thumb) return;
                 e.preventDefault();
                 ThumbnailStrip.showContextMenu(thumb, parseInt(thumb.dataset.index, 10), e.pageX, e.pageY);
-            };
+            }, { signal });
 
-            window.addEventListener('click', ThumbnailStrip.hideContextMenu);
+            window.addEventListener('click', ThumbnailStrip.hideContextMenu, { signal });
         },
 
         showContextMenu(thumb, index, x, y) {
@@ -1880,14 +2075,23 @@
                     return;
                 }
 
+                // Surgical removal: only the affected thumb + reindex those after it.
+                const strip = DOM.$(`.${CSS.GALLERY.THUMBNAIL_STRIP}`, galleryOverlay);
+                const thumbToRemove = strip?.querySelector(`[data-index="${index}"]`);
+                thumbToRemove?.remove();
+
+                if (strip) {
+                    DOM.$$(`.${CSS.GALLERY.THUMBNAIL_WRAPPER}`, strip).forEach(w => {
+                        const i = parseInt(w.dataset.index, 10);
+                        if (i > index) w.dataset.index = String(i - 1);
+                    });
+                }
+
                 if (index < state.currentGalleryIndex) state.currentGalleryIndex--;
                 if (state.currentGalleryIndex >= state.fullSizeImageSrcs.length) {
                     state.currentGalleryIndex = state.fullSizeImageSrcs.length - 1;
                 }
                 if (state.currentGalleryIndex < 0) state.currentGalleryIndex = 0;
-
-                const strip = DOM.$(`.${CSS.GALLERY.THUMBNAIL_STRIP}`, galleryOverlay);
-                if (strip) Gallery._populateAllThumbnails(strip);
 
                 Gallery.showExpandedView(state.currentGalleryIndex);
                 ThumbnailStrip.updateThumbnailNumbers();
@@ -1903,9 +2107,7 @@
                 confirmText: 'Remove'
             });
 
-            if (result.isConfirmed) {
-                doRemove();
-            }
+            if (result.isConfirmed) doRemove();
         },
 
         updateThumbnailNumbers() {
@@ -1990,14 +2192,16 @@
         createNotification() {
             let area = document.getElementById(CSS.NOTIF_AREA) || UI.createNotificationArea();
             const container = DOM.create('div', { id: CSS.NOTIF_CONTAINER, className: CSS.NOTIF_CONTAINER }, [
-                DOM.create('div', { id: CSS.NOTIF_TEXT }),
+                DOM.create('div', { id: CSS.NOTIF_TEXT, className: 'ug-notification-text' }),
                 DOM.create('button', {
                     id: CSS.NOTIF_CLOSE,
+                    className: 'ug-notification-close',
                     text: '×',
                     onclick: () => state.notification = null
                 }),
                 DOM.create('a', {
                     id: CSS.NOTIF_REPORT,
+                    className: 'ug-notification-report',
                     text: 'Report Issue',
                     href: 'https://github.com/TearTyr/Ultra-Galleries/issues',
                     target: '_blank'
@@ -2151,7 +2355,19 @@
                     settings: [
                         { id: 'animationsToggle', label: 'Enable Animations', type: 'checkbox', stateKey: 'animationsEnabled', gmKey: 'animationsEnabled' },
                         { id: 'bottomStripeToggle', label: 'Show Thumbnail Strip', type: 'checkbox', stateKey: 'bottomStripeVisible', gmKey: 'bottomStripeVisible' },
-                        { id: 'autoLoadOriginalsToggle', label: 'Auto-load Original Images', type: 'checkbox', stateKey: 'autoLoadOriginals', gmKey: 'autoLoadOriginals' }
+                        { id: 'autoLoadOriginalsToggle', label: 'Auto-load Original Images', type: 'checkbox', stateKey: 'autoLoadOriginals', gmKey: 'autoLoadOriginals' },
+                        {
+                            id: 'fullscreenMode',
+                            label: 'Fullscreen Mode:',
+                            type: 'select',
+                            stateKey: 'fullscreenMode',
+                            gmKey: 'fullscreenMode',
+                            options: [
+                                { value: 'native', text: 'Native (browser fullscreen)' },
+                                { value: 'css', text: 'CSS (styled overlay)' },
+                                { value: 'ask', text: 'Ask each time' }
+                            ]
+                        }
                     ]
                 },
                 {
@@ -2405,6 +2621,7 @@
     const Gallery = {
         _preloadedImageCache: {},
         _preloadingInProgress: {},
+        _controlsHideTimer: null,
 
         _clearPreloadCache() {
             for (const index in Gallery._preloadedImageCache) {
@@ -2459,6 +2676,18 @@
                 Gallery._fetchAndCacheImage(currentIndex + i, sessionId);
             }
             Gallery._fetchAndCacheImage(currentIndex - 1, sessionId);
+        },
+
+        async _fetchVideoForElement(videoEl, url, sessionId, token) {
+            try {
+                const blob = await ImageLoader.fetchBlob(url, sessionId);
+                if (!videoEl.isConnected || videoEl.dataset.ugFetchToken !== token) return;
+                videoEl.src = blob ? BlobManager.createUrl(blob) : url;
+            } catch (err) {
+                if (!videoEl.isConnected || videoEl.dataset.ugFetchToken !== token) return;
+                console.warn('Ultra Galleries: video blob fetch failed, falling back:', err);
+                videoEl.src = url;
+            }
         },
 
         _releaseVideo(video) {
@@ -2667,17 +2896,18 @@
 
             PointerEngine.init(mainImageContainer);
 
-            let controlsTimeout;
             const resetControlsTimer = () => {
                 state.controlsVisible = true;
-                clearTimeout(controlsTimeout);
-                controlsTimeout = setTimeout(() => {
+                clearTimeout(Gallery._controlsHideTimer);
+                Gallery._controlsHideTimer = setTimeout(() => {
                     if (!PointerEngine.isDragging && !viewState.pinchZoomActive) {
                         state.controlsVisible = false;
                     }
                 }, CONFIG.CONTROLS_HIDE_DELAY);
             };
 
+            expandedView.addEventListener('pointermove', resetControlsTimer);
+            expandedView.addEventListener('pointerdown', resetControlsTimer);
             expandedView.addEventListener('mousemove', resetControlsTimer);
             resetControlsTimer();
         },
@@ -2811,7 +3041,6 @@
 
                 const mainVideo = DOM.create('video', {
                     className: CSS.GALLERY.MAIN_VIDEO,
-                    src: mediaItem.src,
                     poster: mediaItem.poster,
                     controls: 'true',
                     loop: 'true',
@@ -2833,6 +3062,18 @@
                 });
 
                 mainMediaContainer.appendChild(mainVideo);
+
+                // Fetch the video through the paced pipeline so Pawchive's rate limit
+                // and UA header policy are respected. Non-Pawchive hosts go direct.
+                if (isPawchiveHost(mediaItem.src)) {
+                    const token = (crypto.randomUUID?.() || Math.random().toString(36));
+                    mainVideo.dataset.ugFetchToken = token;
+                    const sessionAtLoad = state.currentLoadSessionId;
+                    Gallery._fetchVideoForElement(mainVideo, mediaItem.src, sessionAtLoad, token);
+                } else {
+                    mainVideo.src = mediaItem.src;
+                }
+
                 Gallery._attachVideoPlayOverlay(mainVideo, mainMediaContainer);
             }
 
@@ -2867,8 +3108,14 @@
                 ThumbnailStrip.cleanup();
                 return;
             }
+            if (document.fullscreenElement === galleryOverlay) {
+                const exit = document.exitFullscreen();
+                if (exit && typeof exit.catch === 'function') exit.catch(() => {});
+            }
             state.isGalleryMode = false;
             state.isFullscreen = false;
+            clearTimeout(Gallery._controlsHideTimer);
+            Gallery._controlsHideTimer = null;
             Slideshow.stop();
             Gallery._clearPreloadCache();
             ThumbnailStrip.cleanup();
@@ -2900,8 +3147,43 @@
             }
         },
 
-        toggleFullscreen() {
+        async toggleFullscreen() {
+            let mode = state.fullscreenMode || 'native';
+
+            if (mode === 'ask') {
+                const result = await UGModal.choose({
+                    title: 'Fullscreen mode',
+                    text: 'How should the gallery enter fullscreen?',
+                    icon: 'question',
+                    options: [
+                        { label: 'Native', value: 'native', primary: true },
+                        { label: 'CSS', value: 'css' }
+                    ]
+                });
+                if (!result.value) return; // user dismissed
+                mode = result.value;
+            }
+
             state.isFullscreen = !state.isFullscreen;
+
+            if (mode !== 'native') return;
+            if (!galleryOverlay || typeof galleryOverlay.requestFullscreen !== 'function') return;
+
+            if (state.isFullscreen) {
+                if (!document.fullscreenElement) {
+                    const req = galleryOverlay.requestFullscreen();
+                    if (req && typeof req.catch === 'function') {
+                        req.catch(err => {
+                            console.warn('Ultra Galleries: native fullscreen failed, staying in CSS mode:', err);
+                        });
+                    }
+                }
+            } else {
+                if (document.fullscreenElement === galleryOverlay) {
+                    const exit = document.exitFullscreen();
+                    if (exit && typeof exit.catch === 'function') exit.catch(() => {});
+                }
+            }
         },
 
         nextImage() {
@@ -2921,13 +3203,15 @@
     // Image Loader Module
     // ====================================================
     const ImageLoader = {
+        _inflight: new Map(),
+
         imageActions: {
             height: ImageSizing.applyFillHeight,
             width: ImageSizing.applyFillWidth,
             full: ImageSizing.applyFullSize
         },
 
-        async simulateScrollDown() {
+        async simulateScrollDown(sessionId = null) {
             return new Promise(resolve => {
                 const selectors = [
                     SELECTORS.IMAGE_LINK + ' img',
@@ -2949,6 +3233,12 @@
                 };
 
                 const observer = new IntersectionObserver(entries => {
+                    if (sessionId !== null && state.currentLoadSessionId !== sessionId) {
+                        observer.disconnect();
+                        clearTimeout(timeout);
+                        resolve();
+                        return;
+                    }
                     entries.forEach(entry => {
                         if (entry.isIntersecting) {
                             observer.unobserve(entry.target);
@@ -2966,24 +3256,28 @@
             });
         },
 
-        async fetchWithRetry(url, sessionId, retries = CONFIG.MAX_RETRIES, delay = CONFIG.RETRY_DELAY) {
-            if (state.currentLoadSessionId !== sessionId) return null;
+        async _fetchBlobInternal(url, sessionId, retries, delay) {
             try {
-                if (state.enablePersistentCaching) {
-                    const cachedBlob = await ImageCacheDB.get(url);
-                    if (cachedBlob) return cachedBlob;
-                }
+                // Enforce <= 1 req/sec on Pawchive
+                await RequestPacer.throttle(url);
 
                 return await new Promise((resolve, reject) => {
-                    if (state.currentLoadSessionId !== sessionId) {
+                    if (sessionId !== null && state.currentLoadSessionId !== sessionId) {
                         reject(new Error('Stale session'));
+                        return;
                     }
-                    GM.xmlHttpRequest({
+
+                    let handle = null;
+                    const cleanup = () => { ActiveRequests.remove(sessionId, handle); };
+
+                    handle = GM.xmlHttpRequest({
                         method: 'GET',
-                        url: url,
+                        url,
+                        headers: RequestPacer.getHeaders(url),
                         responseType: 'blob',
                         timeout: 120000,
                         onload: async (response) => {
+                            cleanup();
                             if (response.status === 200 || response.status === 206) {
                                 const blob = response.response;
                                 if (state.enablePersistentCaching) {
@@ -2996,55 +3290,69 @@
                                 reject(err);
                             }
                         },
-                        onerror: (error) => reject(error),
-                        ontimeout: () => reject(new Error('Request timeout'))
+                        onerror: (error) => { cleanup(); reject(error); },
+                        ontimeout: () => { cleanup(); reject(new Error('Request timeout')); },
+                        onabort: () => { cleanup(); reject(new Error('Request aborted')); }
                     });
+
+                    ActiveRequests.add(sessionId, handle);
                 });
             } catch (err) {
-                if (err.message === 'Stale session') throw err;
+                if (err.message === 'Stale session' || err.message === 'Request aborted') throw err;
                 if (err.status && err.status >= 400 && err.status < 500 && err.status !== 429) throw err;
                 if (retries <= 0) throw err;
                 await Utils.delay(delay);
-                return ImageLoader.fetchWithRetry(url, sessionId, retries - 1, delay * 1.5);
+                return ImageLoader._fetchBlobInternal(url, sessionId, retries - 1, delay * 1.5);
             }
         },
 
-        async fetchBlobDirect(url, retries = CONFIG.MAX_RETRIES, delay = CONFIG.RETRY_DELAY) {
-            try {
+        fetchBlob(url, sessionId = null, retries = CONFIG.MAX_RETRIES, delay = CONFIG.RETRY_DELAY) {
+            if (sessionId !== null && state.currentLoadSessionId !== sessionId) {
+                return Promise.reject(new Error('Stale session'));
+            }
+
+            // Dedupe key: never share a promise across sessions, and give direct
+            // (session-less) calls their own namespace so background downloads
+            // can't hand off a promise to an active gallery session.
+            const key = `${sessionId ?? 'direct'}:${url}`;
+            const existing = ImageLoader._inflight.get(key);
+            if (existing) return existing;
+
+            const promise = (async () => {
                 if (state.enablePersistentCaching) {
                     const cachedBlob = await ImageCacheDB.get(url);
                     if (cachedBlob) return cachedBlob;
                 }
 
-                return await new Promise((resolve, reject) => {
-                    GM.xmlHttpRequest({
-                        method: 'GET',
-                        url: url,
-                        responseType: 'blob',
-                        timeout: 120000,
-                        onload: async (response) => {
-                            if (response.status === 200 || response.status === 206) {
-                                const blob = response.response;
-                                if (state.enablePersistentCaching) {
-                                    await ImageCacheDB.put(url, blob);
-                                }
-                                resolve(blob);
-                            } else {
-                                const err = new Error(`HTTP ${response.status}`);
-                                err.status = response.status;
-                                reject(err);
-                            }
-                        },
-                        onerror: (error) => reject(error),
-                        ontimeout: () => reject(new Error('Request timeout'))
-                    });
-                });
-            } catch (err) {
-                if (err.status && err.status >= 400 && err.status < 500 && err.status !== 429) throw err;
-                if (retries <= 0) throw err;
-                await Utils.delay(delay);
-                return ImageLoader.fetchBlobDirect(url, retries - 1, delay * 1.5);
-            }
+                // Session may have changed while the cache read was pending.
+                if (sessionId !== null && state.currentLoadSessionId !== sessionId) {
+                    throw new Error('Stale session');
+                }
+
+                return ImageLoader._fetchBlobInternal(url, sessionId, retries, delay);
+            })();
+
+            ImageLoader._inflight.set(key, promise);
+
+            // Self-clean when settled. The `.then(cleanup, cleanup)` derived promise
+            // never rejects because cleanup returns undefined, so no unhandled
+            // rejection warnings are produced when the underlying fetch fails.
+            const cleanup = () => {
+                if (ImageLoader._inflight.get(key) === promise) {
+                    ImageLoader._inflight.delete(key);
+                }
+            };
+            promise.then(cleanup, cleanup);
+
+            return promise;
+        },
+
+        fetchWithRetry(url, sessionId) {
+            return ImageLoader.fetchBlob(url, sessionId);
+        },
+
+        fetchBlobDirect(url) {
+            return ImageLoader.fetchBlob(url, null);
         },
 
         async loadImageAndApplyToPage(linkElement, galleryIndex, posterHref, isUniqueForGallery, sessionId, itemData) {
@@ -3132,7 +3440,7 @@
                     poster = linkElement.querySelector('img, video')?.getAttribute('poster') ||
                         (linkElement.querySelector('img')?.getAttribute('data-src') || linkElement.querySelector('img')?.src);
                     if (!url) return;
-                    if (!poster) poster = 'https://pawchive.pw/static/menu/recent.svg';
+                    if (!poster) poster = FALLBACK_POSTER;
 
                     if (!uniqueGalleryItems.has(url)) {
                         uniqueGalleryItems.set(url, {
@@ -3159,7 +3467,7 @@
                 if (url) {
                     url = url.split('?')[0];
                     if (!uniqueGalleryItems.has(url)) {
-                        const poster = videoEl.getAttribute('poster') || 'https://pawchive.pw/static/menu/recent.svg';
+                        const poster = videoEl.getAttribute('poster') || FALLBACK_POSTER;
                         uniqueGalleryItems.set(url, {
                             linkElement: videoEl, originalUrl: url, posterUrl: poster, type: 'video',
                             fileName: url.split('/').pop()
@@ -3205,6 +3513,9 @@
 
             if (!Utils.isPostPage() || state.isLoading) return;
 
+            // Cancel anything still running for the previous session.
+            if (state.currentLoadSessionId) ActiveRequests.abortSession(state.currentLoadSessionId);
+
             const sessionId = StateManager.generateSessionId();
             state.currentLoadSessionId = sessionId;
 
@@ -3244,7 +3555,7 @@
                 updateGalleryButton(true);
 
                 if (state.autoLoadOriginals) {
-                    await ImageLoader.simulateScrollDown();
+                    await ImageLoader.simulateScrollDown(sessionId);
                     Utils.ensureThumbnailsExist();
                     await ImageLoader._concurrentRunner(uniqueItems, sessionId);
                     if (state.currentLoadSessionId !== sessionId) return;
@@ -3292,7 +3603,6 @@
     const DownloadManager = {
         _worker: null,
         _workerUrl: null,
-        _pendingVideoPromises: [],
 
         _getPostMeta: () => ({
             title: DOM.$(SELECTORS.POST_TITLE)?.textContent?.trim() || 'Untitled',
@@ -3324,24 +3634,30 @@
             return Utils.sanitizeFileName(formattedName);
         },
 
-        downloadVideo: (url, name) => new Promise(resolve => {
-            if (typeof GM_download !== 'function') {
-                resolve(false);
-                return;
-            }
-            try {
-                GM_download({
-                    url,
-                    name,
-                    onload: () => resolve(true),
-                    onerror: () => resolve(false),
-                    ontimeout: () => resolve(false)
-                });
-            } catch (e) {
-                console.error('GM_download failed:', e);
-                resolve(false);
-            }
-        }),
+        downloadVideo: async (url, name) => {
+            // Paced <= 1 req/sec on Pawchive
+            await RequestPacer.throttle(url);
+
+            return new Promise(resolve => {
+                if (typeof GM_download !== 'function') {
+                    resolve(false);
+                    return;
+                }
+                try {
+                    GM_download({
+                        url,
+                        name,
+                        headers: RequestPacer.getHeaders(url),
+                        onload: () => resolve(true),
+                        onerror: () => resolve(false),
+                        ontimeout: () => resolve(false)
+                    });
+                } catch (e) {
+                    console.error('GM_download failed:', e);
+                    resolve(false);
+                }
+            });
+        },
 
         createZipWorker() {
             const jszipSource = GM_getResourceText('jszipScript') || '';
@@ -3424,11 +3740,22 @@
             state.notificationType = 'info';
             state.notification = 'Starting download...';
 
+            // Sequential video downloader ensures strictly <= 1 active video download (concurrency limit)
+            const downloadVideosSequentially = async (entries) => {
+                const results = [];
+                for (let i = 0; i < entries.length; i++) {
+                    if (!state.isDownloading) break;
+                    const x = entries[i];
+                    state.notification = `Downloading video ${i + 1}/${entries.length}...`;
+                    const ok = await DownloadManager.downloadVideo(x.item.src, DownloadManager._buildFileName(x.item, x.index));
+                    results.push({ status: 'fulfilled', value: ok });
+                }
+                return results;
+            };
+
             if (imageEntries.length === 0) {
                 state.notification = `Downloading ${videoEntries.length} video(s)...`;
-                const results = await Promise.allSettled(
-                    videoEntries.map(x => DownloadManager.downloadVideo(x.item.src, DownloadManager._buildFileName(x.item, x.index)))
-                );
+                const results = await downloadVideosSequentially(videoEntries);
                 const ok = results.filter(r => r.status === 'fulfilled' && r.value === true).length;
                 state.notification = `Video downloads finished (${ok}/${videoEntries.length} succeeded).`;
                 state.notificationType = ok > 0 ? 'success' : 'warning';
@@ -3436,9 +3763,8 @@
                 return;
             }
 
-            DownloadManager._pendingVideoPromises = videoEntries.map(x =>
-                DownloadManager.downloadVideo(x.item.src, DownloadManager._buildFileName(x.item, x.index))
-            );
+            // Run video downloads sequentially alongside ZIP processing
+            const videoTask = downloadVideosSequentially(videoEntries);
 
             const notifyProgress = Utils.throttle((message) => {
                 state.notificationType = 'info';
@@ -3470,11 +3796,10 @@
 
                     DOM.saveBlob(zipBlob, zipFileName);
 
-                    const videoPromises = DownloadManager._pendingVideoPromises || [];
-                    Promise.allSettled(videoPromises).then(results => {
+                    videoTask.then(results => {
                         const ok = results.filter(r => r.status === 'fulfilled' && r.value === true).length;
-                        if (videoPromises.length > 0) {
-                            state.notification = `ZIP complete! Videos: ${ok}/${videoPromises.length} downloaded.`;
+                        if (videoEntries.length > 0) {
+                            state.notification = `ZIP complete! Videos: ${ok}/${videoEntries.length} downloaded.`;
                         } else {
                             state.notification = 'Download complete!';
                         }
@@ -3511,9 +3836,11 @@
 
                             (async () => {
                                 try {
+                                    if (!state.isDownloading) return;
                                     const pathInZip = DownloadManager._buildFileName(entry.item, entry.index);
                                     let blob = await ImageCacheDB.get(entry.item.src);
                                     if (!blob) blob = await ImageLoader.fetchBlobDirect(entry.item.src);
+                                    if (!state.isDownloading) return;
 
                                     if (blob && state.isDownloading && DownloadManager._worker) {
                                         DownloadManager._worker.postMessage({
@@ -3586,7 +3913,6 @@
                 URL.revokeObjectURL(DownloadManager._workerUrl);
                 DownloadManager._workerUrl = null;
             }
-            DownloadManager._pendingVideoPromises = [];
             state.isDownloading = false;
         }
     };
@@ -3649,7 +3975,6 @@
                         const imgElement = thumbnailDiv.querySelector('img');
                         if (!imgElement) return;
 
-                        // Prevent duplicate button bars if already initialized
                         if (thumbnailDiv.querySelector(`.${CSS.BTN_CONTAINER}`)) return;
 
                         imgElement.classList.add('post__image');
@@ -3674,7 +3999,6 @@
                         const buttonGroupElement = UI.createButtonGroup(buttonGroupConfig);
                         if (buttonGroupElement.childElementCount > 0) {
                             buttonGroupElement.classList.add('ug-injected-ui');
-                            // Prepend directly INSIDE thumbnailDiv so it sits centered right above the image
                             thumbnailDiv.insertBefore(buttonGroupElement, thumbnailDiv.firstChild);
                         }
                     });
@@ -3693,6 +4017,7 @@
         },
 
         cleanupPostActions() {
+            ActiveRequests.abortAll();
             state.currentLoadSessionId = null;
             ErrorHandler.clearRetries();
             UI.forceHideNotification();
@@ -3731,13 +4056,12 @@
                 loadedImages: 0,
                 totalImages: 0,
                 errorCount: 0,
-                isLoading: false
+                isLoading: false,
+                currentPostUrl: null
             });
 
-            elements = {
-                galleryButton: null,
-                settingsButton: null
-            };
+            elements.galleryButton = null;
+            elements.settingsButton = null;
         },
 
         updateButtonVisibilityLight() {
@@ -3852,6 +4176,9 @@
                     } else if (keyLower === ' ') {
                         event.preventDefault();
                         Slideshow.toggle();
+                    } else if (keyLower === 'f') {
+                        event.preventDefault();
+                        Gallery.toggleFullscreen();
                     }
                 }
             }
@@ -3909,6 +4236,12 @@
             uiObserver = null;
         }
 
+        if (galleryOverlay && document.fullscreenElement === galleryOverlay) {
+            const exit = document.exitFullscreen();
+            if (exit && typeof exit.catch === 'function') exit.catch(() => {});
+        }
+        ActiveRequests.abortAll();
+        ImageLoader._inflight.clear();
         PostActions.cleanupPostActions();
         Gallery._clearPreloadCache();
         DownloadManager.cleanupWorker();
@@ -3934,9 +4267,9 @@
                 console.warn('Ultra Galleries: Failed to load main CSS resource.');
             }
 
-            Slideshow.init();
             const allSettings = SettingsManager.loadAllSettings();
             Object.assign(state, allSettings);
+            Slideshow.init();
             document.body.classList.toggle('ug-animations-disabled', !state.animationsEnabled);
             updateButtonLabels();
             state.notification = null;
@@ -3945,9 +4278,19 @@
                 ImageCacheDB.init();
             }
 
-            CONFIG.MAX_SCALE = SettingsManager.loadSetting('maxZoomScale', CONFIG.MAX_SCALE);
             document.addEventListener('keydown', EventHandlers.handleGlobalKeyDown);
             window.addEventListener('beforeunload', fullCleanup);
+
+            // Keep our visual state in sync with native fullscreen transitions
+            // (e.g., when the user exits via Escape or the browser UI).
+            let galleryWasNativeFullscreen = false;
+            document.addEventListener('fullscreenchange', () => {
+                const isGalleryNative = Boolean(galleryOverlay) && document.fullscreenElement === galleryOverlay;
+                if (galleryWasNativeFullscreen && !isGalleryNative && state.isFullscreen) {
+                    state.isFullscreen = false;
+                }
+                galleryWasNativeFullscreen = isGalleryNative;
+            });
 
             // Modern Navigation API with Fallback
             const debouncedInject = Utils.debounce(injectUI, 150);
@@ -3977,11 +4320,16 @@
             }
 
             // Target-filtered MutationObserver (ignores own injected UI overlay updates)
+            const UG_ROOT_SELECTOR = '.ug-gallery-overlay, #ug-settings-overlay, .ug-notification-area, .ug-modal-overlay, .ug-injected-ui, .ug-thumbnail-context-menu, .ug-thumbnail-zoom-preview, .settings-button-wrapper';
+
             uiObserver = new MutationObserver((mutations) => {
                 for (const m of mutations) {
-                    if (m.target?.closest?.('.ug-gallery-overlay, #ug-settings-overlay, .ug-notification-area, .ug-modal-overlay')) continue;
+                    if (m.target?.closest?.(UG_ROOT_SELECTOR)) continue;
                     for (const node of m.addedNodes) {
-                        if (node.nodeType === 1 && (node.matches?.('.post__files, .scrape__files, article, .post__body') || node.querySelector?.('a.fileThumb, .post__thumbnail'))) {
+                        if (node.nodeType !== 1) continue;
+                        if (node.matches?.(UG_ROOT_SELECTOR)) continue;
+                        if (node.matches?.('.post__files, .scrape__files, article, .post__body') ||
+                            node.querySelector?.('a.fileThumb, .post__thumbnail')) {
                             debouncedInject();
                             return;
                         }
