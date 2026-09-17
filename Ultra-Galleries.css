@@ -1,5 +1,5 @@
 /* ====================================================
-                    Ultra Galleries v4.3.0
+                    Ultra Galleries v4.3.1
    ==================================================== */
 
 /* ------------------- THEME & VARIABLES ------------------- */
@@ -1247,7 +1247,7 @@ img.post__image.retrying {
     margin-bottom: 8px;
 }
 
-/* Optional group label for sidebar sectioning (used if sections are grouped) */
+/* Optional group label for sidebar sectioning */
 .ug-sidebar-group-label {
     font-size: 10px;
     text-transform: uppercase;
