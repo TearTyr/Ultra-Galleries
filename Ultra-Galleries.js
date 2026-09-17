@@ -28,7 +28,7 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_getResourceText
-// @resource     mainCSS https://cdn.jsdelivr.net/gh/TearTyr/Ultra-Galleries@TestingBranch/Ultra-Galleries.css?v=4.1.1
+// @resource     mainCSS https://cdn.jsdelivr.net/gh/TearTyr/Ultra-Galleries@TestingBranch/Ultra-Galleries.css?v=4.3.0
 // @resource     jszipScript https://unpkg.com/jszip@3.10.2/dist/jszip.min.js
 // @downloadURL  https://update.sleazyfork.org/scripts/537986/Ultra%20Galleries.user.js
 // @updateURL    https://update.sleazyfork.org/scripts/537986/Ultra%20Galleries.meta.js
