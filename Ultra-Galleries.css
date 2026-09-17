@@ -1,5 +1,5 @@
 /* ====================================================
-                    Ultra Galleries v4.0.2
+                    Ultra Galleries v4.3.0
    ==================================================== */
 
 /* ------------------- THEME & VARIABLES ------------------- */
@@ -161,7 +161,8 @@
 .ug-slideshow-stop,
 .ug-thumbnail-context-menu-item,
 .ug-notification-close,
-.ug-notification-report {
+.ug-notification-report,
+.ug-attachment-download-btn {
     font-family: inherit;
 }
 
@@ -180,7 +181,8 @@
 .ug-notification-report:focus-visible,
 .ug-thumbnail-context-menu-item:focus-visible,
 .ug-error-retry:focus-visible,
-.ug-slideshow-stop:focus-visible {
+.ug-slideshow-stop:focus-visible,
+.ug-attachment-download-btn:focus-visible {
     outline: 2px solid var(--ug-accent);
     outline-offset: 2px;
 }
@@ -787,6 +789,75 @@ img.post__image.retrying {
 }
 .ug-error-retry:hover { background: var(--ug-accent-hover); transform: translateY(-1px); }
 
+/* ------------------- ATTACHMENT PREVIEW ------------------- */
+/* Non-media attachments (.clip, .psd, .zip, etc.) */
+.ug-attachment-preview {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 40px;
+    color: var(--ug-text);
+    text-align: center;
+    width: 100%;
+    height: 100%;
+    max-width: 520px;
+    margin: 0 auto;
+}
+
+.ug-attachment-preview > div:first-child {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ug-attachment-preview svg {
+    width: 120px;
+    height: 120px;
+    color: var(--ug-text-muted);
+    opacity: 0.7;
+    stroke: currentColor;
+}
+
+.ug-attachment-type {
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ug-text-muted);
+    font-weight: 600;
+}
+
+.ug-attachment-info {
+    font-size: 15px;
+    color: var(--ug-text);
+    word-break: break-all;
+    max-width: 80%;
+    line-height: 1.5;
+    font-weight: 500;
+}
+
+.ug-attachment-download-btn {
+    padding: 11px 26px;
+    border-radius: var(--ug-radius-sm);
+    background: var(--ug-accent);
+    color: var(--ug-text-inverse);
+    border: none;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: background var(--ug-duration-fast) var(--ug-ease-smooth), transform var(--ug-duration-fast) var(--ug-ease-spring), box-shadow var(--ug-duration-fast) var(--ug-ease-smooth);
+}
+.ug-attachment-download-btn:hover {
+    background: var(--ug-accent-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 0 16px var(--ug-accent-glow);
+}
+.ug-attachment-download-btn:active {
+    transform: translateY(0);
+    box-shadow: none;
+}
+
 /* ------------------- NAV / COUNTER ------------------- */
 .ug-gallery-nav-container {
     position: absolute;
@@ -931,6 +1002,23 @@ img.post__image.retrying {
     -webkit-user-drag: none;
     user-select: none;
     pointer-events: none;
+}
+
+/* File icon fallback for non-media attachments */
+.ug-thumbnail-file-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    background: var(--ug-surface-2);
+    color: var(--ug-text-muted);
+}
+.ug-thumbnail-file-icon svg {
+    width: 45%;
+    height: 45%;
+    opacity: 0.85;
+    stroke: currentColor;
 }
 
 .ug-play-icon {
@@ -1159,6 +1247,18 @@ img.post__image.retrying {
     margin-bottom: 8px;
 }
 
+/* Optional group label for sidebar sectioning (used if sections are grouped) */
+.ug-sidebar-group-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ug-text-muted);
+    font-weight: 600;
+    opacity: 0.75;
+    padding: 14px 14px 6px;
+}
+.ug-sidebar-group-label:first-child { padding-top: 2px; }
+
 .ug-sidebar-button {
     width: 100%;
     text-align: left;
@@ -1237,6 +1337,35 @@ img.post__image.retrying {
 }
 
 .ug-settings-section { animation: ug-fade-in var(--ug-duration-fast) var(--ug-ease-out); }
+
+/* Sub-headers group settings inside a section */
+.ug-settings-subheader {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ug-text-muted);
+    font-weight: 600;
+    margin: 22px 0 12px;
+    padding: 0 2px;
+}
+.ug-settings-subheader:first-child { margin-top: 0; }
+
+/* Helper text beneath a setting */
+.ug-settings-description {
+    font-size: 12.5px;
+    color: var(--ug-text-muted);
+    line-height: 1.5;
+    margin: -4px 0 14px;
+    padding: 0 2px;
+}
+
+/* Horizontal divider between groups */
+.ug-settings-divider {
+    height: 1px;
+    border: 0;
+    background: var(--ug-border);
+    margin: 22px 0;
+}
 
 .ug-setting-item { margin-bottom: 16px; }
 
@@ -1392,6 +1521,7 @@ img.post__image.retrying {
         gap: 6px;
     }
     .ug-sidebar-header { display: none; }
+    .ug-sidebar-group-label { display: none; }
     .ug-sidebar-button {
         white-space: nowrap;
         padding: 8px 14px;
