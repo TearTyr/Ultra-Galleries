@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1477603-%E3%83%A1%E3%83%AA%E3%83%BC
-// @version      4.3.0
+// @version      4.3.1
 // @description  Modern image gallery with highly efficient background zipping, video playback, browsing, fullscreen, and download features. Native DOM, unified pointer gestures, and zero external UI dependencies.
 // @author       ntf (original), Meri/TearTyr (maintained)
 // @match        *://kemono.su/*
@@ -28,7 +28,7 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_getResourceText
-// @resource     mainCSS https://cdn.jsdelivr.net/gh/TearTyr/Ultra-Galleries@TestingBranch/Ultra-Galleries.css?v=4.3.0
+// @resource     mainCSS https://cdn.jsdelivr.net/gh/TearTyr/Ultra-Galleries@TestingBranch/Ultra-Galleries.css?v=4.3.1
 // @resource     jszipScript https://unpkg.com/jszip@3.10.2/dist/jszip.min.js
 // @downloadURL  https://update.sleazyfork.org/scripts/537986/Ultra%20Galleries.user.js
 // @updateURL    https://update.sleazyfork.org/scripts/537986/Ultra%20Galleries.meta.js
@@ -65,7 +65,7 @@
     // Pawchive Compliance Configuration & Pacer
     // ====================================================
     const PAWCHIVE_CONFIG = {
-        USER_AGENT: 'UltraGalleries/4.3.0 (+https://github.com/TearTyr/Ultra-Galleries; contact: Meri/TearTyr)',
+        USER_AGENT: 'UltraGalleries/4.3.1 (+https://github.com/TearTyr/Ultra-Galleries; contact: Meri/TearTyr)',
         MIN_REQUEST_INTERVAL: 1050 // Enforces <= 1 request/second
     };
 
@@ -206,28 +206,6 @@
         VIDEO_LINK: 'a.fileThumb[href$=".mp4"], a.fileThumb[href$=".webm"], a.fileThumb[href$=".mov"], a[href$=".mp4"], a[href$=".webm"], a[href$=".mov"]',
         VIDEO_THUMBNAIL: isNekohouse ? '.scrape__video-thumbnail' : '.post__video-thumbnail'
     };
-
-    // EXTRA_CSS — currently provides attachment preview + download button + settings panel layout.
-    // Note: settings panel visual styling assumes the new main CSS will land later;
-    // until then these rules stand on their own and are safe to keep.
-    const EXTRA_CSS = `
-        .ug-attachment-preview { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; padding:40px; color:#ddd; text-align:center; width:100%; height:100%; }
-        .ug-attachment-preview svg { width:120px; height:120px; opacity:0.75; }
-        .ug-attachment-info { font-size:1.05em; word-break:break-all; max-width:80%; line-height:1.4; }
-        .ug-attachment-type { font-size:0.85em; opacity:0.6; text-transform:uppercase; letter-spacing:1px; }
-        .ug-attachment-download-btn { padding:12px 26px; border-radius:8px; background:#4a9eff; color:#fff; border:none; cursor:pointer; font-size:1em; font-weight:600; transition:background .15s; }
-        .ug-attachment-download-btn:hover { background:#3a8eef; }
-        .ug-thumbnail-file-icon { display:flex; align-items:center; justify-content:center; width:100%; height:100%; background:#2a2a2a; color:#999; }
-        .ug-thumbnail-file-icon svg { width:45%; height:45%; opacity:0.85; }
-
-        /* Settings panel additions */
-        .ug-settings-subheader { font-size: 0.78em; text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,0.5); margin: 22px 0 10px; font-weight: 600; }
-        .ug-settings-section .ug-settings-subheader:first-child { margin-top: 0; }
-        .ug-settings-description { font-size: 0.85em; color: rgba(255,255,255,0.5); margin: -4px 0 10px; line-height: 1.45; }
-        .ug-settings-divider { height: 1px; background: rgba(255,255,255,0.08); margin: 20px 0; border: 0; }
-        .ug-sidebar-group-label { font-size: 0.7em; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,0.35); padding: 14px 16px 6px; font-weight: 600; }
-        .ug-sidebar-group-label:first-child { padding-top: 4px; }
-    `;
 
     // ====================================================
     // Native DOM Helpers
@@ -599,6 +577,54 @@
     // ====================================================
     const Utils = {
         sanitizeFileName: name => String(name || '').replace(/[/\\:*?"<>|]/g, '-'),
+
+        // Created once at script init — Intl.Collator is expensive to
+        // instantiate, cheap to reuse. `numeric: true` gives us "file2 < file10";
+        // `sensitivity: 'base'` ignores case so Page_1 and page_1 group together.
+        _naturalCollator: new Intl.Collator(undefined, {
+            numeric: true,
+            sensitivity: 'base'
+        }),
+
+        // Natural-order string comparison.
+        naturalCompare(a, b) {
+            return Utils._naturalCollator.compare(String(a ?? ''), String(b ?? ''));
+        },
+
+        // Extract the original filename from a link, in reliability order:
+        //   1. `download` attribute (most accurate)
+        //   2. `?f=` query param (Pawchive/Kemono)
+        //   3. URL path tail (hash — last resort)
+        // Safe for non-anchor elements (e.g. raw <video>) — all reads are optional.
+        extractFileName(linkEl, fallbackUrl) {
+            const dl = linkEl?.getAttribute?.('download');
+            if (dl && dl.trim()) return dl.trim();
+
+            const href = linkEl?.getAttribute?.('href') || '';
+            const fMatch = href.match(/[?&]f=([^&#]+)/);
+            if (fMatch) {
+                try { return decodeURIComponent(fMatch[1]); }
+                catch { return fMatch[1]; }
+            }
+
+            try {
+                return String(fallbackUrl || '').split('?')[0].split('/').pop() || '';
+            } catch {
+                return '';
+            }
+        },
+
+        // Sort an array of media items in place per the given mode.
+        // Unknown modes are a silent no-op so a bad stored value can't break loading.
+        sortItems(items, mode) {
+            if (!mode || mode === 'dom') return items;
+            if (mode === 'filename-asc') {
+                items.sort((a, b) => Utils.naturalCompare(a.fileName, b.fileName));
+            } else if (mode === 'filename-desc') {
+                items.sort((a, b) => Utils.naturalCompare(b.fileName, a.fileName));
+            }
+            return items;
+        },
 
         getPostDate: (type = 'published') => {
             let selector;
@@ -1389,6 +1415,7 @@
             heightBtnText: '【FILL HEIGHT】',
             widthBtnText: '【FILL WIDTH】',
             galleryBtnText: '【GALLERY】',
+            sortMode: 'dom',
             currentResizeMode: 'height',
             fullscreenMode: 'native'
         },
@@ -1457,6 +1484,8 @@
                     return ['top', 'bottom'].includes(value) ? value : 'bottom';
                 case 'fullscreenMode':
                     return ['native', 'css', 'ask'].includes(value) ? value : 'native';
+                case 'sortMode':
+                    return ['dom', 'filename-asc', 'filename-desc'].includes(value) ? value : 'dom';
                 case 'zipFileNameFormat':
                 case 'imageFileNameFormat':
                     return (typeof value === 'string' && value.trim()) ? value : def;
@@ -1655,7 +1684,8 @@
         galleryBtnText: SettingsManager.loadSetting('galleryBtnText', '【GALLERY】'),
         slideshowDelay: SettingsManager.loadSetting('slideshowDelay', CONFIG.SLIDESHOW_DELAY),
         slideshowPauseOnHover: SettingsManager.loadSetting('slideshowPauseOnHover', true),
-        fullscreenMode: SettingsManager.loadSetting('fullscreenMode', 'native')
+        fullscreenMode: SettingsManager.loadSetting('fullscreenMode', 'native'),
+        sortMode: SettingsManager.loadSetting('sortMode', 'dom')
     }, {
         controlsVisible(value) {
             if (galleryOverlay) {
@@ -2368,7 +2398,6 @@
         },
 
         _createSettingElement(setting) {
-            // Structural elements (no state)
             if (setting.type === 'header') {
                 return DOM.create('h3', { className: 'ug-settings-subheader', text: setting.label });
             }
@@ -2513,6 +2542,37 @@
                         { type: 'description', label: 'Tokens: {date_published}, {date_edited}, {date_imported}, {date}, {title}, {artistName}' },
                         { id: 'imageFileNameFormatInput', label: 'Image Filename Format', type: 'text', stateKey: 'imageFileNameFormat', gmKey: 'imageFileNameFormat', maxLength: 200 },
                         { type: 'description', label: 'Tokens: same as above plus {fileName} and {index}' }
+                    ]
+                },
+                {
+                    title: 'Sorting',
+                    key: 'sorting',
+                    settings: [
+                        { type: 'header', label: 'Media Order' },
+                        { type: 'description', label: 'Fixes scrambled order — especially useful for comic posts where pages are numbered ("page_01.jpg", "page_02.jpg", …). Natural sort treats numbers as numbers, so "page_10" comes after "page_9" instead of before it.' },
+                        {
+                            id: 'sortModeSelect',
+                            label: 'Sort Order',
+                            type: 'select',
+                            stateKey: 'sortMode',
+                            gmKey: 'sortMode',
+                            options: [
+                                { value: 'dom', text: 'Default (site order)' },
+                                { value: 'filename-asc', text: 'Filename: A → Z (natural)' },
+                                { value: 'filename-desc', text: 'Filename: Z → A (natural)' }
+                            ],
+                            onChange: () => {
+                                if (state.isGalleryMode) Gallery.closeGallery();
+                                if (Utils.isPostPage() && !state.isLoading) {
+                                    state.notificationType = 'info';
+                                    state.notification = 'Applying sort order...';
+                                    ImageLoader.loadImages();
+                                }
+                            }
+                        },
+                        { type: 'divider' },
+                        { type: 'header', label: 'How it works' },
+                        { type: 'description', label: 'Filenames are read from the post\'s download attribute, the file URL\'s ?f= parameter, or the URL itself — in that order. If none contain a usable name, items fall back to the site\'s DOM order.' }
                     ]
                 },
                 {
@@ -3610,7 +3670,7 @@
                     if (!uniqueGalleryItems.has(url)) {
                         uniqueGalleryItems.set(url, {
                             linkElement, originalUrl: url, posterUrl: poster, type: 'video',
-                            fileName: linkElement.getAttribute('download') || url.split('/').pop()
+                            fileName: Utils.extractFileName(linkElement, url)
                         });
                     }
                 } else {
@@ -3625,11 +3685,11 @@
                         if (!uniqueGalleryItems.has(url)) {
                             uniqueGalleryItems.set(url, {
                                 linkElement, originalUrl: url, posterUrl: url, type: 'image',
-                                fileName: linkElement.getAttribute('download') || url.split('/').pop()
+                                fileName: Utils.extractFileName(linkElement, url)
                             });
                         }
                     } else if (isAttachmentLink) {
-                        const downloadName = linkElement.getAttribute('download') || url.split('/').pop();
+                        const downloadName = Utils.extractFileName(linkElement, url);
                         if (!uniqueGalleryItems.has(url)) {
                             uniqueGalleryItems.set(url, {
                                 linkElement, originalUrl: url, posterUrl: FALLBACK_ATTACHMENT, type: 'attachment',
@@ -3648,7 +3708,7 @@
                         const poster = videoEl.getAttribute('poster') || FALLBACK_POSTER;
                         uniqueGalleryItems.set(url, {
                             linkElement: videoEl, originalUrl: url, posterUrl: poster, type: 'video',
-                            fileName: url.split('/').pop()
+                            fileName: Utils.extractFileName(videoEl, url)
                         });
                     }
                 }
@@ -3715,6 +3775,7 @@
                 if (state.currentLoadSessionId !== sessionId) return;
 
                 const uniqueItems = Array.from(uniqueGalleryItems.values());
+                Utils.sortItems(uniqueItems, state.sortMode);
                 state.totalImages = uniqueItems.length;
                 state.fullSizeImageSrcs = Array(uniqueItems.length).fill(null);
                 state.originalImageSrcs = Array(uniqueItems.length).fill(null);
@@ -3870,8 +3931,6 @@
                         }
                         self.usedNames.add(finalName);
 
-                        // Robust timestamp handling — accepts epoch ms or ISO string,
-                        // and silently falls back to JSZip's default if the value is bad.
                         let fileOptions;
                         if (date !== null && date !== undefined) {
                             const parsedDate = (typeof date === 'number') ? new Date(date) : new Date(String(date));
@@ -3988,8 +4047,6 @@
                         .replace('{artistName}', sanitizedArtistName)
                         .replace('{title}', sanitizedTitle);
 
-                    // Add a suffix for the filtered variants so the three downloads
-                    // don't collide when saved into the same folder.
                     if (filter !== 'all') {
                         if (zipFileName.toLowerCase().endsWith('.zip')) {
                             zipFileName = zipFileName.slice(0, -4) + `-${zipSuffix}.zip`;
@@ -4023,7 +4080,6 @@
                 let running = 0;
                 const concurrencyLimit = CONFIG.MAX_CONCURRENT_FETCHES;
 
-                // Guard against a missing/unparsable published date.
                 const postDateMs = (
                     state.preserveFileDates &&
                     meta.publishedDate instanceof Date &&
@@ -4168,6 +4224,8 @@
                     );
 
                     postActionsContainer.appendChild(globalButtons);
+
+                    // Apply any previously-saved hide settings to the freshly-created buttons.
                     PostActions.updateButtonVisibilityLight();
                 }
 
@@ -4301,8 +4359,6 @@
                 const scope = btn.dataset.scope || 'global';
                 const map = scope === 'thumbnail' ? thumbnailHideMap : globalHideMap;
                 if (Object.prototype.hasOwnProperty.call(map, action)) {
-                    // Use the .ug-hidden utility class (display:none !important)
-                    // so it wins against .ug-button { display: inline-flex !important }.
                     btn.classList.toggle('ug-hidden', !!map[action]);
                 }
             });
@@ -4497,11 +4553,7 @@
                 console.warn('Ultra Galleries: Failed to load main CSS resource.');
             }
 
-            GM_addStyle(EXTRA_CSS);
-
             // One-time migration from 4.2.x single-scope button-visibility keys.
-            // Old settings become the thumbnail toggles; the global bar resets to visible.
-            // Runs once because after this pass the new keys exist and future loads skip it.
             if (GM_getValue('hideFullButton') !== undefined && GM_getValue('hideThumbnailFullButton') === undefined) {
                 SettingsManager.saveSetting('hideThumbnailFullButton', SettingsManager.loadSetting('hideFullButton', false));
                 SettingsManager.saveSetting('hideThumbnailWidthButton', SettingsManager.loadSetting('hideWidthButton', false));
