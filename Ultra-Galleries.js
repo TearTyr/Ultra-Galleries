@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1477603-%E3%83%A1%E3%83%AA%E3%83%BC
-// @version      4.1.1
+// @version      4.3.0
 // @description  Modern image gallery with highly efficient background zipping, video playback, browsing, fullscreen, and download features. Native DOM, unified pointer gestures, and zero external UI dependencies.
 // @author       ntf (original), Meri/TearTyr (maintained)
 // @match        *://kemono.su/*
@@ -28,8 +28,8 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_getResourceText
-// @resource     mainCSS https://cdn.jsdelivr.net/gh/TearTyr/Ultra-Galleries@TestingBranch/Ultra-Galleries.css
-// @resource     jszipScript https://unpkg.com/jszip@3.10.1/dist/jszip.min.js
+// @resource     mainCSS https://cdn.jsdelivr.net/gh/TearTyr/Ultra-Galleries@TestingBranch/Ultra-Galleries.css?v=4.1.1
+// @resource     jszipScript https://unpkg.com/jszip@3.10.2/dist/jszip.min.js
 // @downloadURL  https://update.sleazyfork.org/scripts/537986/Ultra%20Galleries.user.js
 // @updateURL    https://update.sleazyfork.org/scripts/537986/Ultra%20Galleries.meta.js
 // @noframes
@@ -65,7 +65,7 @@
     // Pawchive Compliance Configuration & Pacer
     // ====================================================
     const PAWCHIVE_CONFIG = {
-        USER_AGENT: 'UltraGalleries/4.1.1 (+https://github.com/TearTyr/Ultra-Galleries; contact: Meri/TearTyr)',
+        USER_AGENT: 'UltraGalleries/4.3.0 (+https://github.com/TearTyr/Ultra-Galleries; contact: Meri/TearTyr)',
         MIN_REQUEST_INTERVAL: 1050 // Enforces <= 1 request/second
     };
 
@@ -79,7 +79,7 @@
         queue: Promise.resolve(),
 
         async throttle(url) {
-            if (!isPawchiveHost(url)) return; // Only throttles Pawchive to maintain speed elsewhere
+            if (!isPawchiveHost(url)) return;
             return (this.queue = this.queue.catch(() => {}).then(async () => {
                 const now = Date.now();
                 const elapsed = now - this.lastRequestTime;
@@ -99,7 +99,6 @@
         }
     };
 
-    // Tracks in-flight GM.xmlHttpRequest handles so they can be aborted on session change.
     const ActiveRequests = {
         bySession: new Map(),
 
@@ -135,9 +134,15 @@
         '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 24 24" fill="#666"><path d="M8 5v14l11-7z"/></svg>'
     );
 
+    const FALLBACK_ATTACHMENT = 'data:image/svg+xml;base64,' + btoa(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
+    );
+
     const BUTTONS = {
         DOWNLOAD: '【DOWNLOAD】',
         DOWNLOAD_ALL: '【DL ALL】',
+        DOWNLOAD_IMAGES: '【DL IMAGES】',
+        DOWNLOAD_ATTACHMENTS: '【DL FILES】',
         FULL: '【FULL】',
         HEIGHT: '【FILL HEIGHT】',
         WIDTH: '【FILL WIDTH】',
@@ -201,6 +206,28 @@
         VIDEO_LINK: 'a.fileThumb[href$=".mp4"], a.fileThumb[href$=".webm"], a.fileThumb[href$=".mov"], a[href$=".mp4"], a[href$=".webm"], a[href$=".mov"]',
         VIDEO_THUMBNAIL: isNekohouse ? '.scrape__video-thumbnail' : '.post__video-thumbnail'
     };
+
+    // EXTRA_CSS — currently provides attachment preview + download button + settings panel layout.
+    // Note: settings panel visual styling assumes the new main CSS will land later;
+    // until then these rules stand on their own and are safe to keep.
+    const EXTRA_CSS = `
+        .ug-attachment-preview { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; padding:40px; color:#ddd; text-align:center; width:100%; height:100%; }
+        .ug-attachment-preview svg { width:120px; height:120px; opacity:0.75; }
+        .ug-attachment-info { font-size:1.05em; word-break:break-all; max-width:80%; line-height:1.4; }
+        .ug-attachment-type { font-size:0.85em; opacity:0.6; text-transform:uppercase; letter-spacing:1px; }
+        .ug-attachment-download-btn { padding:12px 26px; border-radius:8px; background:#4a9eff; color:#fff; border:none; cursor:pointer; font-size:1em; font-weight:600; transition:background .15s; }
+        .ug-attachment-download-btn:hover { background:#3a8eef; }
+        .ug-thumbnail-file-icon { display:flex; align-items:center; justify-content:center; width:100%; height:100%; background:#2a2a2a; color:#999; }
+        .ug-thumbnail-file-icon svg { width:45%; height:45%; opacity:0.85; }
+
+        /* Settings panel additions */
+        .ug-settings-subheader { font-size: 0.78em; text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,0.5); margin: 22px 0 10px; font-weight: 600; }
+        .ug-settings-section .ug-settings-subheader:first-child { margin-top: 0; }
+        .ug-settings-description { font-size: 0.85em; color: rgba(255,255,255,0.5); margin: -4px 0 10px; line-height: 1.45; }
+        .ug-settings-divider { height: 1px; background: rgba(255,255,255,0.08); margin: 20px 0; border: 0; }
+        .ug-sidebar-group-label { font-size: 0.7em; text-transform: uppercase; letter-spacing: 1.5px; color: rgba(255,255,255,0.35); padding: 14px 16px 6px; font-weight: 600; }
+        .ug-sidebar-group-label:first-child { padding-top: 4px; }
+    `;
 
     // ====================================================
     // Native DOM Helpers
@@ -591,6 +618,27 @@
                 }
             }
             return 'UnknownDate';
+        },
+
+        // Returns the post timestamp as a real Date anchored to UTC so that
+        // JSZip's DOS serializer (which reads UTC components) writes the exact
+        // wall-clock shown on the post page. Returns null if no valid date found.
+        getPostDateObject: (type = 'published') => {
+            let selector;
+            if (type === 'edited') selector = '.post__edited, .scrape__edited';
+            else if (type === 'added' || type === 'imported') selector = '.post__added, .scrape__added';
+            else selector = '.post__published, .scrape__published, time[datetime]';
+
+            const timeEl = DOM.$(selector);
+            if (timeEl) {
+                const raw = (timeEl.getAttribute('datetime') || timeEl.textContent || '').trim();
+                const match = raw.match(/(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+                if (match) {
+                    const [, y, mo, d, h = '00', mi = '00', s = '00'] = match;
+                    return new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s));
+                }
+            }
+            return null;
         },
 
         setImageStyle: (img, styles) => {
@@ -1308,11 +1356,24 @@
             notificationPosition: 'bottom',
             bottomStripeVisible: true,
             hideNavArrows: false,
-            hideFullButton: false,
-            hideDownloadButton: false,
-            hideHeightButton: false,
-            hideWidthButton: false,
+
+            // Post-action bar (global) visibility
+            hideGlobalGalleryButton: false,
+            hideGlobalHeightButton: false,
+            hideGlobalWidthButton: false,
+            hideGlobalFullButton: false,
+            hideGlobalDownloadAllButton: false,
+            hideGlobalDownloadImagesButton: false,
+            hideGlobalDownloadAttachmentsButton: false,
+
+            // Per-thumbnail button visibility
+            hideThumbnailHeightButton: false,
+            hideThumbnailWidthButton: false,
+            hideThumbnailFullButton: false,
+            hideThumbnailDownloadButton: false,
+
             enablePersistentCaching: true,
+            preserveFileDates: true,
             slideshowDelay: CONFIG.SLIDESHOW_DELAY,
             slideshowPauseOnHover: true,
             inertiaEnabled: true,
@@ -1322,6 +1383,8 @@
             autoLoadOriginals: true,
             downloadBtnText: '【DOWNLOAD】',
             downloadAllBtnText: '【DL ALL】',
+            downloadImagesBtnText: '【DL IMAGES】',
+            downloadAttachmentsBtnText: '【DL FILES】',
             fullBtnText: '【FULL】',
             heightBtnText: '【FILL HEIGHT】',
             widthBtnText: '【FILL WIDTH】',
@@ -1550,13 +1613,26 @@
         notificationPosition: SettingsManager.loadSetting('notificationPosition', 'bottom'),
         animationsEnabled: SettingsManager.loadSetting('animationsEnabled', true),
         enablePersistentCaching: SettingsManager.loadSetting('enablePersistentCaching', true),
+        preserveFileDates: SettingsManager.loadSetting('preserveFileDates', true),
         notification: null,
         notificationType: 'info',
         hideNavArrows: SettingsManager.loadSetting('hideNavArrows', false),
-        hideFullButton: SettingsManager.loadSetting('hideFullButton', false),
-        hideDownloadButton: SettingsManager.loadSetting('hideDownloadButton', false),
-        hideHeightButton: SettingsManager.loadSetting('hideHeightButton', false),
-        hideWidthButton: SettingsManager.loadSetting('hideWidthButton', false),
+
+        // Global post-action button visibility
+        hideGlobalGalleryButton: SettingsManager.loadSetting('hideGlobalGalleryButton', false),
+        hideGlobalHeightButton: SettingsManager.loadSetting('hideGlobalHeightButton', false),
+        hideGlobalWidthButton: SettingsManager.loadSetting('hideGlobalWidthButton', false),
+        hideGlobalFullButton: SettingsManager.loadSetting('hideGlobalFullButton', false),
+        hideGlobalDownloadAllButton: SettingsManager.loadSetting('hideGlobalDownloadAllButton', false),
+        hideGlobalDownloadImagesButton: SettingsManager.loadSetting('hideGlobalDownloadImagesButton', false),
+        hideGlobalDownloadAttachmentsButton: SettingsManager.loadSetting('hideGlobalDownloadAttachmentsButton', false),
+
+        // Thumbnail button visibility
+        hideThumbnailHeightButton: SettingsManager.loadSetting('hideThumbnailHeightButton', false),
+        hideThumbnailWidthButton: SettingsManager.loadSetting('hideThumbnailWidthButton', false),
+        hideThumbnailFullButton: SettingsManager.loadSetting('hideThumbnailFullButton', false),
+        hideThumbnailDownloadButton: SettingsManager.loadSetting('hideThumbnailDownloadButton', false),
+
         settingsOpen: false,
         prevImageKey: SettingsManager.loadSetting('prevImageKey', 'k'),
         nextImageKey: SettingsManager.loadSetting('nextImageKey', 'l'),
@@ -1571,6 +1647,8 @@
         autoLoadOriginals: SettingsManager.loadSetting('autoLoadOriginals', true),
         downloadBtnText: SettingsManager.loadSetting('downloadBtnText', '【DOWNLOAD】'),
         downloadAllBtnText: SettingsManager.loadSetting('downloadAllBtnText', '【DL ALL】'),
+        downloadImagesBtnText: SettingsManager.loadSetting('downloadImagesBtnText', '【DL IMAGES】'),
+        downloadAttachmentsBtnText: SettingsManager.loadSetting('downloadAttachmentsBtnText', '【DL FILES】'),
         fullBtnText: SettingsManager.loadSetting('fullBtnText', '【FULL】'),
         heightBtnText: SettingsManager.loadSetting('heightBtnText', '【FILL HEIGHT】'),
         widthBtnText: SettingsManager.loadSetting('widthBtnText', '【FILL WIDTH】'),
@@ -1613,7 +1691,6 @@
         },
 
         notificationType(value) {
-            // Class is applied by UI.showNotification; this callback is intentionally a no-op.
             void value;
         },
 
@@ -1681,6 +1758,8 @@
     function updateButtonLabels() {
         BUTTONS.DOWNLOAD = state.downloadBtnText || '【DOWNLOAD】';
         BUTTONS.DOWNLOAD_ALL = state.downloadAllBtnText || '【DL ALL】';
+        BUTTONS.DOWNLOAD_IMAGES = state.downloadImagesBtnText || '【DL IMAGES】';
+        BUTTONS.DOWNLOAD_ATTACHMENTS = state.downloadAttachmentsBtnText || '【DL FILES】';
         BUTTONS.FULL = state.fullBtnText || '【FULL】';
         BUTTONS.HEIGHT = state.heightBtnText || '【FILL HEIGHT】';
         BUTTONS.WIDTH = state.widthBtnText || '【FILL WIDTH】';
@@ -1689,6 +1768,8 @@
         const labels = {
             DOWNLOAD: BUTTONS.DOWNLOAD,
             DOWNLOAD_ALL: BUTTONS.DOWNLOAD_ALL,
+            DOWNLOAD_IMAGES: BUTTONS.DOWNLOAD_IMAGES,
+            DOWNLOAD_ATTACHMENTS: BUTTONS.DOWNLOAD_ATTACHMENTS,
             FULL: BUTTONS.FULL,
             HEIGHT: BUTTONS.HEIGHT,
             WIDTH: BUTTONS.WIDTH,
@@ -1818,7 +1899,6 @@
             const strip = DOM.$('.ug-thumbnail-strip', galleryOverlay);
             if (!strip) return;
 
-            // Tear down previous run before wiring up new listeners.
             ThumbnailStrip._abortController?.abort();
             ThumbnailStrip._abortController = new AbortController();
             const signal = ThumbnailStrip._abortController.signal;
@@ -1951,6 +2031,9 @@
             if (!mediaItem) return;
 
             DOM.$('.ug-thumbnail-zoom-preview')?.remove();
+
+            if (mediaItem.type === 'attachment') return;
+
             const thumbImg = thumb.querySelector('img');
             const src = mediaItem.type === 'video' ? (mediaItem.poster || thumbImg?.src) : (thumbImg?.src || mediaItem.src);
             if (!src) return;
@@ -2019,7 +2102,7 @@
 
             const menuItems = [
                 { text: 'Open Image', action: () => Gallery.showExpandedView(index) },
-                { text: 'Download Image', action: () => DownloadManager.downloadImageByIndex(index) },
+                { text: 'Download File', action: () => DownloadManager.downloadImageByIndex(index) },
                 { text: 'Copy URL', action: () => ThumbnailStrip.copyImageUrl(index) },
                 { text: 'Remove from Gallery', action: () => ThumbnailStrip.removeFromGallery(index), danger: true }
             ];
@@ -2056,7 +2139,7 @@
             if (!mediaItem) return;
             navigator.clipboard.writeText(mediaItem.src).then(() => {
                 state.notificationType = 'success';
-                state.notification = 'Image URL copied to clipboard';
+                state.notification = 'URL copied to clipboard';
             }).catch(err => {
                 console.error('Failed to copy URL:', err);
                 state.notificationType = 'error';
@@ -2075,7 +2158,6 @@
                     return;
                 }
 
-                // Surgical removal: only the affected thumb + reindex those after it.
                 const strip = DOM.$(`.${CSS.GALLERY.THUMBNAIL_STRIP}`, galleryOverlay);
                 const thumbToRemove = strip?.querySelector(`[data-index="${index}"]`);
                 thumbToRemove?.remove();
@@ -2097,7 +2179,7 @@
                 ThumbnailStrip.updateThumbnailNumbers();
                 ThumbnailStrip.updateScrollIndicators();
                 state.notificationType = 'info';
-                state.notification = 'Image removed from gallery';
+                state.notification = 'Item removed from gallery';
             };
 
             const result = await UGModal.confirm({
@@ -2131,7 +2213,7 @@
         _notificationTimeoutId: null,
         _notificationHideTimeoutId: null,
 
-        createToggleButton(name, action, disabled = false, actionName = null) {
+        createToggleButton(name, action, disabled = false, actionName = null, scope = 'global') {
             const btn = DOM.create('button', {
                 type: 'button',
                 text: name,
@@ -2147,6 +2229,7 @@
             });
 
             if (actionName) btn.dataset.action = actionName;
+            if (scope) btn.dataset.scope = scope;
             if (disabled) btn.classList.add('disabled');
             return btn;
         },
@@ -2156,13 +2239,13 @@
             buttonsConfig.forEach(config => {
                 let createThisButton = true;
                 switch (config.name) {
-                    case 'FULL': if (state.hideFullButton) createThisButton = false; break;
-                    case 'DOWNLOAD': if (state.hideDownloadButton) createThisButton = false; break;
-                    case 'HEIGHT': if (state.hideHeightButton) createThisButton = false; break;
-                    case 'WIDTH': if (state.hideWidthButton) createThisButton = false; break;
+                    case 'FULL': if (state.hideThumbnailFullButton) createThisButton = false; break;
+                    case 'DOWNLOAD': if (state.hideThumbnailDownloadButton) createThisButton = false; break;
+                    case 'HEIGHT': if (state.hideThumbnailHeightButton) createThisButton = false; break;
+                    case 'WIDTH': if (state.hideThumbnailWidthButton) createThisButton = false; break;
                 }
                 if (!createThisButton) return;
-                div.appendChild(UI.createToggleButton(config.text, config.action, false, config.name));
+                div.appendChild(UI.createToggleButton(config.text, config.action, false, config.name, 'thumbnail'));
             });
             return div;
         },
@@ -2285,6 +2368,17 @@
         },
 
         _createSettingElement(setting) {
+            // Structural elements (no state)
+            if (setting.type === 'header') {
+                return DOM.create('h3', { className: 'ug-settings-subheader', text: setting.label });
+            }
+            if (setting.type === 'divider') {
+                return DOM.create('hr', { className: 'ug-settings-divider' });
+            }
+            if (setting.type === 'description') {
+                return DOM.create('p', { className: 'ug-settings-description', text: setting.label });
+            }
+
             const div = DOM.create('div', { className: 'ug-setting-item' });
             const label = DOM.create('label', { for: setting.id, text: setting.label });
 
@@ -2353,38 +2447,42 @@
                     title: 'General',
                     key: 'general',
                     settings: [
+                        { type: 'header', label: 'Appearance' },
                         { id: 'animationsToggle', label: 'Enable Animations', type: 'checkbox', stateKey: 'animationsEnabled', gmKey: 'animationsEnabled' },
-                        { id: 'bottomStripeToggle', label: 'Show Thumbnail Strip', type: 'checkbox', stateKey: 'bottomStripeVisible', gmKey: 'bottomStripeVisible' },
-                        { id: 'autoLoadOriginalsToggle', label: 'Auto-load Original Images', type: 'checkbox', stateKey: 'autoLoadOriginals', gmKey: 'autoLoadOriginals' },
-                        {
-                            id: 'fullscreenMode',
-                            label: 'Fullscreen Mode:',
-                            type: 'select',
-                            stateKey: 'fullscreenMode',
-                            gmKey: 'fullscreenMode',
+                        { id: 'bottomStripeToggle', label: 'Show Thumbnail Strip in Gallery', type: 'checkbox', stateKey: 'bottomStripeVisible', gmKey: 'bottomStripeVisible' },
+                        { type: 'divider' },
+                        { type: 'header', label: 'Notifications' },
+                        { id: 'notificationsEnabledToggle', label: 'Enable Notifications', type: 'checkbox', stateKey: 'notificationsEnabled', gmKey: 'notificationsEnabled' },
+                        { id: 'notificationPosition', label: 'Notification Position', type: 'select', stateKey: 'notificationPosition', gmKey: 'notificationPosition',
+                            options: [{ value: 'top', text: 'Top' }, { value: 'bottom', text: 'Bottom' }] },
+                        { type: 'divider' },
+                        { type: 'header', label: 'Fullscreen' },
+                        { id: 'fullscreenMode', label: 'Fullscreen Mode', type: 'select', stateKey: 'fullscreenMode', gmKey: 'fullscreenMode',
                             options: [
                                 { value: 'native', text: 'Native (browser fullscreen)' },
                                 { value: 'css', text: 'CSS (styled overlay)' },
                                 { value: 'ask', text: 'Ask each time' }
-                            ]
-                        }
+                            ] },
+                        { type: 'divider' },
+                        { type: 'header', label: 'Image Loading' },
+                        { id: 'autoLoadOriginalsToggle', label: 'Auto-load Original Images', type: 'checkbox', stateKey: 'autoLoadOriginals', gmKey: 'autoLoadOriginals' }
                     ]
                 },
                 {
-                    title: 'Pan & Zoom',
-                    key: 'panZoom',
+                    title: 'Gallery Viewer',
+                    key: 'galleryViewer',
                     settings: [
+                        { type: 'header', label: 'Navigation' },
+                        { id: 'hideNavArrows', label: 'Hide Navigation Arrows in Gallery', type: 'checkbox', stateKey: 'hideNavArrows', gmKey: 'hideNavArrows', onChange: () => PostActions.updateButtonVisibilityLight() },
+                        { type: 'divider' },
+                        { type: 'header', label: 'Zoom & Pan' },
                         { id: 'zoomEnabledToggle', label: 'Enable Zoom & Pan', type: 'checkbox', stateKey: 'zoomEnabled', gmKey: 'zoomEnabled' },
-                        { id: 'inertiaEnabledToggle', label: 'Enable Smooth Pan Inertia', type: 'checkbox', stateKey: 'inertiaEnabled', gmKey: 'inertiaEnabled' }
-                    ]
-                },
-                {
-                    title: 'Slideshow',
-                    key: 'slideshow',
-                    settings: [
+                        { id: 'inertiaEnabledToggle', label: 'Enable Smooth Pan Inertia', type: 'checkbox', stateKey: 'inertiaEnabled', gmKey: 'inertiaEnabled' },
+                        { type: 'divider' },
+                        { type: 'header', label: 'Slideshow' },
                         {
                             id: 'slideshowDelay',
-                            label: 'Slideshow Delay (ms):',
+                            label: 'Slideshow Delay (ms)',
                             type: 'text',
                             stateKey: 'slideshowDelay',
                             gmKey: 'slideshowDelay',
@@ -2395,65 +2493,94 @@
                                 Slideshow.setDelay(validDelay);
                             }
                         },
-                        { id: 'slideshowPauseOnHover', label: 'Pause on Hover', type: 'checkbox', stateKey: 'slideshowPauseOnHover', gmKey: 'slideshowPauseOnHover' }
+                        { id: 'slideshowPauseOnHover', label: 'Pause Slideshow on Hover', type: 'checkbox', stateKey: 'slideshowPauseOnHover', gmKey: 'slideshowPauseOnHover' }
+                    ]
+                },
+                {
+                    title: 'Downloads',
+                    key: 'downloads',
+                    settings: [
+                        { type: 'header', label: 'Behavior' },
+                        { id: 'preserveFileDatesToggle', label: 'Preserve Post Date on ZIP Files', type: 'checkbox', stateKey: 'preserveFileDates', gmKey: 'preserveFileDates' },
+                        { type: 'description', label: 'ZIP entries will be stamped with the post\'s published date. Requires an archive tool that restores timestamps (7-Zip, WinRAR, Explorer).' },
+                        { type: 'divider' },
+                        { type: 'header', label: 'Caching' },
+                        { id: 'persistentCachingToggle', label: 'Enable Persistent Image Caching', type: 'checkbox', stateKey: 'enablePersistentCaching', gmKey: 'enablePersistentCaching' },
+                        { id: 'clearCacheButton', label: 'Clear Persistent Cache', type: 'button', action: () => ImageCacheDB.clear() },
+                        { type: 'divider' },
+                        { type: 'header', label: 'File Naming' },
+                        { id: 'zipFileNameFormatInput', label: 'ZIP Filename Format', type: 'text', stateKey: 'zipFileNameFormat', gmKey: 'zipFileNameFormat', maxLength: 200 },
+                        { type: 'description', label: 'Tokens: {date_published}, {date_edited}, {date_imported}, {date}, {title}, {artistName}' },
+                        { id: 'imageFileNameFormatInput', label: 'Image Filename Format', type: 'text', stateKey: 'imageFileNameFormat', gmKey: 'imageFileNameFormat', maxLength: 200 },
+                        { type: 'description', label: 'Tokens: same as above plus {fileName} and {index}' }
+                    ]
+                },
+                {
+                    title: 'Post Actions',
+                    key: 'postActions',
+                    settings: [
+                        { type: 'header', label: 'Button Visibility' },
+                        { type: 'description', label: 'The bar that appears at the top of a post.' },
+                        { id: 'hideGlobalGalleryButton', label: 'Hide GALLERY Button', type: 'checkbox', stateKey: 'hideGlobalGalleryButton', gmKey: 'hideGlobalGalleryButton', onChange: () => PostActions.updateButtonVisibilityLight() },
+                        { id: 'hideGlobalHeightButton', label: 'Hide FILL HEIGHT Button', type: 'checkbox', stateKey: 'hideGlobalHeightButton', gmKey: 'hideGlobalHeightButton', onChange: () => PostActions.updateButtonVisibilityLight() },
+                        { id: 'hideGlobalWidthButton', label: 'Hide FILL WIDTH Button', type: 'checkbox', stateKey: 'hideGlobalWidthButton', gmKey: 'hideGlobalWidthButton', onChange: () => PostActions.updateButtonVisibilityLight() },
+                        { id: 'hideGlobalFullButton', label: 'Hide FULL Button', type: 'checkbox', stateKey: 'hideGlobalFullButton', gmKey: 'hideGlobalFullButton', onChange: () => PostActions.updateButtonVisibilityLight() },
+                        { id: 'hideGlobalDownloadAllButton', label: 'Hide DL ALL Button', type: 'checkbox', stateKey: 'hideGlobalDownloadAllButton', gmKey: 'hideGlobalDownloadAllButton', onChange: () => PostActions.updateButtonVisibilityLight() },
+                        { id: 'hideGlobalDownloadImagesButton', label: 'Hide DL IMAGES Button', type: 'checkbox', stateKey: 'hideGlobalDownloadImagesButton', gmKey: 'hideGlobalDownloadImagesButton', onChange: () => PostActions.updateButtonVisibilityLight() },
+                        { id: 'hideGlobalDownloadAttachmentsButton', label: 'Hide DL FILES Button', type: 'checkbox', stateKey: 'hideGlobalDownloadAttachmentsButton', gmKey: 'hideGlobalDownloadAttachmentsButton', onChange: () => PostActions.updateButtonVisibilityLight() }
+                    ]
+                },
+                {
+                    title: 'Thumbnails',
+                    key: 'thumbnails',
+                    settings: [
+                        { type: 'header', label: 'Per-Image Button Visibility' },
+                        { type: 'description', label: 'The small button row that appears above each thumbnail image.' },
+                        { id: 'hideThumbnailHeightButton', label: 'Hide FILL HEIGHT Button', type: 'checkbox', stateKey: 'hideThumbnailHeightButton', gmKey: 'hideThumbnailHeightButton', onChange: () => PostActions.updateButtonVisibilityLight() },
+                        { id: 'hideThumbnailWidthButton', label: 'Hide FILL WIDTH Button', type: 'checkbox', stateKey: 'hideThumbnailWidthButton', gmKey: 'hideThumbnailWidthButton', onChange: () => PostActions.updateButtonVisibilityLight() },
+                        { id: 'hideThumbnailFullButton', label: 'Hide FULL Button', type: 'checkbox', stateKey: 'hideThumbnailFullButton', gmKey: 'hideThumbnailFullButton', onChange: () => PostActions.updateButtonVisibilityLight() },
+                        { id: 'hideThumbnailDownloadButton', label: 'Hide DOWNLOAD Button', type: 'checkbox', stateKey: 'hideThumbnailDownloadButton', gmKey: 'hideThumbnailDownloadButton', onChange: () => PostActions.updateButtonVisibilityLight() }
                     ]
                 },
                 {
                     title: 'Button Labels',
                     key: 'buttonLabels',
                     settings: [
-                        { id: 'downloadBtnTextInput', label: 'Download Button:', type: 'text', stateKey: 'downloadBtnText', gmKey: 'downloadBtnText', onChange: updateButtonLabels },
-                        { id: 'downloadAllBtnTextInput', label: 'Download All Button:', type: 'text', stateKey: 'downloadAllBtnText', gmKey: 'downloadAllBtnText', onChange: updateButtonLabels },
-                        { id: 'fullBtnTextInput', label: 'Full Size Button:', type: 'text', stateKey: 'fullBtnText', gmKey: 'fullBtnText', onChange: updateButtonLabels },
-                        { id: 'heightBtnTextInput', label: 'Fill Height Button:', type: 'text', stateKey: 'heightBtnText', gmKey: 'heightBtnText', onChange: updateButtonLabels },
-                        { id: 'widthBtnTextInput', label: 'Fill Width Button:', type: 'text', stateKey: 'widthBtnText', gmKey: 'widthBtnText', onChange: updateButtonLabels },
-                        { id: 'galleryBtnTextInput', label: 'Gallery Button:', type: 'text', stateKey: 'galleryBtnText', gmKey: 'galleryBtnText', onChange: updateButtonLabels }
-                    ]
-                },
-                {
-                    title: 'Buttons',
-                    key: 'buttonVisibility',
-                    settings: [
-                        { id: 'hideNavArrows', label: 'Hide Navigation Arrows', type: 'checkbox', stateKey: 'hideNavArrows', gmKey: 'hideNavArrows', onChange: () => PostActions.updateButtonVisibilityLight() },
-                        { id: 'hideFullBtn', label: 'Hide Full Size Button', type: 'checkbox', stateKey: 'hideFullButton', gmKey: 'hideFullButton', onChange: () => PostActions.updateButtonVisibilityLight() },
-                        { id: 'hideDownloadBtn', label: 'Hide Download Button', type: 'checkbox', stateKey: 'hideDownloadButton', gmKey: 'hideDownloadButton', onChange: () => PostActions.updateButtonVisibilityLight() },
-                        { id: 'hideHeightBtn', label: 'Hide Fill Height Button', type: 'checkbox', stateKey: 'hideHeightButton', gmKey: 'hideHeightButton', onChange: () => PostActions.updateButtonVisibilityLight() },
-                        { id: 'hideWidthBtn', label: 'Hide Fill Width Button', type: 'checkbox', stateKey: 'hideWidthButton', gmKey: 'hideWidthButton', onChange: () => PostActions.updateButtonVisibilityLight() }
+                        { type: 'header', label: 'Download Buttons' },
+                        { id: 'downloadBtnTextInput', label: 'DOWNLOAD', type: 'text', stateKey: 'downloadBtnText', gmKey: 'downloadBtnText', maxLength: 40, onChange: updateButtonLabels },
+                        { id: 'downloadAllBtnTextInput', label: 'DL ALL', type: 'text', stateKey: 'downloadAllBtnText', gmKey: 'downloadAllBtnText', maxLength: 40, onChange: updateButtonLabels },
+                        { id: 'downloadImagesBtnTextInput', label: 'DL IMAGES', type: 'text', stateKey: 'downloadImagesBtnText', gmKey: 'downloadImagesBtnText', maxLength: 40, onChange: updateButtonLabels },
+                        { id: 'downloadAttachmentsBtnTextInput', label: 'DL FILES', type: 'text', stateKey: 'downloadAttachmentsBtnText', gmKey: 'downloadAttachmentsBtnText', maxLength: 40, onChange: updateButtonLabels },
+                        { type: 'divider' },
+                        { type: 'header', label: 'Sizing & View Buttons' },
+                        { id: 'fullBtnTextInput', label: 'FULL', type: 'text', stateKey: 'fullBtnText', gmKey: 'fullBtnText', maxLength: 40, onChange: updateButtonLabels },
+                        { id: 'heightBtnTextInput', label: 'FILL HEIGHT', type: 'text', stateKey: 'heightBtnText', gmKey: 'heightBtnText', maxLength: 40, onChange: updateButtonLabels },
+                        { id: 'widthBtnTextInput', label: 'FILL WIDTH', type: 'text', stateKey: 'widthBtnText', gmKey: 'widthBtnText', maxLength: 40, onChange: updateButtonLabels },
+                        { id: 'galleryBtnTextInput', label: 'GALLERY', type: 'text', stateKey: 'galleryBtnText', gmKey: 'galleryBtnText', maxLength: 40, onChange: updateButtonLabels }
                     ]
                 },
                 {
                     title: 'Keyboard',
-                    key: 'keys',
+                    key: 'keyboard',
                     settings: [
-                        { id: 'galleryKeyInput', label: 'Gallery Key:', type: 'text', stateKey: 'galleryKey', gmKey: 'galleryKey', maxLength: 1 },
-                        { id: 'prevImageKeyInput', label: 'Previous Image Key:', type: 'text', stateKey: 'prevImageKey', gmKey: 'prevImageKey', maxLength: 1 },
-                        { id: 'nextImageKeyInput', label: 'Next Image Key:', type: 'text', stateKey: 'nextImageKey', gmKey: 'nextImageKey', maxLength: 1 }
+                        { type: 'header', label: 'Shortcuts' },
+                        { type: 'description', label: 'Single letters work best. These shortcuts are disabled while typing in any input field.' },
+                        { id: 'galleryKeyInput', label: 'Open / Close Gallery', type: 'text', stateKey: 'galleryKey', gmKey: 'galleryKey', maxLength: 1 },
+                        { id: 'prevImageKeyInput', label: 'Previous Image', type: 'text', stateKey: 'prevImageKey', gmKey: 'prevImageKey', maxLength: 1 },
+                        { id: 'nextImageKeyInput', label: 'Next Image', type: 'text', stateKey: 'nextImageKey', gmKey: 'nextImageKey', maxLength: 1 },
+                        { type: 'divider' },
+                        { type: 'header', label: 'Fixed Shortcuts (in Gallery)' },
+                        { type: 'description', label: '← / →  Navigate   ·   + / −  Zoom   ·   0  Reset Zoom   ·   Space  Slideshow   ·   F  Fullscreen   ·   Esc  Close' }
                     ]
                 },
                 {
-                    title: 'Notifications',
-                    key: 'notifications',
+                    title: 'Advanced',
+                    key: 'advanced',
                     settings: [
-                        { id: 'notificationsEnabledToggle', label: 'Enable Notifications', type: 'checkbox', stateKey: 'notificationsEnabled', gmKey: 'notificationsEnabled' },
-                        {
-                            id: 'notificationPosition',
-                            label: 'Notification Position:',
-                            type: 'select',
-                            stateKey: 'notificationPosition',
-                            gmKey: 'notificationPosition',
-                            options: [{ value: 'top', text: 'Top' }, { value: 'bottom', text: 'Bottom' }]
-                        }
-                    ]
-                },
-                {
-                    title: 'Downloads',
-                    key: 'optimizations',
-                    settings: [
-                        { id: 'persistentCachingToggle', label: 'Enable Persistent Image Caching', type: 'checkbox', stateKey: 'enablePersistentCaching', gmKey: 'enablePersistentCaching' },
-                        { id: 'clearCacheButton', label: 'Clear Persistent Cache', type: 'button', action: () => ImageCacheDB.clear() },
+                        { type: 'header', label: 'Backup & Restore' },
                         {
                             id: 'exportSettingsButton',
-                            label: 'Export Settings',
+                            label: 'Export Settings to File',
                             type: 'button',
                             action: () => {
                                 const blob = new Blob([SettingsManager.exportSettings()], { type: 'application/json' });
@@ -2464,7 +2591,7 @@
                         },
                         {
                             id: 'importSettingsButton',
-                            label: 'Import Settings',
+                            label: 'Import Settings from File',
                             type: 'button',
                             action: () => {
                                 const input = DOM.create('input', { type: 'file', accept: '.json' });
@@ -2479,9 +2606,12 @@
                                 input.click();
                             }
                         },
+                        { type: 'divider' },
+                        { type: 'header', label: 'Danger Zone' },
+                        { type: 'description', label: 'This will erase all your customizations and reload the page.' },
                         {
                             id: 'resetSettingsButton',
-                            label: 'Reset to Defaults',
+                            label: 'Reset All Settings to Defaults',
                             type: 'button',
                             action: async () => {
                                 const result = await UGModal.confirm({
@@ -2496,14 +2626,6 @@
                                 }
                             }
                         }
-                    ]
-                },
-                {
-                    title: 'File Formatting',
-                    key: 'formatting',
-                    settings: [
-                        { id: 'zipFileNameFormatInput', label: 'Zip File Name Format:', type: 'text', stateKey: 'zipFileNameFormat', gmKey: 'zipFileNameFormat' },
-                        { id: 'imageFileNameFormatInput', label: 'Image File Name Format:', type: 'text', stateKey: 'imageFileNameFormat', gmKey: 'imageFileNameFormat' }
                     ]
                 }
             ];
@@ -2559,6 +2681,7 @@
                         sectionEl.style.display = 'block';
 
                         headerText.textContent = section.title;
+                        body.scrollTop = 0;
                     }
                 });
                 sidebarContainer.appendChild(sideBtn);
@@ -2857,9 +2980,11 @@
             stripThumbnailsContainer.replaceChildren();
             const fragment = document.createDocumentFragment();
 
+            const fileIconSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+
             state.fullSizeImageSrcs.forEach((mediaItem, index) => {
                 if (!mediaItem) return;
-                const thumbSrc = mediaItem.type === 'video' ? mediaItem.poster : mediaItem.src;
+
                 const wrapper = DOM.create('div', {
                     className: CSS.GALLERY.THUMBNAIL_WRAPPER,
                     'data-index': index,
@@ -2874,14 +2999,25 @@
                         className: 'ug-play-icon',
                         html: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>'
                     }));
+                    wrapper.appendChild(DOM.create('img', {
+                        src: mediaItem.poster || FALLBACK_POSTER,
+                        loading: 'lazy',
+                        decoding: 'async',
+                        className: CSS.GALLERY.THUMBNAIL
+                    }));
+                } else if (mediaItem.type === 'attachment') {
+                    wrapper.appendChild(DOM.create('div', {
+                        className: 'ug-thumbnail-file-icon',
+                        html: fileIconSvg
+                    }));
+                } else {
+                    wrapper.appendChild(DOM.create('img', {
+                        src: mediaItem.src,
+                        loading: 'lazy',
+                        decoding: 'async',
+                        className: CSS.GALLERY.THUMBNAIL
+                    }));
                 }
-
-                wrapper.appendChild(DOM.create('img', {
-                    src: thumbSrc,
-                    loading: 'lazy',
-                    decoding: 'async',
-                    className: CSS.GALLERY.THUMBNAIL
-                }));
 
                 fragment.appendChild(wrapper);
             });
@@ -3038,6 +3174,7 @@
                 if (zoomControls) zoomControls.style.display = 'none';
                 if (resetBtn) resetBtn.style.display = 'none';
                 if (fillHeightBtn) fillHeightBtn.style.display = 'block';
+                if (ambientBackground) ambientBackground.style.backgroundImage = '';
 
                 const mainVideo = DOM.create('video', {
                     className: CSS.GALLERY.MAIN_VIDEO,
@@ -3063,8 +3200,6 @@
 
                 mainMediaContainer.appendChild(mainVideo);
 
-                // Fetch the video through the paced pipeline so Pawchive's rate limit
-                // and UA header policy are respected. Non-Pawchive hosts go direct.
                 if (isPawchiveHost(mediaItem.src)) {
                     const token = (crypto.randomUUID?.() || Math.random().toString(36));
                     mainVideo.dataset.ugFetchToken = token;
@@ -3075,6 +3210,33 @@
                 }
 
                 Gallery._attachVideoPlayOverlay(mainVideo, mainMediaContainer);
+
+            } else if (mediaItem.type === 'attachment') {
+                if (zoomControls) zoomControls.style.display = 'none';
+                if (resetBtn) resetBtn.style.display = 'none';
+                if (fillHeightBtn) fillHeightBtn.style.display = 'none';
+                if (ambientBackground) ambientBackground.style.backgroundImage = '';
+
+                const fileName = mediaItem.fileName || mediaItem.src.split('/').pop() || 'attachment';
+                const fileExt = (fileName.match(/\.([a-z0-9]+)$/i) || [, 'file'])[1].toUpperCase();
+
+                const preview = DOM.create('div', { className: 'ug-attachment-preview' }, [
+                    DOM.create('div', {
+                        html: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
+                    }),
+                    DOM.create('div', { className: 'ug-attachment-type', text: fileExt }),
+                    DOM.create('div', { className: 'ug-attachment-info', text: fileName }),
+                    DOM.create('button', {
+                        className: 'ug-attachment-download-btn',
+                        text: 'Download File',
+                        onclick: (e) => {
+                            e.stopPropagation();
+                            DownloadManager.downloadImageByIndex(index);
+                        }
+                    })
+                ]);
+
+                mainMediaContainer.appendChild(preview);
             }
 
             if (counter) {
@@ -3160,7 +3322,7 @@
                         { label: 'CSS', value: 'css' }
                     ]
                 });
-                if (!result.value) return; // user dismissed
+                if (!result.value) return;
                 mode = result.value;
             }
 
@@ -3258,7 +3420,6 @@
 
         async _fetchBlobInternal(url, sessionId, retries, delay) {
             try {
-                // Enforce <= 1 req/sec on Pawchive
                 await RequestPacer.throttle(url);
 
                 return await new Promise((resolve, reject) => {
@@ -3311,9 +3472,6 @@
                 return Promise.reject(new Error('Stale session'));
             }
 
-            // Dedupe key: never share a promise across sessions, and give direct
-            // (session-less) calls their own namespace so background downloads
-            // can't hand off a promise to an active gallery session.
             const key = `${sessionId ?? 'direct'}:${url}`;
             const existing = ImageLoader._inflight.get(key);
             if (existing) return existing;
@@ -3324,7 +3482,6 @@
                     if (cachedBlob) return cachedBlob;
                 }
 
-                // Session may have changed while the cache read was pending.
                 if (sessionId !== null && state.currentLoadSessionId !== sessionId) {
                     throw new Error('Stale session');
                 }
@@ -3334,9 +3491,6 @@
 
             ImageLoader._inflight.set(key, promise);
 
-            // Self-clean when settled. The `.then(cleanup, cleanup)` derived promise
-            // never rejects because cleanup returns undefined, so no unhandled
-            // rejection warnings are produced when the underlying fetch fails.
             const cleanup = () => {
                 if (ImageLoader._inflight.get(key) === promise) {
                     ImageLoader._inflight.delete(key);
@@ -3370,42 +3524,53 @@
             let blobUrlToUse = loadedBlobUrls.get(posterHref);
 
             try {
-                if (!blobUrlToUse) {
-                    if (itemData.type === 'video') {
-                        const posterBlob = await ImageLoader.fetchWithRetry(posterHref, sessionId);
-                        if (state.currentLoadSessionId !== sessionId) return;
-                        if (!posterBlob) throw new Error('Failed to fetch poster blob');
-                        blobUrlToUse = BlobManager.createUrl(posterBlob);
-                    } else {
-                        const blob = await ImageLoader.fetchWithRetry(cacheKey, sessionId);
-                        if (state.currentLoadSessionId !== sessionId) return;
-                        if (!blob) throw new Error('Failed to fetch blob');
-                        blobUrlToUse = BlobManager.createUrl(blob);
+                if (itemData.type !== 'attachment') {
+                    if (!blobUrlToUse) {
+                        if (itemData.type === 'video') {
+                            const posterBlob = await ImageLoader.fetchWithRetry(posterHref, sessionId);
+                            if (state.currentLoadSessionId !== sessionId) return;
+                            if (!posterBlob) throw new Error('Failed to fetch poster blob');
+                            blobUrlToUse = BlobManager.createUrl(posterBlob);
+                        } else {
+                            const blob = await ImageLoader.fetchWithRetry(cacheKey, sessionId);
+                            if (state.currentLoadSessionId !== sessionId) return;
+                            if (!blob) throw new Error('Failed to fetch blob');
+                            blobUrlToUse = BlobManager.createUrl(blob);
+                        }
+                        loadedBlobUrls.set(posterHref, blobUrlToUse);
                     }
-                    loadedBlobUrls.set(posterHref, blobUrlToUse);
-                }
 
-                if (state.currentLoadSessionId !== sessionId) return;
+                    if (state.currentLoadSessionId !== sessionId) return;
 
-                if (imgElement.tagName === 'IMG') {
-                    imgElement.src = blobUrlToUse;
-                    imgElement.dataset.originalSrc = cacheKey;
-                    imgElement.classList.add('ug-image-loaded');
-                    imgElement.style.cursor = 'default';
-                    const parentLink = imgElement.closest('a');
-                    if (parentLink) parentLink.style.cursor = 'default';
-                    ImageLoader.imageActions[state.currentResizeMode](imgElement);
+                    if (imgElement.tagName === 'IMG') {
+                        imgElement.src = blobUrlToUse;
+                        imgElement.dataset.originalSrc = cacheKey;
+                        imgElement.classList.add('ug-image-loaded');
+                        imgElement.style.cursor = 'default';
+                        const parentLink = imgElement.closest('a');
+                        if (parentLink) parentLink.style.cursor = 'default';
+                        ImageLoader.imageActions[state.currentResizeMode](imgElement);
+                    }
                 }
 
                 if (isUniqueForGallery) {
-                    state.fullSizeImageSrcs[galleryIndex] = itemData.type === 'video'
-                        ? { type: 'video', src: cacheKey, poster: blobUrlToUse }
-                        : { type: 'image', src: cacheKey, originalSrc: cacheKey };
+                    if (itemData.type === 'video') {
+                        state.fullSizeImageSrcs[galleryIndex] = { type: 'video', src: cacheKey, poster: blobUrlToUse };
+                    } else if (itemData.type === 'attachment') {
+                        state.fullSizeImageSrcs[galleryIndex] = {
+                            type: 'attachment',
+                            src: cacheKey,
+                            poster: FALLBACK_ATTACHMENT,
+                            fileName: itemData.fileName
+                        };
+                    } else {
+                        state.fullSizeImageSrcs[galleryIndex] = { type: 'image', src: cacheKey, originalSrc: cacheKey };
+                    }
 
                     state.originalImageSrcs[galleryIndex] = {
                         src: cacheKey,
                         type: itemData.type,
-                        fileName: linkElement.getAttribute('download') || cacheKey.split('/').pop()
+                        fileName: itemData.fileName || linkElement.getAttribute('download') || cacheKey.split('/').pop()
                     };
                 }
 
@@ -3451,13 +3616,26 @@
                 } else {
                     url = Utils.handleMediaSrc(linkElement);
                     if (!url && linkElement.href) url = linkElement.href.split('?')[0];
-                    if (!url || !/\.(jpe?g|png|gif|webp|bmp)$/i.test(url)) return;
+                    if (!url) return;
 
-                    if (!uniqueGalleryItems.has(url)) {
-                        uniqueGalleryItems.set(url, {
-                            linkElement, originalUrl: url, posterUrl: url, type: 'image',
-                            fileName: linkElement.getAttribute('download') || url.split('/').pop()
-                        });
+                    const isImage = /\.(jpe?g|png|gif|webp|bmp)$/i.test(url);
+                    const isAttachmentLink = linkElement.matches(SELECTORS.ATTACHMENT_LINK);
+
+                    if (isImage) {
+                        if (!uniqueGalleryItems.has(url)) {
+                            uniqueGalleryItems.set(url, {
+                                linkElement, originalUrl: url, posterUrl: url, type: 'image',
+                                fileName: linkElement.getAttribute('download') || url.split('/').pop()
+                            });
+                        }
+                    } else if (isAttachmentLink) {
+                        const downloadName = linkElement.getAttribute('download') || url.split('/').pop();
+                        if (!uniqueGalleryItems.has(url)) {
+                            uniqueGalleryItems.set(url, {
+                                linkElement, originalUrl: url, posterUrl: FALLBACK_ATTACHMENT, type: 'attachment',
+                                fileName: downloadName
+                            });
+                        }
                     }
                 }
             });
@@ -3513,7 +3691,6 @@
 
             if (!Utils.isPostPage() || state.isLoading) return;
 
-            // Cancel anything still running for the previous session.
             if (state.currentLoadSessionId) ActiveRequests.abortSession(state.currentLoadSessionId);
 
             const sessionId = StateManager.generateSessionId();
@@ -3545,6 +3722,13 @@
                 uniqueItems.forEach((item, index) => {
                     if (item.type === 'video') {
                         state.fullSizeImageSrcs[index] = { type: 'video', src: item.originalUrl, poster: item.posterUrl };
+                    } else if (item.type === 'attachment') {
+                        state.fullSizeImageSrcs[index] = {
+                            type: 'attachment',
+                            src: item.originalUrl,
+                            poster: FALLBACK_ATTACHMENT,
+                            fileName: item.fileName
+                        };
                     } else {
                         state.fullSizeImageSrcs[index] = { type: 'image', src: item.originalUrl, originalSrc: item.originalUrl };
                     }
@@ -3609,13 +3793,16 @@
             artistName: DOM.$(SELECTORS.POST_USER_NAME)?.textContent?.trim() || 'Unknown Artist',
             datePublished: Utils.getPostDate('published'),
             dateEdited: Utils.getPostDate('edited'),
-            dateImported: Utils.getPostDate('imported')
+            dateImported: Utils.getPostDate('imported'),
+            publishedDate: Utils.getPostDateObject('published')
         }),
 
         _buildFileName: (item, index) => {
             const meta = DownloadManager._getPostMeta();
             const extMatch = item.fileName.match(/\.([a-z0-9]+)$/i);
-            const correctExt = extMatch ? extMatch[1].toLowerCase() : (item.type === 'video' ? 'mp4' : 'jpg');
+            const correctExt = extMatch
+                ? extMatch[1].toLowerCase()
+                : (item.type === 'video' ? 'mp4' : item.type === 'attachment' ? 'bin' : 'jpg');
             const fileNameWithoutExt = item.fileName.replace(/\.[^/.]+$/, '');
 
             let formattedName = state.imageFileNameFormat
@@ -3634,8 +3821,7 @@
             return Utils.sanitizeFileName(formattedName);
         },
 
-        downloadVideo: async (url, name) => {
-            // Paced <= 1 req/sec on Pawchive
+        downloadFile: async (url, name) => {
             await RequestPacer.throttle(url);
 
             return new Promise(resolve => {
@@ -3671,7 +3857,7 @@
                         self.filesAdded = 0;
                         self.usedNames = new Set();
                     } else if (type === 'addFile') {
-                        let { blob, name } = data;
+                        let { blob, name, date } = data;
                         let finalName = name;
                         let counter = 1;
                         const dotIndex = name.lastIndexOf('.');
@@ -3683,7 +3869,18 @@
                             counter++;
                         }
                         self.usedNames.add(finalName);
-                        self.zip.file(finalName, blob);
+
+                        // Robust timestamp handling — accepts epoch ms or ISO string,
+                        // and silently falls back to JSZip's default if the value is bad.
+                        let fileOptions;
+                        if (date !== null && date !== undefined) {
+                            const parsedDate = (typeof date === 'number') ? new Date(date) : new Date(String(date));
+                            if (!Number.isNaN(parsedDate.getTime())) {
+                                fileOptions = { date: parsedDate };
+                            }
+                        }
+                        self.zip.file(finalName, blob, fileOptions);
+
                         self.filesAdded++;
                         self.postMessage({ type: 'progress', message: \`Added \${self.filesAdded}/\${self.totalFiles}\` });
                     } else if (type === 'generate') {
@@ -3706,31 +3903,58 @@
             return DownloadManager._worker;
         },
 
-        downloadAllImages: async () => {
+        downloadAllImages: async (filter = 'all') => {
             if (state.isDownloading) {
                 UGModal.alert('Download in Progress', 'A download is already running.', 'info');
                 return;
             }
 
             const meta = DownloadManager._getPostMeta();
-            const indexedItems = state.originalImageSrcs
+
+            let indexedItems = state.originalImageSrcs
                 .map((item, index) => ({ item, index }))
                 .filter(x => x.item && x.item.src);
 
-            const imageEntries = indexedItems.filter(x => x.item.type !== 'video');
-            const videoEntries = indexedItems.filter(x => x.item.type === 'video');
+            if (filter === 'images') {
+                indexedItems = indexedItems.filter(x => x.item.type === 'image');
+            } else if (filter === 'attachments') {
+                indexedItems = indexedItems.filter(x => x.item.type !== 'image');
+            }
 
             if (indexedItems.length === 0) {
                 state.notificationType = 'warning';
-                state.notification = 'No media found to download.';
+                state.notification = filter === 'images'
+                    ? 'No images found to download.'
+                    : filter === 'attachments'
+                        ? 'No attachments found to download.'
+                        : 'No media found to download.';
                 return;
             }
 
+            let title, text, confirmText, zipSuffix, kindWord;
+            if (filter === 'images') {
+                title = 'Download Images?';
+                text = `Create ZIP from ${indexedItems.length} image(s)?`;
+                confirmText = 'Create ZIP';
+                zipSuffix = 'images';
+                kindWord = 'image(s)';
+            } else if (filter === 'attachments') {
+                title = 'Download Files?';
+                text = `Create ZIP from ${indexedItems.length} attachment(s)? (videos + other files)`;
+                confirmText = 'Create ZIP';
+                zipSuffix = 'files';
+                kindWord = 'attachment(s)';
+            } else {
+                title = 'Download All?';
+                text = `Create ZIP from all ${indexedItems.length} item(s)? (images + videos + attachments)`;
+                confirmText = 'Create ZIP';
+                zipSuffix = 'all';
+                kindWord = 'item(s)';
+            }
+
             const result = await UGModal.confirm({
-                title: 'Download All?',
-                text: `Create ZIP from ${imageEntries.length} image(s)? (${videoEntries.length} video(s) will be downloaded individually)`,
-                icon: 'question',
-                confirmText: 'Create ZIP',
+                title, text, icon: 'question',
+                confirmText,
                 cancelText: 'Cancel'
             });
 
@@ -3738,33 +3962,7 @@
 
             state.isDownloading = true;
             state.notificationType = 'info';
-            state.notification = 'Starting download...';
-
-            // Sequential video downloader ensures strictly <= 1 active video download (concurrency limit)
-            const downloadVideosSequentially = async (entries) => {
-                const results = [];
-                for (let i = 0; i < entries.length; i++) {
-                    if (!state.isDownloading) break;
-                    const x = entries[i];
-                    state.notification = `Downloading video ${i + 1}/${entries.length}...`;
-                    const ok = await DownloadManager.downloadVideo(x.item.src, DownloadManager._buildFileName(x.item, x.index));
-                    results.push({ status: 'fulfilled', value: ok });
-                }
-                return results;
-            };
-
-            if (imageEntries.length === 0) {
-                state.notification = `Downloading ${videoEntries.length} video(s)...`;
-                const results = await downloadVideosSequentially(videoEntries);
-                const ok = results.filter(r => r.status === 'fulfilled' && r.value === true).length;
-                state.notification = `Video downloads finished (${ok}/${videoEntries.length} succeeded).`;
-                state.notificationType = ok > 0 ? 'success' : 'warning';
-                state.isDownloading = false;
-                return;
-            }
-
-            // Run video downloads sequentially alongside ZIP processing
-            const videoTask = downloadVideosSequentially(videoEntries);
+            state.notification = `Preparing ${kindWord}...`;
 
             const notifyProgress = Utils.throttle((message) => {
                 state.notificationType = 'info';
@@ -3790,22 +3988,24 @@
                         .replace('{artistName}', sanitizedArtistName)
                         .replace('{title}', sanitizedTitle);
 
+                    // Add a suffix for the filtered variants so the three downloads
+                    // don't collide when saved into the same folder.
+                    if (filter !== 'all') {
+                        if (zipFileName.toLowerCase().endsWith('.zip')) {
+                            zipFileName = zipFileName.slice(0, -4) + `-${zipSuffix}.zip`;
+                        } else {
+                            zipFileName += `-${zipSuffix}`;
+                        }
+                    }
                     if (!zipFileName.toLowerCase().endsWith('.zip')) {
                         zipFileName += '.zip';
                     }
 
                     DOM.saveBlob(zipBlob, zipFileName);
 
-                    videoTask.then(results => {
-                        const ok = results.filter(r => r.status === 'fulfilled' && r.value === true).length;
-                        if (videoEntries.length > 0) {
-                            state.notification = `ZIP complete! Videos: ${ok}/${videoEntries.length} downloaded.`;
-                        } else {
-                            state.notification = 'Download complete!';
-                        }
-                        state.notificationType = 'success';
-                        DownloadManager.cleanupWorker();
-                    });
+                    state.notification = 'Download complete!';
+                    state.notificationType = 'success';
+                    DownloadManager.cleanupWorker();
                 } else if (type === 'error') {
                     state.notificationType = 'error';
                     state.notification = `Download failed: ${message}`;
@@ -3815,7 +4015,7 @@
 
             worker.postMessage({
                 type: 'init',
-                data: { totalFiles: imageEntries.length }
+                data: { totalFiles: indexedItems.length }
             });
 
             const streamFiles = async () => {
@@ -3823,15 +4023,22 @@
                 let running = 0;
                 const concurrencyLimit = CONFIG.MAX_CONCURRENT_FETCHES;
 
+                // Guard against a missing/unparsable published date.
+                const postDateMs = (
+                    state.preserveFileDates &&
+                    meta.publishedDate instanceof Date &&
+                    !Number.isNaN(meta.publishedDate.getTime())
+                ) ? meta.publishedDate.getTime() : null;
+
                 return new Promise((resolve) => {
                     const next = () => {
-                        if (!state.isDownloading || index >= imageEntries.length) {
+                        if (!state.isDownloading || index >= indexedItems.length) {
                             if (running === 0) resolve();
                             return;
                         }
 
-                        while (running < concurrencyLimit && index < imageEntries.length) {
-                            const entry = imageEntries[index++];
+                        while (running < concurrencyLimit && index < indexedItems.length) {
+                            const entry = indexedItems[index++];
                             running++;
 
                             (async () => {
@@ -3845,7 +4052,7 @@
                                     if (blob && state.isDownloading && DownloadManager._worker) {
                                         DownloadManager._worker.postMessage({
                                             type: 'addFile',
-                                            data: { blob, name: pathInZip }
+                                            data: { blob, name: pathInZip, date: postDateMs }
                                         });
                                     }
                                 } catch (e) {
@@ -3877,11 +4084,16 @@
             }
 
             const formattedName = DownloadManager._buildFileName(item, index);
-            if (item.type === 'video') {
+
+            if (item.type === 'video' || item.type === 'attachment') {
                 state.notificationType = 'info';
-                state.notification = 'Starting video download...';
-                const ok = await DownloadManager.downloadVideo(item.src, formattedName);
-                state.notification = ok ? 'Video download complete' : 'Video download failed';
+                state.notification = item.type === 'video'
+                    ? 'Starting video download...'
+                    : 'Starting file download...';
+                const ok = await DownloadManager.downloadFile(item.src, formattedName);
+                state.notification = ok
+                    ? (item.type === 'video' ? 'Video download complete' : 'File download complete')
+                    : (item.type === 'video' ? 'Video download failed' : 'File download failed');
                 state.notificationType = ok ? 'success' : 'error';
             } else {
                 try {
@@ -3943,17 +4155,20 @@
 
                 if (postActionsContainer && !DOM.$('.ug-global-actions', postActionsContainer)) {
                     const globalButtons = DOM.create('div', { className: 'ug-injected-ui ug-global-actions' });
-                    elements.galleryButton = UI.createToggleButton('Loading Gallery...', Gallery.toggleGallery, true, 'GALLERY');
+                    elements.galleryButton = UI.createToggleButton('Loading Gallery...', Gallery.toggleGallery, true, 'GALLERY', 'global');
 
                     globalButtons.append(
-                        UI.createToggleButton(BUTTONS.HEIGHT, () => PostActions.resizeAllImages('height'), false, 'HEIGHT'),
-                        UI.createToggleButton(BUTTONS.WIDTH, () => PostActions.resizeAllImages('width'), false, 'WIDTH'),
-                        UI.createToggleButton(BUTTONS.FULL, () => PostActions.resizeAllImages('full'), false, 'FULL'),
-                        UI.createToggleButton(BUTTONS.DOWNLOAD_ALL, DownloadManager.downloadAllImages, false, 'DOWNLOAD_ALL'),
+                        UI.createToggleButton(BUTTONS.HEIGHT, () => PostActions.resizeAllImages('height'), false, 'HEIGHT', 'global'),
+                        UI.createToggleButton(BUTTONS.WIDTH, () => PostActions.resizeAllImages('width'), false, 'WIDTH', 'global'),
+                        UI.createToggleButton(BUTTONS.FULL, () => PostActions.resizeAllImages('full'), false, 'FULL', 'global'),
+                        UI.createToggleButton(BUTTONS.DOWNLOAD_ALL, () => DownloadManager.downloadAllImages('all'), false, 'DOWNLOAD_ALL', 'global'),
+                        UI.createToggleButton(BUTTONS.DOWNLOAD_IMAGES, () => DownloadManager.downloadAllImages('images'), false, 'DOWNLOAD_IMAGES', 'global'),
+                        UI.createToggleButton(BUTTONS.DOWNLOAD_ATTACHMENTS, () => DownloadManager.downloadAllImages('attachments'), false, 'DOWNLOAD_ATTACHMENTS', 'global'),
                         elements.galleryButton
                     );
 
                     postActionsContainer.appendChild(globalButtons);
+                    PostActions.updateButtonVisibilityLight();
                 }
 
                 if (!DOM.$('.settings-button-wrapper')) {
@@ -4065,22 +4280,37 @@
         },
 
         updateButtonVisibilityLight() {
-            const hideMap = {
-                FULL: state.hideFullButton,
-                DOWNLOAD: state.hideDownloadButton,
-                HEIGHT: state.hideHeightButton,
-                WIDTH: state.hideWidthButton
+            const globalHideMap = {
+                GALLERY: state.hideGlobalGalleryButton,
+                HEIGHT: state.hideGlobalHeightButton,
+                WIDTH: state.hideGlobalWidthButton,
+                FULL: state.hideGlobalFullButton,
+                DOWNLOAD_ALL: state.hideGlobalDownloadAllButton,
+                DOWNLOAD_IMAGES: state.hideGlobalDownloadImagesButton,
+                DOWNLOAD_ATTACHMENTS: state.hideGlobalDownloadAttachmentsButton
+            };
+            const thumbnailHideMap = {
+                HEIGHT: state.hideThumbnailHeightButton,
+                WIDTH: state.hideThumbnailWidthButton,
+                FULL: state.hideThumbnailFullButton,
+                DOWNLOAD: state.hideThumbnailDownloadButton
             };
 
             DOM.$$(`.${CSS.BTN}[data-action]`).forEach(btn => {
                 const action = btn.dataset.action;
-                if (Object.prototype.hasOwnProperty.call(hideMap, action)) {
-                    btn.style.display = hideMap[action] ? 'none' : '';
+                const scope = btn.dataset.scope || 'global';
+                const map = scope === 'thumbnail' ? thumbnailHideMap : globalHideMap;
+                if (Object.prototype.hasOwnProperty.call(map, action)) {
+                    // Use the .ug-hidden utility class (display:none !important)
+                    // so it wins against .ug-button { display: inline-flex !important }.
+                    btn.classList.toggle('ug-hidden', !!map[action]);
                 }
             });
 
             if (galleryOverlay) {
-                DOM.$$(`.${CSS.GALLERY.NAV}`, galleryOverlay).forEach(n => n.style.display = state.hideNavArrows ? 'none' : '');
+                DOM.$$(`.${CSS.GALLERY.NAV}`, galleryOverlay).forEach(n => {
+                    n.classList.toggle('ug-hidden', state.hideNavArrows);
+                });
             }
         },
 
@@ -4267,6 +4497,18 @@
                 console.warn('Ultra Galleries: Failed to load main CSS resource.');
             }
 
+            GM_addStyle(EXTRA_CSS);
+
+            // One-time migration from 4.2.x single-scope button-visibility keys.
+            // Old settings become the thumbnail toggles; the global bar resets to visible.
+            // Runs once because after this pass the new keys exist and future loads skip it.
+            if (GM_getValue('hideFullButton') !== undefined && GM_getValue('hideThumbnailFullButton') === undefined) {
+                SettingsManager.saveSetting('hideThumbnailFullButton', SettingsManager.loadSetting('hideFullButton', false));
+                SettingsManager.saveSetting('hideThumbnailWidthButton', SettingsManager.loadSetting('hideWidthButton', false));
+                SettingsManager.saveSetting('hideThumbnailHeightButton', SettingsManager.loadSetting('hideHeightButton', false));
+                SettingsManager.saveSetting('hideThumbnailDownloadButton', SettingsManager.loadSetting('hideDownloadButton', false));
+            }
+
             const allSettings = SettingsManager.loadAllSettings();
             Object.assign(state, allSettings);
             Slideshow.init();
@@ -4281,8 +4523,6 @@
             document.addEventListener('keydown', EventHandlers.handleGlobalKeyDown);
             window.addEventListener('beforeunload', fullCleanup);
 
-            // Keep our visual state in sync with native fullscreen transitions
-            // (e.g., when the user exits via Escape or the browser UI).
             let galleryWasNativeFullscreen = false;
             document.addEventListener('fullscreenchange', () => {
                 const isGalleryNative = Boolean(galleryOverlay) && document.fullscreenElement === galleryOverlay;
@@ -4292,7 +4532,6 @@
                 galleryWasNativeFullscreen = isGalleryNative;
             });
 
-            // Modern Navigation API with Fallback
             const debouncedInject = Utils.debounce(injectUI, 150);
 
             if ('navigation' in window) {
@@ -4319,7 +4558,6 @@
                 window.addEventListener('popstate', debouncedInject);
             }
 
-            // Target-filtered MutationObserver (ignores own injected UI overlay updates)
             const UG_ROOT_SELECTOR = '.ug-gallery-overlay, #ug-settings-overlay, .ug-notification-area, .ug-modal-overlay, .ug-injected-ui, .ug-thumbnail-context-menu, .ug-thumbnail-zoom-preview, .settings-button-wrapper';
 
             uiObserver = new MutationObserver((mutations) => {
