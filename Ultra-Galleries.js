@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1477603-%E3%83%A1%E3%83%AA%E3%83%BC
-// @version      4.3.1
-// @description  Modern image gallery with highly efficient background zipping, video playback, browsing, fullscreen, and download features. Native DOM, unified pointer gestures, and zero external UI dependencies.
+// @version      4.4.2
+// @description  Modern image gallery with highly efficient background zipping, video playback, browsing, fullscreen with a floating (higher-layer) thumbnail strip, and download features. Native DOM, unified pointer gestures, and zero external UI dependencies.
 // @author       ntf (original), Meri/TearTyr (maintained)
 // @match        *://kemono.su/*
 // @match        *://*.kemono.su/*
@@ -46,13 +46,16 @@
         MAX_RETRIES: 5,
         RETRY_DELAY: 2000,
         MIN_SCALE: 0.05,
-        MAX_SCALE: 5,
         ZOOM_STEP: 0.2,
-        DEBOUNCE_DELAY: 250,
-        PAN_RESISTANCE: 0.8,
         DOUBLE_TAP_THRESHOLD: 300,
+        SWIPE_NAV_THRESHOLD: 80,
         CACHE_EVICTION_COUNT: 20,
+        MAX_CACHE_ENTRIES: 800,
+        MAX_CACHE_KEEP_ENTRIES: 600,
+        CACHE_TRIM_INTERVAL_WRITES: 25,
         PRELOAD_COUNT: 2,
+        THUMBNAIL_CHUNK_SIZE: 150,
+        THUMBNAIL_CHUNK_THRESHOLD: 300,
         SCROLL_SIMULATION_BASE_TIMEOUT: 3000,
         SLIDESHOW_DELAY: 3000,
         CONTROLS_HIDE_DELAY: 3000,
@@ -65,7 +68,7 @@
     // Pawchive Compliance Configuration & Pacer
     // ====================================================
     const PAWCHIVE_CONFIG = {
-        USER_AGENT: 'UltraGalleries/4.3.1 (+https://github.com/TearTyr/Ultra-Galleries; contact: Meri/TearTyr)',
+        USER_AGENT: 'UltraGalleries/4.5.0 (+https://github.com/TearTyr/Ultra-Galleries; contact: Meri/TearTyr)',
         MIN_REQUEST_INTERVAL: 1050 // Enforces <= 1 request/second
     };
 
@@ -183,6 +186,8 @@
             FULLSCREEN: 'ug-gallery-fullscreen',
             FULLSCREEN_OVERLAY: 'ug-fullscreen-overlay',
             STRIP_CONTAINER: 'ug-gallery-thumbnail-strip-container',
+            STRIP_TOGGLE: 'ug-strip-toggle',
+            STRIP_FLOATING: 'ug-strip-floating',
             TOOLBAR_BTN: 'ug-toolbar-button',
             CONTROLS_HIDDEN: 'ug-controls-hidden',
             GRABBING: 'ug-grabbing',
@@ -272,16 +277,30 @@
     // ====================================================
     // Built-in Native Modal System
     // ====================================================
+    const MODAL_ICON_SVGS = {
+        question: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
+        warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
+        info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12.01" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>'
+    };
+
     const UGModal = {
+        // Tracks the currently-open modal so a superseding modal (or page
+        // cleanup) can close it properly — resolving its promise and
+        // removing its keydown listener — instead of ripping its overlay
+        // out of the DOM and leaking both.
+        _active: null,
+
+        closeAny() {
+            const active = UGModal._active;
+            UGModal._active = null;
+            if (active) {
+                try { active.cancel(); } catch { /* ignore */ }
+            }
+        },
+
         confirm({ title, text, confirmText = 'Confirm', cancelText = 'Cancel', icon = 'question' }) {
             return new Promise((resolve) => {
-                DOM.$('.ug-modal-overlay')?.remove();
-
-                const iconSvgs = {
-                    question: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
-                    warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
-                    info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12.01" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>'
-                };
+                UGModal.closeAny();
 
                 const opener = document.activeElement;
                 const prevOverflow = document.body.style.overflow;
@@ -307,7 +326,7 @@
 
                 const overlay = DOM.create('div', { className: 'ug-modal-overlay' }, [
                     DOM.create('div', { className: 'ug-modal-container' }, [
-                        DOM.create('div', { className: `ug-modal-icon ${icon}`, html: iconSvgs[icon] || iconSvgs.info }),
+                        DOM.create('div', { className: `ug-modal-icon ${icon}`, html: MODAL_ICON_SVGS[icon] || MODAL_ICON_SVGS.info }),
                         DOM.create('h3', { className: 'ug-modal-title', text: title }),
                         DOM.create('p', { className: 'ug-modal-text', text: text }),
                         DOM.create('div', { className: 'ug-modal-actions' }, focusables)
@@ -336,7 +355,11 @@
                     if (e.key === 'Tab') {
                         const first = focusables[0];
                         const last = focusables[focusables.length - 1];
-                        if (e.shiftKey && document.activeElement === first) {
+                        if (!focusables.includes(document.activeElement)) {
+                            // Focus escaped the modal — pull it back in.
+                            e.preventDefault();
+                            first.focus();
+                        } else if (e.shiftKey && document.activeElement === first) {
                             last.focus();
                             e.preventDefault();
                         } else if (!e.shiftKey && document.activeElement === last) {
@@ -348,9 +371,11 @@
                 window.addEventListener('keydown', onKey);
 
                 let closed = false;
+                const handle = { cancel: () => close(false) };
                 function close(result) {
                     if (closed) return;
                     closed = true;
+                    if (UGModal._active === handle) UGModal._active = null;
                     window.removeEventListener('keydown', onKey);
                     overlay.classList.remove('show');
                     document.body.style.overflow = prevOverflow;
@@ -360,6 +385,7 @@
                     }, 200);
                     resolve({ isConfirmed: result });
                 }
+                UGModal._active = handle;
             });
         },
 
@@ -369,13 +395,7 @@
 
         choose({ title, text, icon = 'question', options }) {
             return new Promise((resolve) => {
-                DOM.$('.ug-modal-overlay')?.remove();
-
-                const iconSvgs = {
-                    question: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
-                    warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
-                    info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12.01" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>'
-                };
+                UGModal.closeAny();
 
                 const opener = document.activeElement;
                 const prevOverflow = document.body.style.overflow;
@@ -394,7 +414,7 @@
 
                 const overlay = DOM.create('div', { className: 'ug-modal-overlay' }, [
                     DOM.create('div', { className: 'ug-modal-container' }, [
-                        DOM.create('div', { className: `ug-modal-icon ${icon}`, html: iconSvgs[icon] || iconSvgs.info }),
+                        DOM.create('div', { className: `ug-modal-icon ${icon}`, html: MODAL_ICON_SVGS[icon] || MODAL_ICON_SVGS.info }),
                         DOM.create('h3', { className: 'ug-modal-title', text: title }),
                         DOM.create('p', { className: 'ug-modal-text', text: text }),
                         DOM.create('div', { className: 'ug-modal-actions' }, buttons)
@@ -414,7 +434,11 @@
                     if (e.key === 'Tab') {
                         const first = focusables[0];
                         const last = focusables[focusables.length - 1];
-                        if (e.shiftKey && document.activeElement === first) {
+                        if (!focusables.includes(document.activeElement)) {
+                            // Focus escaped the modal — pull it back in.
+                            e.preventDefault();
+                            first.focus();
+                        } else if (e.shiftKey && document.activeElement === first) {
                             last.focus();
                             e.preventDefault();
                         } else if (!e.shiftKey && document.activeElement === last) {
@@ -426,9 +450,11 @@
                 window.addEventListener('keydown', onKey);
 
                 let closed = false;
+                const handle = { cancel: () => close(null) };
                 function close(value) {
                     if (closed) return;
                     closed = true;
+                    if (UGModal._active === handle) UGModal._active = null;
                     window.removeEventListener('keydown', onKey);
                     overlay.classList.remove('show');
                     document.body.style.overflow = prevOverflow;
@@ -438,6 +464,7 @@
                     }, 200);
                     resolve({ value });
                 }
+                UGModal._active = handle;
             });
         }
     };
@@ -449,6 +476,7 @@
         DB_NAME: 'UltraGalleriesCache',
         STORE_NAME: 'imageCache',
         dbPromise: null,
+        _writesSinceTrim: 0,
 
         init() {
             if (this.dbPromise) return this.dbPromise;
@@ -495,27 +523,38 @@
             try {
                 const db = await this.init();
                 return new Promise((resolve) => {
+                    let settled = false;
+                    const done = (result) => { if (!settled) { settled = true; resolve(result); } };
                     const tx = db.transaction(this.STORE_NAME, 'readwrite');
                     tx.objectStore(this.STORE_NAME).put({ url, blob, cachedAt: Date.now() });
-                    tx.oncomplete = () => resolve(true);
+                    tx.oncomplete = () => {
+                        done(true);
+                        // Periodic LRU cap enforcement: cheap counter check on
+                        // every Nth successful write, trim only when over cap.
+                        if (++ImageCacheDB._writesSinceTrim >= CONFIG.CACHE_TRIM_INTERVAL_WRITES) {
+                            ImageCacheDB._writesSinceTrim = 0;
+                            ImageCacheDB.enforceCap();
+                        }
+                    };
                     tx.onerror = async (e) => {
                         if (e.target.error && e.target.error.name === 'QuotaExceededError') {
                             await this.evictOldest(CONFIG.CACHE_EVICTION_COUNT);
                         }
-                        resolve(false);
+                        done(false);
                     };
+                    // An abort can fire without onerror (e.g. quota hit at commit
+                    // time) — resolve anyway so callers never hang.
+                    tx.onabort = () => done(false);
                 });
             } catch {
                 return false;
             }
         },
 
-        async evictOldest(count = 20) {
-            try {
-                const db = await this.init();
+        evictOldest(count = 20) {
+            return this.init().then(db => new Promise((resolve) => {
                 const tx = db.transaction(this.STORE_NAME, 'readwrite');
-                const store = tx.objectStore(this.STORE_NAME);
-                const index = store.index('cachedAt');
+                const index = tx.objectStore(this.STORE_NAME).index('cachedAt');
                 let deleted = 0;
                 index.openCursor().onsuccess = (e) => {
                     const cursor = e.target.result;
@@ -525,8 +564,54 @@
                         cursor.continue();
                     }
                 };
+                tx.oncomplete = () => resolve(deleted);
+                tx.onerror = () => resolve(deleted);
+                tx.onabort = () => resolve(deleted);
+            })).catch(() => 0);
+        },
+
+        // Keeps the store under MAX_CACHE_ENTRIES by dropping least-recently-used
+        // records (get() touches cachedAt, so the index order IS the LRU order).
+        async enforceCap() {
+            try {
+                const db = await this.init();
+                const count = await new Promise((resolve) => {
+                    const tx = db.transaction(this.STORE_NAME, 'readonly');
+                    const req = tx.objectStore(this.STORE_NAME).count();
+                    req.onsuccess = () => resolve(req.result || 0);
+                    req.onerror = () => resolve(0);
+                    tx.onabort = () => resolve(0);
+                });
+                if (count > CONFIG.MAX_CACHE_ENTRIES) {
+                    await this.evictOldest(count - CONFIG.MAX_CACHE_KEEP_ENTRIES);
+                }
             } catch {
-                // Ignore eviction errors
+                // Ignore cap errors
+            }
+        },
+
+        async getStats() {
+            try {
+                const db = await this.init();
+                return await new Promise((resolve) => {
+                    const tx = db.transaction(this.STORE_NAME, 'readonly');
+                    const index = tx.objectStore(this.STORE_NAME).index('cachedAt');
+                    let count = 0;
+                    let bytes = 0;
+                    index.openCursor().onsuccess = (e) => {
+                        const cursor = e.target.result;
+                        if (cursor) {
+                            count++;
+                            bytes += cursor.value?.blob?.size || 0;
+                            cursor.continue();
+                        }
+                    };
+                    tx.oncomplete = () => resolve({ count, bytes });
+                    tx.onerror = () => resolve({ count, bytes });
+                    tx.onabort = () => resolve({ count, bytes });
+                });
+            } catch {
+                return { count: 0, bytes: 0 };
             }
         },
 
@@ -554,6 +639,7 @@
         settingsButton: null
     };
     let lastFocusedElement = null;
+    let galleryOpenerElement = null;
     let focusTrapListener = null;
     let uiObserver = null;
     let lastProcessedUrl = null;
@@ -839,10 +925,14 @@
         calculateHardBoundaryOffsets: (offsetX, offsetY, scale, containerRect, imageDOM) => {
             if (!imageDOM || !containerRect) return { x: offsetX, y: offsetY };
 
-            const natW = imageDOM.naturalWidth || imageDOM.videoWidth || 0;
-            const natH = imageDOM.naturalHeight || imageDOM.videoHeight || 0;
-            const imgWidth = natW * scale;
-            const imgHeight = natH * scale;
+            // Use the element's rendered layout box (offsetWidth/Height are
+            // unaffected by CSS transforms) rather than intrinsic pixels.
+            // Intrinsic size makes a downscaled 4000px image behave as if it
+            // were 4000px wide at scale 1, letting it pan into empty space.
+            const baseW = imageDOM.offsetWidth || imageDOM.naturalWidth || imageDOM.videoWidth || 0;
+            const baseH = imageDOM.offsetHeight || imageDOM.naturalHeight || imageDOM.videoHeight || 0;
+            const imgWidth = baseW * scale;
+            const imgHeight = baseH * scale;
 
             let x = offsetX;
             let y = offsetY;
@@ -877,9 +967,12 @@
         lastPosition: { x: 0, y: 0 },
         animationFrame: null,
         inertiaAnimation: null,
+        boundaryAnimation: null,
         cachedImgEl: null,
         cachedZoomEl: null,
         lastTapTime: 0,
+        lastTapMoved: false,
+        lastPointerType: '',
 
         init(containerDOM) {
             containerDOM.addEventListener('pointerdown', PointerEngine.onPointerDown, { passive: false });
@@ -910,6 +1003,10 @@
 
         onPointerDown(e) {
             if (e.pointerType === 'mouse' && e.button !== 0) return;
+            PointerEngine.lastPointerType = e.pointerType || '';
+            // Let native <video> controls receive the click at rest scale —
+            // preventDefault() on pointerdown would swallow play/seek input.
+            if (e.target instanceof HTMLVideoElement && viewState.zoomScale <= 1) return;
             e.preventDefault();
 
             PointerEngine.activePointers.set(e.pointerId, e);
@@ -920,15 +1017,23 @@
                 cancelAnimationFrame(PointerEngine.inertiaAnimation);
                 PointerEngine.inertiaAnimation = null;
             }
+            if (PointerEngine.boundaryAnimation) {
+                cancelAnimationFrame(PointerEngine.boundaryAnimation);
+                PointerEngine.boundaryAnimation = null;
+            }
 
             if (PointerEngine.activePointers.size === 1) {
                 const now = Date.now();
-                if (e.pointerType === 'touch' && now - PointerEngine.lastTapTime < CONFIG.DOUBLE_TAP_THRESHOLD) {
+                // The previous tap only counts toward a double-tap if it stayed
+                // put — two quick swipes in a row must navigate, not zoom.
+                if (e.pointerType === 'touch' && !PointerEngine.lastTapMoved &&
+                    now - PointerEngine.lastTapTime < CONFIG.DOUBLE_TAP_THRESHOLD) {
                     PointerEngine.handleDoubleTap(e);
                     PointerEngine.lastTapTime = 0;
                     return;
                 }
                 PointerEngine.lastTapTime = now;
+                PointerEngine.lastTapMoved = false;
 
                 PointerEngine.isDragging = true;
                 PointerEngine.dragStartTime = performance.now();
@@ -976,6 +1081,12 @@
                 const deltaX = e.clientX - viewState.dragStartPosition.x;
                 const deltaY = e.clientY - viewState.dragStartPosition.y;
 
+                // Drag slop: once the gesture has visibly moved, it can no
+                // longer be half of a double-tap.
+                if (!PointerEngine.lastTapMoved && (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10)) {
+                    PointerEngine.lastTapMoved = true;
+                }
+
                 viewState.imageOffset.x = viewState.dragStartOffset.x + deltaX;
                 viewState.imageOffset.y = viewState.dragStartOffset.y + deltaY;
 
@@ -1020,6 +1131,26 @@
                         setTimeout(() => container.style.willChange = '', 1000);
                     }
 
+                    // Swipe-to-navigate at rest scale: a dominant horizontal
+                    // drag past the threshold flips images. (At scale 1 the
+                    // drag is otherwise a pointless rubber-band that snaps
+                    // straight back, so this gesture is free real estate.)
+                    const swipeDx = PointerEngine.lastPosition.x - viewState.dragStartPosition.x;
+                    const swipeDy = PointerEngine.lastPosition.y - viewState.dragStartPosition.y;
+                    if (viewState.zoomScale <= 1 &&
+                        Math.abs(swipeDx) >= CONFIG.SWIPE_NAV_THRESHOLD &&
+                        Math.abs(swipeDx) > Math.abs(swipeDy)) {
+                        viewState.pinchZoomActive = false;
+                        viewState.imageOffset.x = 0;
+                        viewState.imageOffset.y = 0;
+                        PointerEngine.velocity.x = 0;
+                        PointerEngine.velocity.y = 0;
+                        PointerEngine.updateTransform();
+                        if (swipeDx < 0) Gallery.nextImage();
+                        else Gallery.prevImage();
+                        return;
+                    }
+
                     if (state.inertiaEnabled && (Math.abs(PointerEngine.velocity.x) > 0.5 || Math.abs(PointerEngine.velocity.y) > 0.5)) {
                         PointerEngine.applyInertia();
                     } else {
@@ -1037,15 +1168,26 @@
         },
 
         applyInertia() {
-            const friction = 0.95;
+            // Time-based decay: velocity is in px per 60Hz-frame and friction is
+            // applied proportionally to elapsed time, so inertia feels identical
+            // on 60Hz, 120Hz and variable-refresh displays (and survives frame
+            // hitches without teleporting the image).
+            const FRAME_MS = 1000 / 60;
+            const FRICTION_PER_FRAME = 0.95;
             const minVelocity = 0.5;
+            let lastTime = performance.now();
 
-            const animate = () => {
-                PointerEngine.velocity.x *= friction;
-                PointerEngine.velocity.y *= friction;
+            const animate = (now) => {
+                const dt = Math.min(Math.max(now - lastTime, 0), 100);
+                lastTime = now;
+                const frames = dt / FRAME_MS;
+                const decay = Math.pow(FRICTION_PER_FRAME, frames);
 
-                viewState.imageOffset.x += PointerEngine.velocity.x;
-                viewState.imageOffset.y += PointerEngine.velocity.y;
+                PointerEngine.velocity.x *= decay;
+                PointerEngine.velocity.y *= decay;
+
+                viewState.imageOffset.x += PointerEngine.velocity.x * frames;
+                viewState.imageOffset.y += PointerEngine.velocity.y * frames;
 
                 if (Math.abs(PointerEngine.velocity.x) < minVelocity && Math.abs(PointerEngine.velocity.y) < minVelocity) {
                     PointerEngine.inertiaAnimation = null;
@@ -1094,17 +1236,22 @@
                     PointerEngine.updateTransform();
 
                     if (progress < 1) {
-                        requestAnimationFrame(animateToBoundary);
+                        PointerEngine.boundaryAnimation = requestAnimationFrame(animateToBoundary);
+                    } else {
+                        PointerEngine.boundaryAnimation = null;
                     }
                 };
 
-                requestAnimationFrame(animateToBoundary);
+                if (PointerEngine.boundaryAnimation) {
+                    cancelAnimationFrame(PointerEngine.boundaryAnimation);
+                }
+                PointerEngine.boundaryAnimation = requestAnimationFrame(animateToBoundary);
             }
         },
 
         handleDoubleTap(e) {
             e.preventDefault();
-            if (!galleryOverlay) return;
+            if (!galleryOverlay || !state.zoomEnabled) return;
 
             const containerDOM = DOM.$(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`, galleryOverlay);
             if (!containerDOM) return;
@@ -1116,7 +1263,7 @@
             if (viewState.zoomScale > 1) {
                 Zoom.resetZoom();
             } else {
-                const newScale = 2.5;
+                const newScale = Math.min(2.5, state.maxZoomScale);
                 const imageX = (clickX - viewState.imageOffset.x) / viewState.zoomScale;
                 const imageY = (clickY - viewState.imageOffset.y) / viewState.zoomScale;
 
@@ -1150,7 +1297,6 @@
         start() {
             if (Slideshow.isActive) return;
             Slideshow.isActive = true;
-            state.isSlideshowActive = true;
             Slideshow.interval = setInterval(() => Gallery.nextImage(), Slideshow.delay);
             Slideshow.showIndicator();
 
@@ -1167,7 +1313,6 @@
         stop() {
             if (!Slideshow.isActive) return;
             Slideshow.isActive = false;
-            state.isSlideshowActive = false;
             if (Slideshow.interval) {
                 clearInterval(Slideshow.interval);
                 Slideshow.interval = null;
@@ -1287,6 +1432,10 @@
         retryAttempts: new Map(),
 
         async handleImageError(error, url, element = null, context = {}) {
+            // The load was cancelled (session changed / requests aborted) —
+            // retrying would just fail instantly MAX_RETRIES more times.
+            if (error?.message === 'Stale session' || error?.message === 'Request aborted') return;
+
             const retryCount = ErrorHandler.retryAttempts.get(url) || 0;
             console.error(`Image load error (${retryCount + 1}/${CONFIG.MAX_RETRIES}):`, error, url);
 
@@ -1381,6 +1530,7 @@
             notificationsEnabled: true,
             notificationPosition: 'bottom',
             bottomStripeVisible: true,
+            stripMode: 'floating',
             hideNavArrows: false,
 
             // Post-action bar (global) visibility
@@ -1482,6 +1632,8 @@
                     return (typeof value === 'string' && value.length === 1) ? value : def;
                 case 'notificationPosition':
                     return ['top', 'bottom'].includes(value) ? value : 'bottom';
+                case 'stripMode':
+                    return ['floating', 'docked'].includes(value) ? value : 'floating';
                 case 'fullscreenMode':
                     return ['native', 'css', 'ask'].includes(value) ? value : 'native';
                 case 'sortMode':
@@ -1510,6 +1662,9 @@
 
                 if (SettingsManager.saveAllSettings(validatedSettings)) {
                     Object.assign(state, validatedSettings);
+                    // Reflect imported values immediately instead of after a reload.
+                    updateButtonLabels();
+                    Slideshow.init();
                     state.notificationType = 'success';
                     state.notification = 'Settings imported successfully';
                     return true;
@@ -1627,7 +1782,6 @@
         currentGalleryIndex: 0,
         currentResizeMode: SettingsManager.loadSetting('currentResizeMode', 'height'),
         isFullscreen: false,
-        currentPostUrl: null,
         maxZoomScale: SettingsManager.loadSetting('maxZoomScale', 5),
         originalImageSrcs: [],
         fullSizeImageSrcs: [],
@@ -1666,13 +1820,10 @@
         prevImageKey: SettingsManager.loadSetting('prevImageKey', 'k'),
         nextImageKey: SettingsManager.loadSetting('nextImageKey', 'l'),
         bottomStripeVisible: SettingsManager.loadSetting('bottomStripeVisible', true),
+        stripMode: SettingsManager.loadSetting('stripMode', 'floating'),
         zoomEnabled: SettingsManager.loadSetting('zoomEnabled', true),
         controlsVisible: true,
-        isDragging: false,
-        lastTapTime: 0,
-        zoomIndicatorVisible: true,
         inertiaEnabled: SettingsManager.loadSetting('inertiaEnabled', true),
-        isSlideshowActive: false,
         autoLoadOriginals: SettingsManager.loadSetting('autoLoadOriginals', true),
         downloadBtnText: SettingsManager.loadSetting('downloadBtnText', '【DOWNLOAD】'),
         downloadAllBtnText: SettingsManager.loadSetting('downloadAllBtnText', '【DL ALL】'),
@@ -1740,6 +1891,19 @@
                 const btn = DOM.$(`.${CSS.GALLERY.FULLSCREEN}`, galleryOverlay);
                 if (btn) btn.classList.toggle('active', Boolean(value));
             }
+            if (value) {
+                // Settle into a clean, truly-fullscreen view shortly after
+                // entering fullscreen; any pointer movement brings the
+                // controls (and the floating strip) right back.
+                clearTimeout(Gallery._controlsHideTimer);
+                Gallery._controlsHideTimer = setTimeout(() => {
+                    if (!PointerEngine.isDragging && !viewState.pinchZoomActive) {
+                        state.controlsVisible = false;
+                    }
+                }, 900);
+            } else {
+                state.controlsVisible = true;
+            }
         },
 
         zoomEnabled(value) {
@@ -1756,13 +1920,21 @@
             if (galleryOverlay) {
                 const stripContainer = DOM.$(`.${CSS.GALLERY.STRIP_CONTAINER}`, galleryOverlay);
                 if (stripContainer) stripContainer.style.display = value ? 'flex' : 'none';
+                const stripToggleBtn = DOM.$(`.${CSS.GALLERY.STRIP_TOGGLE}`, galleryOverlay);
+                if (stripToggleBtn) {
+                    stripToggleBtn.classList.toggle('active', Boolean(value));
+                    stripToggleBtn.title = value ? 'Hide thumbnail strip' : 'Show thumbnail strip';
+                }
             }
         },
 
-        isDragging(value) {
+        stripMode(value) {
+            SettingsManager.saveSetting('stripMode', value);
+            // 'floating' puts the strip on a higher layer above the media and
+            // slides it fully off-screen when controls hide (true fullscreen).
+            // 'docked' keeps the classic pinned bottom bar. Applied live.
             if (galleryOverlay) {
-                const container = DOM.$(`.${CSS.GALLERY.MAIN_IMG_CONTAINER}`, galleryOverlay);
-                container?.classList.toggle(CSS.GALLERY.GRABBING, value);
+                galleryOverlay.classList.toggle(CSS.GALLERY.STRIP_FLOATING, value !== 'docked');
             }
         },
 
@@ -1991,6 +2163,7 @@
             if (!total) return;
 
             const target = Math.max(0, Math.min(total - 1, currentIndex + (direction === 'next' ? 1 : -1)));
+            Gallery._ensureThumbnailsUpTo(target);
             const targetEl = DOM.$(`[data-index="${target}"]`, strip);
             if (targetEl) {
                 targetEl.focus();
@@ -2181,6 +2354,7 @@
             const doRemove = () => {
                 state.fullSizeImageSrcs.splice(index, 1);
                 state.originalImageSrcs.splice(index, 1);
+                if (index < Gallery._thumbRenderedCount) Gallery._thumbRenderedCount--;
                 Gallery._clearPreloadCache();
 
                 if (state.fullSizeImageSrcs.length === 0) {
@@ -2479,6 +2653,12 @@
                         { type: 'header', label: 'Appearance' },
                         { id: 'animationsToggle', label: 'Enable Animations', type: 'checkbox', stateKey: 'animationsEnabled', gmKey: 'animationsEnabled' },
                         { id: 'bottomStripeToggle', label: 'Show Thumbnail Strip in Gallery', type: 'checkbox', stateKey: 'bottomStripeVisible', gmKey: 'bottomStripeVisible' },
+                        { id: 'stripMode', label: 'Thumbnail Strip Mode', type: 'select', stateKey: 'stripMode', gmKey: 'stripMode',
+                            options: [
+                                { value: 'floating', text: 'Floating — higher layer above the image (true fullscreen)' },
+                                { value: 'docked', text: 'Docked — classic pinned bottom bar' }
+                            ] },
+                        { type: 'description', label: 'Floating mode layers the thumbnail strip above the media and slides it completely off-screen when controls hide, so fullscreen is truly fullscreen. Move the mouse to bring it back.' },
                         { type: 'divider' },
                         { type: 'header', label: 'Notifications' },
                         { id: 'notificationsEnabledToggle', label: 'Enable Notifications', type: 'checkbox', stateKey: 'notificationsEnabled', gmKey: 'notificationsEnabled' },
@@ -2517,7 +2697,10 @@
                             gmKey: 'slideshowDelay',
                             maxLength: 5,
                             onChange: (value) => {
-                                const validDelay = parseInt(value, 10) || CONFIG.SLIDESHOW_DELAY;
+                                const parsed = parseInt(value, 10);
+                                const validDelay = (Number.isFinite(parsed) && parsed >= 500)
+                                    ? parsed
+                                    : CONFIG.SLIDESHOW_DELAY;
                                 state.slideshowDelay = validDelay;
                                 Slideshow.setDelay(validDelay);
                             }
@@ -2536,6 +2719,11 @@
                         { type: 'header', label: 'Caching' },
                         { id: 'persistentCachingToggle', label: 'Enable Persistent Image Caching', type: 'checkbox', stateKey: 'enablePersistentCaching', gmKey: 'enablePersistentCaching' },
                         { id: 'clearCacheButton', label: 'Clear Persistent Cache', type: 'button', action: () => ImageCacheDB.clear() },
+                        { id: 'cacheStatsButton', label: 'Show Cache Statistics', type: 'button', action: async () => {
+                            const stats = await ImageCacheDB.getStats();
+                            const mb = (stats.bytes / 1048576).toFixed(1);
+                            UGModal.alert('Persistent Cache', `${stats.count} cached file(s), ~${mb} MB stored.`, 'info');
+                        } },
                         { type: 'divider' },
                         { type: 'header', label: 'File Naming' },
                         { id: 'zipFileNameFormatInput', label: 'ZIP Filename Format', type: 'text', stateKey: 'zipFileNameFormat', gmKey: 'zipFileNameFormat', maxLength: 200 },
@@ -2596,10 +2784,10 @@
                     settings: [
                         { type: 'header', label: 'Per-Image Button Visibility' },
                         { type: 'description', label: 'The small button row that appears above each thumbnail image.' },
-                        { id: 'hideThumbnailHeightButton', label: 'Hide FILL HEIGHT Button', type: 'checkbox', stateKey: 'hideThumbnailHeightButton', gmKey: 'hideThumbnailHeightButton', onChange: () => PostActions.updateButtonVisibilityLight() },
-                        { id: 'hideThumbnailWidthButton', label: 'Hide FILL WIDTH Button', type: 'checkbox', stateKey: 'hideThumbnailWidthButton', gmKey: 'hideThumbnailWidthButton', onChange: () => PostActions.updateButtonVisibilityLight() },
-                        { id: 'hideThumbnailFullButton', label: 'Hide FULL Button', type: 'checkbox', stateKey: 'hideThumbnailFullButton', gmKey: 'hideThumbnailFullButton', onChange: () => PostActions.updateButtonVisibilityLight() },
-                        { id: 'hideThumbnailDownloadButton', label: 'Hide DOWNLOAD Button', type: 'checkbox', stateKey: 'hideThumbnailDownloadButton', gmKey: 'hideThumbnailDownloadButton', onChange: () => PostActions.updateButtonVisibilityLight() }
+                        { id: 'hideThumbnailHeightButton', label: 'Hide FILL HEIGHT Button', type: 'checkbox', stateKey: 'hideThumbnailHeightButton', gmKey: 'hideThumbnailHeightButton', onChange: () => PostActions.refreshThumbnailButtonGroups() },
+                        { id: 'hideThumbnailWidthButton', label: 'Hide FILL WIDTH Button', type: 'checkbox', stateKey: 'hideThumbnailWidthButton', gmKey: 'hideThumbnailWidthButton', onChange: () => PostActions.refreshThumbnailButtonGroups() },
+                        { id: 'hideThumbnailFullButton', label: 'Hide FULL Button', type: 'checkbox', stateKey: 'hideThumbnailFullButton', gmKey: 'hideThumbnailFullButton', onChange: () => PostActions.refreshThumbnailButtonGroups() },
+                        { id: 'hideThumbnailDownloadButton', label: 'Hide DOWNLOAD Button', type: 'checkbox', stateKey: 'hideThumbnailDownloadButton', gmKey: 'hideThumbnailDownloadButton', onChange: () => PostActions.refreshThumbnailButtonGroups() }
                     ]
                 },
                 {
@@ -2805,6 +2993,9 @@
         _preloadedImageCache: {},
         _preloadingInProgress: {},
         _controlsHideTimer: null,
+        _thumbObserver: null,
+        _thumbSentinel: null,
+        _thumbRenderedCount: 0,
 
         _clearPreloadCache() {
             for (const index in Gallery._preloadedImageCache) {
@@ -2969,6 +3160,15 @@
                 }
             });
 
+            const stripToggleBtn = DOM.create('button', {
+                className: `${CSS.GALLERY.STRIP_TOGGLE} ${CSS.GALLERY.TOOLBAR_BTN}`,
+                'aria-label': 'Toggle Thumbnail Strip',
+                title: state.bottomStripeVisible ? 'Hide thumbnail strip' : 'Show thumbnail strip',
+                html: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="13" width="20" height="8" rx="2"></rect><line x1="7" y1="13" x2="7" y2="21"></line><line x1="12" y1="13" x2="12" y2="21"></line><line x1="17" y1="13" x2="17" y2="21"></line></svg>',
+                onclick: () => { state.bottomStripeVisible = !state.bottomStripeVisible; }
+            });
+            if (state.bottomStripeVisible) stripToggleBtn.classList.add('active');
+
             const fullscreenBtn = DOM.create('button', {
                 className: `${CSS.GALLERY.FULLSCREEN} ${CSS.GALLERY.TOOLBAR_BTN}`,
                 'aria-label': 'Toggle Fullscreen',
@@ -2976,7 +3176,7 @@
                 onclick: Gallery.toggleFullscreen
             });
 
-            toolbar.append(resetBtn, zoomControls, slideshowBtn, fillHeightBtn, fullscreenBtn);
+            toolbar.append(resetBtn, zoomControls, slideshowBtn, fillHeightBtn, stripToggleBtn, fullscreenBtn);
             expandedView.append(
                 toolbar,
                 DOM.create('button', {
@@ -3036,52 +3236,113 @@
             return strip;
         },
 
+        _makeThumbnailWrapper(mediaItem, index) {
+            const wrapper = DOM.create('div', {
+                className: CSS.GALLERY.THUMBNAIL_WRAPPER,
+                'data-index': index,
+                'aria-label': `Thumbnail ${index + 1}`,
+                tabindex: '0',
+                role: 'button',
+                onclick: () => Gallery.showExpandedView(index)
+            });
+
+            if (mediaItem.type === 'video') {
+                wrapper.appendChild(DOM.create('div', {
+                    className: 'ug-play-icon',
+                    html: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>'
+                }));
+                wrapper.appendChild(DOM.create('img', {
+                    src: mediaItem.poster || FALLBACK_POSTER,
+                    loading: 'lazy',
+                    decoding: 'async',
+                    className: CSS.GALLERY.THUMBNAIL
+                }));
+            } else if (mediaItem.type === 'attachment') {
+                wrapper.appendChild(DOM.create('div', {
+                    className: 'ug-thumbnail-file-icon',
+                    html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
+                }));
+            } else {
+                wrapper.appendChild(DOM.create('img', {
+                    src: mediaItem.src,
+                    loading: 'lazy',
+                    decoding: 'async',
+                    className: CSS.GALLERY.THUMBNAIL
+                }));
+            }
+            return wrapper;
+        },
+
+        _appendThumbnailChunk(strip, from, to) {
+            const items = state.fullSizeImageSrcs;
+            const end = Math.min(to, items.length);
+            const fragment = document.createDocumentFragment();
+            for (let i = from; i < end; i++) {
+                const mediaItem = items[i];
+                if (!mediaItem) continue;
+                fragment.appendChild(Gallery._makeThumbnailWrapper(mediaItem, i));
+            }
+            Gallery._thumbSentinel?.remove();
+            strip.appendChild(fragment);
+            Gallery._thumbRenderedCount = Math.max(Gallery._thumbRenderedCount, end);
+
+            if (Gallery._thumbRenderedCount < items.length) {
+                if (!Gallery._thumbSentinel) {
+                    Gallery._thumbSentinel = DOM.create('div', {
+                        className: 'ug-thumbnail-strip-sentinel',
+                        'aria-hidden': 'true',
+                        style: { flex: '0 0 1px', width: '1px', alignSelf: 'stretch' }
+                    });
+                }
+                strip.appendChild(Gallery._thumbSentinel);
+                if (!Gallery._thumbObserver) {
+                    Gallery._thumbObserver = new IntersectionObserver((entries) => {
+                        if (entries.some(en => en.isIntersecting)) {
+                            Gallery._appendThumbnailChunk(
+                                strip,
+                                Gallery._thumbRenderedCount,
+                                Gallery._thumbRenderedCount + CONFIG.THUMBNAIL_CHUNK_SIZE
+                            );
+                        }
+                    }, { root: strip, rootMargin: '400px' });
+                }
+                Gallery._thumbObserver.disconnect();
+                Gallery._thumbObserver.observe(Gallery._thumbSentinel);
+            } else {
+                Gallery._thumbSentinel = null;
+                Gallery._thumbObserver?.disconnect();
+                Gallery._thumbObserver = null;
+            }
+        },
+
         _populateAllThumbnails(stripThumbnailsContainer) {
             stripThumbnailsContainer.replaceChildren();
-            const fragment = document.createDocumentFragment();
+            Gallery._thumbObserver?.disconnect();
+            Gallery._thumbObserver = null;
+            Gallery._thumbSentinel = null;
+            Gallery._thumbRenderedCount = 0;
 
-            const fileIconSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+            const total = state.fullSizeImageSrcs.length;
+            const firstChunk = total > CONFIG.THUMBNAIL_CHUNK_THRESHOLD
+                ? CONFIG.THUMBNAIL_CHUNK_SIZE
+                : total;
+            Gallery._appendThumbnailChunk(stripThumbnailsContainer, 0, firstChunk);
+        },
 
-            state.fullSizeImageSrcs.forEach((mediaItem, index) => {
-                if (!mediaItem) return;
-
-                const wrapper = DOM.create('div', {
-                    className: CSS.GALLERY.THUMBNAIL_WRAPPER,
-                    'data-index': index,
-                    'aria-label': `Thumbnail ${index + 1}`,
-                    tabindex: '0',
-                    role: 'button',
-                    onclick: () => Gallery.showExpandedView(index)
-                });
-
-                if (mediaItem.type === 'video') {
-                    wrapper.appendChild(DOM.create('div', {
-                        className: 'ug-play-icon',
-                        html: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>'
-                    }));
-                    wrapper.appendChild(DOM.create('img', {
-                        src: mediaItem.poster || FALLBACK_POSTER,
-                        loading: 'lazy',
-                        decoding: 'async',
-                        className: CSS.GALLERY.THUMBNAIL
-                    }));
-                } else if (mediaItem.type === 'attachment') {
-                    wrapper.appendChild(DOM.create('div', {
-                        className: 'ug-thumbnail-file-icon',
-                        html: fileIconSvg
-                    }));
-                } else {
-                    wrapper.appendChild(DOM.create('img', {
-                        src: mediaItem.src,
-                        loading: 'lazy',
-                        decoding: 'async',
-                        className: CSS.GALLERY.THUMBNAIL
-                    }));
-                }
-
-                fragment.appendChild(wrapper);
-            });
-            stripThumbnailsContainer.appendChild(fragment);
+        // Synchronously renders chunks until the given index exists in the DOM
+        // (no-op for small galleries). Used before selecting/centering a thumb.
+        _ensureThumbnailsUpTo(index) {
+            if (!galleryOverlay || !Number.isFinite(index)) return;
+            const strip = DOM.$(`.${CSS.GALLERY.THUMBNAIL_STRIP}`, galleryOverlay);
+            if (!strip) return;
+            const total = state.fullSizeImageSrcs.length;
+            while (Gallery._thumbRenderedCount <= index && Gallery._thumbRenderedCount < total) {
+                Gallery._appendThumbnailChunk(
+                    strip,
+                    Gallery._thumbRenderedCount,
+                    Gallery._thumbRenderedCount + CONFIG.THUMBNAIL_CHUNK_SIZE
+                );
+            }
         },
 
         _setupGalleryInteractions(expandedView, mainImageContainer) {
@@ -3089,6 +3350,11 @@
                 const currentItem = state.fullSizeImageSrcs[state.currentGalleryIndex];
                 if (currentItem && currentItem.type === 'image') Zoom.handleWheelZoom(e);
             }, { passive: false });
+            mainImageContainer.addEventListener('dblclick', (e) => {
+                if (PointerEngine.lastPointerType && PointerEngine.lastPointerType !== 'mouse') return;
+                const currentItem = state.fullSizeImageSrcs[state.currentGalleryIndex];
+                if (currentItem && currentItem.type === 'image') PointerEngine.handleDoubleTap(e);
+            });
 
             PointerEngine.init(mainImageContainer);
 
@@ -3115,6 +3381,8 @@
                 return;
             }
 
+            galleryOpenerElement = document.activeElement;
+
             galleryOverlay = DOM.create('div', {
                 id: 'gallery-overlay',
                 className: CSS.GALLERY.OVERLAY
@@ -3135,6 +3403,10 @@
 
             document.body.appendChild(galleryOverlay);
 
+            if (state.stripMode !== 'docked') {
+                galleryOverlay.classList.add(CSS.GALLERY.STRIP_FLOATING);
+            }
+
             if (state.isFullscreen) {
                 document.body.classList.add('ug-fullscreen');
                 galleryOverlay.classList.add(CSS.GALLERY.FULLSCREEN_OVERLAY);
@@ -3142,9 +3414,12 @@
 
             Gallery._populateAllThumbnails(stripThumbnailsContainer);
             Gallery._setupGalleryInteractions(expandedView, mainImageContainer);
+            // Bind strip handlers once per gallery; they read live DOM state,
+            // so per-image re-binding is unnecessary churn.
+            ThumbnailStrip.init();
+            Accessibility.init();
             Gallery.showExpandedView(0);
             state.isGalleryMode = true;
-            Accessibility.init();
         },
 
         showExpandedView(index) {
@@ -3181,6 +3456,10 @@
                 cancelAnimationFrame(PointerEngine.animationFrame);
                 PointerEngine.animationFrame = null;
             }
+            if (PointerEngine.boundaryAnimation) {
+                cancelAnimationFrame(PointerEngine.boundaryAnimation);
+                PointerEngine.boundaryAnimation = null;
+            }
 
             mainMediaContainer.replaceChildren();
             mainMediaContainer.classList.remove(CSS.GALLERY.ZOOMED);
@@ -3197,7 +3476,9 @@
 
                 const imageUrlToLoad = Gallery._preloadedImageCache[index] || mediaItem.src;
                 if (ambientBackground) {
-                    ambientBackground.style.backgroundImage = `url("${imageUrlToLoad}")`;
+                    // Strip characters that could escape the CSS url("...") context.
+                    const safeUrl = String(imageUrlToLoad).replace(/["\\]/g, '');
+                    ambientBackground.style.backgroundImage = `url("${safeUrl}")`;
                 }
 
                 const mainImage = DOM.create('img', {
@@ -3205,6 +3486,7 @@
                     decoding: 'async',
                     ondragstart: e => e.preventDefault(),
                     onload() {
+                        if (!this.isConnected) return;
                         this.style.opacity = '1';
                         this.style.transformOrigin = '0 0';
                         ImageSizing.applyBestFit(this);
@@ -3216,6 +3498,7 @@
                         Gallery._preloadAdjacentImages(index);
                     },
                     onerror() {
+                        if (!this.isConnected) return;
                         if (imageUrlToLoad !== mediaItem.src && !this.dataset.ugRetried) {
                             this.dataset.ugRetried = 'true';
                             this.src = mediaItem.src;
@@ -3302,9 +3585,11 @@
             if (counter) {
                 counter.textContent = `${index + 1} / ${state.fullSizeImageSrcs.length}`;
                 counter.classList.remove(CSS.GALLERY.HIDE);
+                Accessibility.announce(`Item ${index + 1} of ${state.fullSizeImageSrcs.length}`);
             }
             expandedView?.classList.remove(CSS.GALLERY.HIDE);
 
+            Gallery._ensureThumbnailsUpTo(index);
             const strip = DOM.$(`.${CSS.GALLERY.THUMBNAIL_STRIP}`, galleryOverlay);
             if (strip) {
                 DOM.$$('.selected', strip).forEach(s => s.classList.remove('selected'));
@@ -3315,11 +3600,8 @@
                 }
             }
 
-            setTimeout(() => {
-                ThumbnailStrip.init();
-                ThumbnailStrip.updateThumbnailNumbers();
-                ThumbnailStrip.updateScrollIndicators();
-            }, 100);
+            ThumbnailStrip.updateThumbnailNumbers();
+            ThumbnailStrip.updateScrollIndicators();
         },
 
         closeGallery() {
@@ -3344,12 +3626,28 @@
 
             if (PointerEngine.inertiaAnimation) cancelAnimationFrame(PointerEngine.inertiaAnimation);
             if (PointerEngine.animationFrame) cancelAnimationFrame(PointerEngine.animationFrame);
+            if (PointerEngine.boundaryAnimation) cancelAnimationFrame(PointerEngine.boundaryAnimation);
+            PointerEngine.inertiaAnimation = null;
+            PointerEngine.animationFrame = null;
+            PointerEngine.boundaryAnimation = null;
 
             Gallery._releaseMediaElements(galleryOverlay);
             galleryOverlay.remove();
             galleryOverlay = null;
             PointerEngine.cachedImgEl = null;
             PointerEngine.cachedZoomEl = null;
+
+            Gallery._thumbObserver?.disconnect();
+            Gallery._thumbObserver = null;
+            Gallery._thumbSentinel = null;
+            Gallery._thumbRenderedCount = 0;
+
+            try {
+                if (galleryOpenerElement && galleryOpenerElement.isConnected) {
+                    galleryOpenerElement.focus();
+                }
+            } catch { /* ignore */ }
+            galleryOpenerElement = null;
         },
 
         toggleGallery() {
@@ -3489,7 +3787,8 @@
                     }
 
                     let handle = null;
-                    const cleanup = () => { ActiveRequests.remove(sessionId, handle); };
+                    const trackId = sessionId ?? 'direct';
+                    const cleanup = () => { ActiveRequests.remove(trackId, handle); };
 
                     handle = GM.xmlHttpRequest({
                         method: 'GET',
@@ -3516,7 +3815,7 @@
                         onabort: () => { cleanup(); reject(new Error('Request aborted')); }
                     });
 
-                    ActiveRequests.add(sessionId, handle);
+                    ActiveRequests.add(trackId, handle);
                 });
             } catch (err) {
                 if (err.message === 'Stale session' || err.message === 'Request aborted') throw err;
@@ -3567,6 +3866,27 @@
 
         fetchBlobDirect(url) {
             return ImageLoader.fetchBlob(url, null);
+        },
+
+        _pruneBlobUrls() {
+            if (loadedBlobUrls.size === 0) return;
+            const inUse = new Set();
+            DOM.$$('img[src^="blob:"], video[src^="blob:"], video[poster^="blob:"]').forEach(el => {
+                if (typeof el.src === 'string' && el.src.startsWith('blob:')) inUse.add(el.src);
+                const poster = el.getAttribute('poster');
+                if (poster && poster.startsWith('blob:')) inUse.add(poster);
+            });
+            state.fullSizeImageSrcs.forEach(item => {
+                if (!item) return;
+                if (typeof item.src === 'string' && item.src.startsWith('blob:')) inUse.add(item.src);
+                if (typeof item.poster === 'string' && item.poster.startsWith('blob:')) inUse.add(item.poster);
+            });
+            for (const [key, url] of loadedBlobUrls) {
+                if (!inUse.has(url)) {
+                    BlobManager.revokeUrl(url);
+                    loadedBlobUrls.delete(key);
+                }
+            }
         },
 
         async loadImageAndApplyToPage(linkElement, galleryIndex, posterHref, isUniqueForGallery, sessionId, itemData) {
@@ -3656,14 +3976,21 @@
                 if (linkElement.closest('.post__user-profile') || linkElement.closest('.scrape__user-profile')) return;
                 if (linkElement.classList.contains('user-header__avatar')) return;
 
-                const isVideo = linkElement.matches(SELECTORS.VIDEO_LINK) || linkElement.href?.match(/\.(mp4|webm|mov)$/i);
+                const cleanHref = (linkElement.getAttribute('href') || linkElement.href || '').split('?')[0];
+                const isVideo = linkElement.matches(SELECTORS.VIDEO_LINK) || /\.(mp4|webm|mov)$/i.test(cleanHref);
                 let url;
                 let poster;
 
                 if (isVideo) {
-                    url = linkElement.getAttribute('href')?.split('?')[0];
-                    poster = linkElement.querySelector('img, video')?.getAttribute('poster') ||
-                        (linkElement.querySelector('img')?.getAttribute('data-src') || linkElement.querySelector('img')?.src);
+                    url = cleanHref || undefined;
+                    const posterImg = linkElement.querySelector('img');
+                    let posterSrc = posterImg?.getAttribute('data-src') || posterImg?.src;
+                    if (typeof posterSrc === 'string' && posterSrc.startsWith('blob:')) {
+                        for (const [orig, blobbed] of loadedBlobUrls) {
+                            if (blobbed === posterSrc) { posterSrc = orig; break; }
+                        }
+                    }
+                    poster = linkElement.querySelector('img, video')?.getAttribute('poster') || posterSrc;
                     if (!url) return;
                     if (!poster) poster = FALLBACK_POSTER;
 
@@ -3761,9 +4088,6 @@
                 await Utils.delay(16);
                 if (state.currentLoadSessionId !== sessionId) return;
 
-                const previousBlobUrls = new Map(loadedBlobUrls);
-                loadedBlobUrls.clear();
-
                 Object.assign(state, {
                     fullSizeImageSrcs: [],
                     originalImageSrcs: [],
@@ -3805,15 +4129,14 @@
                     await ImageLoader._concurrentRunner(uniqueItems, sessionId);
                     if (state.currentLoadSessionId !== sessionId) return;
 
-                    previousBlobUrls.forEach((url, key) => {
-                        if (loadedBlobUrls.has(key)) BlobManager.revokeUrl(url);
-                    });
+                    ImageLoader._pruneBlobUrls();
 
                     ImageLoader.updateFinalStatus();
                     DOM.$$('img.post__image.ug-image-loaded').forEach(img => {
                         ImageLoader.imageActions[state.currentResizeMode](img);
                     });
                 } else {
+                    ImageLoader._pruneBlobUrls();
                     state.notificationType = 'success';
                     state.notification = `Gallery Ready (${state.totalImages} items).`;
                 }
@@ -3860,21 +4183,22 @@
 
         _buildFileName: (item, index) => {
             const meta = DownloadManager._getPostMeta();
-            const extMatch = item.fileName.match(/\.([a-z0-9]+)$/i);
+            const rawName = String(item.fileName || '');
+            const extMatch = rawName.match(/\.([a-z0-9]+)$/i);
             const correctExt = extMatch
                 ? extMatch[1].toLowerCase()
                 : (item.type === 'video' ? 'mp4' : item.type === 'attachment' ? 'bin' : 'jpg');
-            const fileNameWithoutExt = item.fileName.replace(/\.[^/.]+$/, '');
+            const fileNameWithoutExt = rawName.replace(/\.[^/.]+$/, '');
 
             let formattedName = state.imageFileNameFormat
-                .replace(/{date_published}/gi, meta.datePublished)
-                .replace(/{date_edited}/gi, meta.dateEdited)
-                .replace(/{date_imported}/gi, meta.dateImported)
-                .replace(/{date}/gi, meta.datePublished)
-                .replace('{title}', Utils.sanitizeFileName(meta.title))
-                .replace('{artistName}', Utils.sanitizeFileName(meta.artistName))
-                .replace('{fileName}', Utils.sanitizeFileName(fileNameWithoutExt))
-                .replace('{index}', index + 1);
+                .replace(/{date_published}/gi, () => meta.datePublished)
+                .replace(/{date_edited}/gi, () => meta.dateEdited)
+                .replace(/{date_imported}/gi, () => meta.dateImported)
+                .replace(/{date}/gi, () => meta.datePublished)
+                .replace(/{title}/gi, () => Utils.sanitizeFileName(meta.title))
+                .replace(/{artistName}/gi, () => Utils.sanitizeFileName(meta.artistName))
+                .replace(/{fileName}/gi, () => Utils.sanitizeFileName(fileNameWithoutExt))
+                .replace(/{index}/gi, () => index + 1);
 
             if (!formattedName.toLowerCase().endsWith(`.${correctExt}`)) {
                 formattedName += `.${correctExt}`;
@@ -3885,9 +4209,9 @@
         downloadFile: async (url, name) => {
             await RequestPacer.throttle(url);
 
-            return new Promise(resolve => {
+            const gmResult = await new Promise(resolve => {
                 if (typeof GM_download !== 'function') {
-                    resolve(false);
+                    resolve(null);
                     return;
                 }
                 try {
@@ -3904,6 +4228,17 @@
                     resolve(false);
                 }
             });
+            if (gmResult === true) return true;
+
+            try {
+                const blob = await ImageLoader.fetchBlobDirect(url);
+                if (!blob) return false;
+                DOM.saveBlob(blob, name);
+                return true;
+            } catch (e) {
+                console.error('Ultra Galleries: fallback download failed:', e);
+                return false;
+            }
         },
 
         createZipWorker() {
@@ -3962,9 +4297,60 @@
             return DownloadManager._worker;
         },
 
+        // ---- Cancel-download pill ----------------------------------------
+        // The streaming loop already checks state.isDownloading on every file;
+        // this is the UI + abort wiring that makes cancellation reachable.
+        _ensureCancelStyle() {
+            if (document.getElementById('ug-dl-cancel-style')) return;
+            const node = GM_addStyle(
+                '#ug-dl-cancel{position:fixed;right:20px;bottom:20px;z-index:2147483000;' +
+                'padding:8px 16px;border:1px solid rgba(255,110,110,.55);border-radius:999px;' +
+                'background:rgba(24,24,28,.94);color:#ff8a8a;font:600 13px/1.2 system-ui,sans-serif;' +
+                'cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.5);}' +
+                '#ug-dl-cancel:hover{background:rgba(60,24,28,.96);color:#ffb3b3;}'
+            );
+            if (node && node.setAttribute) node.setAttribute('id', 'ug-dl-cancel-style');
+        },
+
+        _showCancelButton() {
+            if (document.getElementById('ug-dl-cancel')) return;
+            DownloadManager._ensureCancelStyle();
+            document.body.appendChild(DOM.create('button', {
+                id: 'ug-dl-cancel',
+                type: 'button',
+                text: '\u2715 Cancel download',
+                title: 'Cancel the running ZIP download',
+                onclick: () => DownloadManager.cancelDownload()
+            }));
+        },
+
+        _hideCancelButton() {
+            document.getElementById('ug-dl-cancel')?.remove();
+        },
+
+        cancelDownload() {
+            if (!state.isDownloading) return;
+            state.isDownloading = false;
+            // Abort in-flight ZIP fetches immediately instead of letting them
+            // finish into a dead worker.
+            ActiveRequests.abortSession('direct');
+            DownloadManager.cleanupWorker();
+            state.notificationType = 'warning';
+            state.notification = 'Download cancelled.';
+        },
+
         downloadAllImages: async (filter = 'all') => {
             if (state.isDownloading) {
                 UGModal.alert('Download in Progress', 'A download is already running.', 'info');
+                return;
+            }
+
+            if (!GM_getResourceText('jszipScript')) {
+                UGModal.alert(
+                    'Download Unavailable',
+                    'The JSZip library resource failed to load. Check your connection, then update or reinstall the script.',
+                    'warning'
+                );
                 return;
             }
 
@@ -4020,6 +4406,7 @@
             if (!result.isConfirmed) return;
 
             state.isDownloading = true;
+            DownloadManager._showCancelButton();
             state.notificationType = 'info';
             state.notification = `Preparing ${kindWord}...`;
 
@@ -4030,22 +4417,34 @@
 
             const worker = DownloadManager.createZipWorker();
 
+            worker.onerror = (err) => {
+                console.error('Ultra Galleries: ZIP worker error:', err);
+                state.notificationType = 'error';
+                state.notification = 'Download failed: ZIP worker crashed.';
+                DownloadManager.cleanupWorker();
+            };
+
             worker.onmessage = (e) => {
                 const { type, message, zipBlob } = e.data;
 
                 if (type === 'progress') {
                     notifyProgress(message);
                 } else if (type === 'complete') {
+                    if (!state.isDownloading) {
+                        // Cancelled while the ZIP was being generated.
+                        DownloadManager.cleanupWorker();
+                        return;
+                    }
                     const sanitizedTitle = Utils.sanitizeFileName(meta.title);
                     const sanitizedArtistName = Utils.sanitizeFileName(meta.artistName);
 
                     let zipFileName = state.zipFileNameFormat
-                        .replace(/{date_published}/gi, meta.datePublished)
-                        .replace(/{date_edited}/gi, meta.dateEdited)
-                        .replace(/{date_imported}/gi, meta.dateImported)
-                        .replace(/{date}/gi, meta.datePublished)
-                        .replace('{artistName}', sanitizedArtistName)
-                        .replace('{title}', sanitizedTitle);
+                        .replace(/{date_published}/gi, () => meta.datePublished)
+                        .replace(/{date_edited}/gi, () => meta.dateEdited)
+                        .replace(/{date_imported}/gi, () => meta.dateImported)
+                        .replace(/{date}/gi, () => meta.datePublished)
+                        .replace(/{artistName}/gi, () => sanitizedArtistName)
+                        .replace(/{title}/gi, () => sanitizedTitle);
 
                     if (filter !== 'all') {
                         if (zipFileName.toLowerCase().endsWith('.zip')) {
@@ -4060,8 +4459,8 @@
 
                     DOM.saveBlob(zipBlob, zipFileName);
 
-                    state.notification = 'Download complete!';
                     state.notificationType = 'success';
+                    state.notification = 'Download complete!';
                     DownloadManager.cleanupWorker();
                 } else if (type === 'error') {
                     state.notificationType = 'error';
@@ -4124,6 +4523,9 @@
                 }).then(() => {
                     if (state.isDownloading && DownloadManager._worker) {
                         DownloadManager._worker.postMessage({ type: 'generate' });
+                    } else {
+                        // Aborted mid-run — don't leak the worker or its blob URL.
+                        DownloadManager.cleanupWorker();
                     }
                 });
             };
@@ -4147,10 +4549,10 @@
                     ? 'Starting video download...'
                     : 'Starting file download...';
                 const ok = await DownloadManager.downloadFile(item.src, formattedName);
+                state.notificationType = ok ? 'success' : 'error';
                 state.notification = ok
                     ? (item.type === 'video' ? 'Video download complete' : 'File download complete')
                     : (item.type === 'video' ? 'Video download failed' : 'File download failed');
-                state.notificationType = ok ? 'success' : 'error';
             } else {
                 try {
                     let blob = await ImageCacheDB.get(item.src);
@@ -4173,6 +4575,7 @@
         },
 
         cleanupWorker() {
+            DownloadManager._hideCancelButton();
             if (DownloadManager._worker) {
                 DownloadManager._worker.terminate();
                 DownloadManager._worker = null;
@@ -4191,6 +4594,7 @@
     const PostActions = {
         imageLinkClickHandler: (event) => {
             if (event.button !== 0) return;
+            if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
             const clickedImageLink = event.target.closest(SELECTORS.IMAGE_LINK) || event.target.closest(SELECTORS.VIDEO_LINK);
             if (clickedImageLink) {
                 event.preventDefault();
@@ -4251,25 +4655,7 @@
                         if (thumbnailDiv.querySelector(`.${CSS.BTN_CONTAINER}`)) return;
 
                         imgElement.classList.add('post__image');
-                        const buttonGroupConfig = [
-                            { text: BUTTONS.HEIGHT, action: (evt) => PostActions.resizeImage('height', evt), name: 'HEIGHT' },
-                            { text: BUTTONS.WIDTH, action: (evt) => PostActions.resizeImage('width', evt), name: 'WIDTH' },
-                            { text: BUTTONS.FULL, action: () => ImageLoader.imageActions.full(imgElement), name: 'FULL' },
-                            {
-                                text: BUTTONS.DOWNLOAD,
-                                action: () => {
-                                    const link = imgElement.closest('a');
-                                    const originalSrc = link ? link.href.split('?')[0] : imgElement.dataset.originalSrc;
-                                    const downloadIndex = state.originalImageSrcs.findIndex(item => item && item.src === originalSrc);
-                                    if (downloadIndex > -1) {
-                                        DownloadManager.downloadImageByIndex(downloadIndex);
-                                    }
-                                },
-                                name: 'DOWNLOAD'
-                            }
-                        ];
-
-                        const buttonGroupElement = UI.createButtonGroup(buttonGroupConfig);
+                        const buttonGroupElement = PostActions._buildThumbButtonGroup(imgElement);
                         if (buttonGroupElement.childElementCount > 0) {
                             buttonGroupElement.classList.add('ug-injected-ui');
                             thumbnailDiv.insertBefore(buttonGroupElement, thumbnailDiv.firstChild);
@@ -4283,7 +4669,6 @@
                 }
 
                 ImageLoader.loadImages();
-                state.currentPostUrl = window.location.href;
             } catch (error) {
                 console.error('Error initializing post actions:', error);
             }
@@ -4291,6 +4676,7 @@
 
         cleanupPostActions() {
             ActiveRequests.abortAll();
+            UGModal.closeAny();
             state.currentLoadSessionId = null;
             ErrorHandler.clearRetries();
             UI.forceHideNotification();
@@ -4329,12 +4715,47 @@
                 loadedImages: 0,
                 totalImages: 0,
                 errorCount: 0,
-                isLoading: false,
-                currentPostUrl: null
+                isLoading: false
             });
 
             elements.galleryButton = null;
             elements.settingsButton = null;
+        },
+
+        _buildThumbButtonGroup(imgElement) {
+            return UI.createButtonGroup([
+                { text: BUTTONS.HEIGHT, action: (evt) => PostActions.resizeImage('height', evt), name: 'HEIGHT' },
+                { text: BUTTONS.WIDTH, action: (evt) => PostActions.resizeImage('width', evt), name: 'WIDTH' },
+                { text: BUTTONS.FULL, action: () => ImageLoader.imageActions.full(imgElement), name: 'FULL' },
+                {
+                    text: BUTTONS.DOWNLOAD,
+                    action: () => {
+                        const link = imgElement.closest('a');
+                        const originalSrc = link ? link.href.split('?')[0] : imgElement.dataset.originalSrc;
+                        const downloadIndex = state.originalImageSrcs.findIndex(item => item && item.src === originalSrc);
+                        if (downloadIndex > -1) {
+                            DownloadManager.downloadImageByIndex(downloadIndex);
+                        }
+                    },
+                    name: 'DOWNLOAD'
+                }
+            ]);
+        },
+
+        refreshThumbnailButtonGroups() {
+            const filesArea = DOM.$('div.post__files') || DOM.$('section.site-section--post') || DOM.$('.post__body');
+            if (!filesArea) return;
+            DOM.$$(SELECTORS.FILE_DIVS, filesArea).forEach(thumbnailDiv => {
+                const imgElement = thumbnailDiv.querySelector('img');
+                if (!imgElement) return;
+                thumbnailDiv.querySelector(`.${CSS.BTN_CONTAINER}`)?.remove();
+                const buttonGroupElement = PostActions._buildThumbButtonGroup(imgElement);
+                if (buttonGroupElement.childElementCount > 0) {
+                    buttonGroupElement.classList.add('ug-injected-ui');
+                    thumbnailDiv.insertBefore(buttonGroupElement, thumbnailDiv.firstChild);
+                }
+            });
+            PostActions.updateButtonVisibilityLight();
         },
 
         updateButtonVisibilityLight() {
@@ -4400,9 +4821,36 @@
             return Boolean(settingValue) && String(eventKey).toLowerCase() === String(settingValue).toLowerCase();
         },
 
+        showShortcutHelp() {
+            const up = (k) => String(k || '').toUpperCase();
+            UGModal.alert(
+                'Keyboard Shortcuts',
+                `Navigate: \u2190 / \u2192 (or ${up(state.prevImageKey)} / ${up(state.nextImageKey)})  \u00b7  First / Last: Home / End  \u00b7  ` +
+                `Zoom: + / \u2212  \u00b7  Reset zoom: 0  \u00b7  Slideshow: Space  \u00b7  Fullscreen: F  \u00b7  ` +
+                `Close gallery: Esc  \u00b7  Open/close gallery: ${up(state.galleryKey)}  \u00b7  This help: ?`,
+                'info'
+            );
+        },
+
+        handleResize: Utils.debounce(() => {
+            if (galleryOverlay && state.isGalleryMode) {
+                PointerEngine.enforceBoundaries();
+            }
+        }, 150),
+
         handleGlobalKeyDown(event) {
+            if (!event.key) return;
             const activeEl = document.activeElement;
             if (activeEl && (activeEl.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName))) {
+                return;
+            }
+
+            if (DOM.$('.ug-modal-overlay')) return;
+            if (state.settingsOpen) {
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    state.settingsOpen = false;
+                }
                 return;
             }
 
@@ -4421,17 +4869,24 @@
                 return;
             }
 
-            if (state.settingsOpen && event.key === 'Escape') {
-                event.preventDefault();
-                state.settingsOpen = false;
-                return;
-            }
-
             if (state.isGalleryMode && galleryOverlay) {
                 const expandedView = DOM.$(`.${CSS.GALLERY.EXPANDED_VIEW}`, galleryOverlay);
                 if (event.key === 'Escape') {
                     event.preventDefault();
                     Gallery.closeGallery();
+                    return;
+                }
+
+                const focusIsControl = Boolean(activeEl) && activeEl !== document.body &&
+                    (activeEl.tagName === 'BUTTON' || activeEl.tagName === 'A' || activeEl.hasAttribute('tabindex'));
+                const stripOwnsArrows = focusIsControl &&
+                    Boolean(activeEl.closest?.(`.${CSS.GALLERY.THUMBNAIL_STRIP}`)) &&
+                    (keyLower === 'arrowleft' || keyLower === 'arrowright');
+                if (stripOwnsArrows || (keyLower === ' ' && focusIsControl)) return;
+
+                if (event.key === '?') {
+                    event.preventDefault();
+                    EventHandlers.showShortcutHelp();
                     return;
                 }
 
@@ -4536,6 +4991,70 @@
         ThumbnailStrip.cleanup();
 
         document.removeEventListener('keydown', EventHandlers.handleGlobalKeyDown);
+        window.removeEventListener('resize', EventHandlers.handleResize);
+    };
+
+    // ====================================================
+    // Floating Thumbnail Strip Styles
+    // Supplement to the external main CSS (@resource is pinned to a fixed
+    // version), injected from the script so it always applies. Scoped under
+    // .ug-strip-floating on the gallery overlay; injected AFTER mainCSS so
+    // it wins the cascade at equal specificity.
+    // ====================================================
+    const STRIP_MODE_CSS = `
+/* ---- Ultra Galleries: floating thumbnail strip ("higher layer" mode) ---- */
+.ug-gallery-overlay.ug-strip-floating .ug-gallery-thumbnail-strip-container {
+    left: 16px;
+    right: 16px;
+    bottom: 14px;
+    width: auto;
+    height: calc(var(--ug-strip-height, 76px) - 10px);
+    border: 1px solid var(--ug-border-strong, rgba(255, 255, 255, 0.12));
+    border-radius: var(--ug-radius-lg, 16px);
+    box-shadow: var(--ug-shadow-lg, 0 12px 40px rgba(0, 0, 0, 0.45));
+    z-index: 30;
+    transition:
+        transform var(--ug-duration-slow, 400ms) var(--ug-ease-out, cubic-bezier(0.16, 1, 0.3, 1)),
+        opacity var(--ug-duration-normal, 250ms) var(--ug-ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+}
+
+/* Slide the strip completely off-screen when controls auto-hide, so
+   fullscreen is truly fullscreen — media edge-to-edge, nothing docked. */
+.ug-gallery-overlay.ug-strip-floating .ug-gallery-expanded-view.ug-controls-hidden .ug-gallery-thumbnail-strip-container {
+    transform: translateY(calc(100% + 32px));
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Full-bleed layout: nav arrows center on the whole media area and the
+   counter floats just above the strip instead of reserving space for it. */
+.ug-gallery-overlay.ug-strip-floating .ug-gallery-nav-container { bottom: 0; }
+.ug-gallery-overlay.ug-strip-floating .ug-gallery-counter {
+    bottom: calc(var(--ug-strip-height, 76px) + 18px);
+}
+
+/* Toolbar quick-toggle button for the strip */
+.ug-strip-toggle.active {
+    color: var(--ug-accent, #6f5fff);
+    background: var(--ug-accent-subtle, rgba(111, 95, 255, 0.08));
+}
+
+/* Keep the floating strip clear of the screen edges on small displays */
+@media (max-width: 640px) {
+    .ug-gallery-overlay.ug-strip-floating .ug-gallery-thumbnail-strip-container {
+        left: 8px;
+        right: 8px;
+        bottom: 8px;
+    }
+}
+`;
+
+    const injectStripModeStyles = () => {
+        if (document.getElementById('ug-strip-mode-style')) return;
+        const node = GM_addStyle(STRIP_MODE_CSS);
+        if (node && node.setAttribute) {
+            node.setAttribute('id', 'ug-strip-mode-style');
+        }
     };
 
     const init = async () => {
@@ -4552,8 +5071,8 @@
             } else {
                 console.warn('Ultra Galleries: Failed to load main CSS resource.');
             }
+            injectStripModeStyles();
 
-            // One-time migration from 4.2.x single-scope button-visibility keys.
             if (GM_getValue('hideFullButton') !== undefined && GM_getValue('hideThumbnailFullButton') === undefined) {
                 SettingsManager.saveSetting('hideThumbnailFullButton', SettingsManager.loadSetting('hideFullButton', false));
                 SettingsManager.saveSetting('hideThumbnailWidthButton', SettingsManager.loadSetting('hideWidthButton', false));
@@ -4573,6 +5092,7 @@
             }
 
             document.addEventListener('keydown', EventHandlers.handleGlobalKeyDown);
+            window.addEventListener('resize', EventHandlers.handleResize);
             window.addEventListener('beforeunload', fullCleanup);
 
             let galleryWasNativeFullscreen = false;
@@ -4588,13 +5108,20 @@
 
             if ('navigation' in window) {
                 window.navigation.addEventListener('navigate', (e) => {
-                    if (!e.canIntercept || e.hashChange) return;
-                    e.intercept({
-                        async handler() {
-                            await Utils.delay(100);
-                            injectUI();
-                        }
-                    });
+                    if (!e.canIntercept || e.hashChange || e.downloadRequest !== null) return;
+                    if (!e.destination || e.destination.sameDocument !== true) return;
+                    try {
+                        e.intercept({
+                            async handler() {
+                                await Utils.delay(100);
+                                injectUI();
+                            }
+                        });
+                    } catch (err) {
+                        // Another listener already intercepted this navigation.
+                        console.warn('Ultra Galleries: navigation.intercept failed:', err);
+                        debouncedInject();
+                    }
                 });
             } else {
                 const originalPushState = history.pushState;
