@@ -69,7 +69,14 @@ This userscript provides a seamless and efficient way to interact with image, vi
 
 ## Version History
 
-### Version 4.3.1 — Current
+### Version 4.5.0 — Current
+
+- **Lazy original loading:** Full-size originals now load only for images near the viewport and are freed again when you scroll far away, keeping memory flat on very large posts.
+- **Smarter downloads:** ZIP and single-file downloads reuse images already in memory (then the persistent cache) before hitting the network.
+- **Animation toggle scoped:** Turning animations off no longer affects the host site, only Ultra Galleries UI.
+- **Fixes:** Skipped gallery images stop downloading, pinch-zoom state syncs correctly, settings no longer steal focus when reopened quickly, and button transitions list explicit properties.
+
+### Version 4.3.1
 
 - **Button visibility fix:** Hide toggles in Settings → Post Actions and Settings → Thumbnails now apply correctly. Previously, the `.ug-button { display: inline-flex !important }` rule in the main stylesheet overrode the inline `display: none` set by the visibility function, so buttons remained visible despite the toggle. Switched to the `.ug-hidden` utility class (`display: none !important`) which wins the cascade.
 - **Initial visibility application:** Hide settings are now applied immediately after the post action bar is created, so saved preferences take effect on the first render rather than requiring a settings change to trigger the update.
@@ -122,7 +129,7 @@ This userscript provides a seamless and efficient way to interact with image, vi
 ## Known Bugs
 
 - If styles ever fail to appear after an update, force-refresh the page once so your script manager re-injects the latest resource bundle.
-- When updating the CSS on a `@resource` tag, jsDelivr's CDN and your userscript manager's local cache may both hold stale copies. Use a **tagged release** (e.g. `@v4.3.1`) rather than a branch ref to avoid this entirely; branches are cached for 12 hours at every edge node, tags are immutable.
+- When updating the CSS on a `@resource` tag, jsDelivr's CDN and your userscript manager's local cache may both hold stale copies. Use a **tagged release** (e.g. `@v4.5.0`) rather than a branch ref to avoid this entirely; branches are cached for 12 hours at every edge node, tags are immutable.
 
 ## Usage
 
@@ -181,4 +188,4 @@ All shortcut keys (except the fixed ones like `Escape`, `+`, `-`, `0`, and `f`) 
 
 ## Version
 
-Current version: **4.3.1**
+Current version: **4.5.0**

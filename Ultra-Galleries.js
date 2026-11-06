@@ -28,7 +28,7 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_getResourceText
-// @resource     mainCSS https://cdn.jsdelivr.net/gh/TearTyr/Ultra-Galleries@v4.3.1/Ultra-Galleries.css
+// @resource     mainCSS https://cdn.jsdelivr.net/gh/TearTyr/Ultra-Galleries@v4.5.0/Ultra-Galleries.css
 // @require      https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js
 // @downloadURL  https://update.sleazyfork.org/scripts/537986/Ultra%20Galleries.user.js
 // @updateURL    https://update.sleazyfork.org/scripts/537986/Ultra%20Galleries.meta.js
@@ -68,7 +68,9 @@
         PRELOAD_WINDOW_BUFFER: 4,
         PROGRESS_NOTIFY_INTERVAL: 250,
         ZIP_LOOKAHEAD: 4,
-        BLOB_URL_REVOKE_DELAY: 60_000
+        BLOB_URL_REVOKE_DELAY: 60_000,
+        LAZY_LOAD_MARGIN: '150% 0px',
+        LAZY_UNLOAD_MARGIN: '400% 0px'
     };
 
     // ====================================================
@@ -1055,6 +1057,8 @@
 
             if (PointerEngine.activePointers.size === 0) {
                 if (PointerEngine.isDragging) {
+                    // A pinch that ended one finger at a time still needs its zoom class synced.
+                    if (viewState.pinchZoomActive) Zoom.applyZoom();
                     PointerEngine.isDragging = false;
                     const container = galleryRefs.mainContainer;
                     if (container) {
@@ -2789,6 +2793,7 @@
             if (!document.getElementById('ug-settings-overlay')) {
                 lastFocusedElement = document.activeElement;
             }
+            clearTimeout(UI._settingsCloseTimer);
             document.getElementById('ug-settings-overlay')?.remove();
             if (focusTrapListener) document.removeEventListener('keydown', focusTrapListener);
 
@@ -2816,6 +2821,8 @@
             document.addEventListener('keydown', focusTrapListener);
         },
 
+        _settingsCloseTimer: null,
+
         closeSettings() {
             if (focusTrapListener) {
                 document.removeEventListener('keydown', focusTrapListener);
@@ -2824,9 +2831,11 @@
             const overlay = document.getElementById('ug-settings-overlay');
             if (!overlay) return;
             overlay.classList.remove('opening');
-            setTimeout(() => {
+            clearTimeout(UI._settingsCloseTimer);
+            UI._settingsCloseTimer = setTimeout(() => {
                 overlay.remove();
-                lastFocusedElement?.focus?.();
+                // Reopened within the fade-out: don't pull focus out of the new dialog.
+                if (!state.settingsOpen) lastFocusedElement?.focus?.();
             }, 300);
         }
     };
@@ -2928,6 +2937,8 @@
 
         _releaseMediaElements(container) {
             container?.querySelectorAll('video').forEach(v => Gallery._releaseVideo(v));
+            // Detached <img> elements keep downloading; drop the src so skipped images stop.
+            container?.querySelectorAll(`img.${CSS.GALLERY.MAIN_IMG}`).forEach(i => i.removeAttribute('src'));
         },
 
         safePlay(video) {
@@ -3641,6 +3652,22 @@
             return ImageLoader.fetchBlob(url, null);
         },
 
+        // Cheapest source first: blob already in memory → IndexedDB → network.
+        async getBestBlob(url) {
+            const blobUrl = loadedBlobUrls.get(url);
+            if (blobUrl) {
+                try {
+                    const res = await fetch(blobUrl);
+                    if (res.ok) return await res.blob();
+                } catch { /* revoked meanwhile: fall through */ }
+            }
+            if (state.enablePersistentCaching) {
+                const cached = await ImageCacheDB.get(url);
+                if (cached) return cached;
+            }
+            return ImageLoader.fetchBlobDirect(url);
+        },
+
         _pruneBlobUrls() {
             if (loadedBlobUrls.size === 0) return;
             const inUse = new Set();
@@ -3729,7 +3756,11 @@
                     };
                 }
 
-                if (state.currentLoadSessionId === sessionId) state.loadedImages++;
+                // Items can reload after being unloaded; count each only once.
+                if (state.currentLoadSessionId === sessionId && !itemData._counted) {
+                    itemData._counted = true;
+                    state.loadedImages++;
+                }
             } catch (error) {
                 if (state.currentLoadSessionId !== sessionId) return;
                 ErrorHandler.handleImageError(
@@ -3737,7 +3768,10 @@
                     imgElement.tagName === 'IMG' ? imgElement : null,
                     { linkElement, galleryIndex, posterHref, isUniqueForGallery, itemData }
                 );
-                state.loadedImages++;
+                if (!itemData._counted) {
+                    itemData._counted = true;
+                    state.loadedImages++;
+                }
                 state.errorCount++;
             }
         },
@@ -3814,37 +3848,94 @@
             return items;
         },
 
-        // Visible / nearest-to-viewport items load first, so what the user is
-        // looking at upgrades to full resolution before off-screen content.
-        _prioritizeByViewport(items) {
-            const vh = window.innerHeight;
-            const tops = items.map(item => {
-                const el = item.linkElement;
-                if (!el?.isConnected) return Number.MAX_SAFE_INTEGER;
-                const r = el.getBoundingClientRect(); // batched reads, no writes in between
-                if (r.bottom >= 0 && r.top <= vh) return 0;
-                return r.top < 0 ? -r.bottom + vh : r.top - vh;
-            });
-            return items
-                .map((item, index) => ({ item, index, distance: tops[index] }))
-                .sort((a, b) => a.distance - b.distance);
+        // Lazy original loading. Items upgrade to full resolution only while they
+        // are within LAZY_LOAD_MARGIN of the viewport, and image blobs are freed
+        // again once they drift beyond LAZY_UNLOAD_MARGIN (wider, so items don't
+        // thrash at the boundary). Keeps memory flat on 200+ image posts.
+        _lazy: null,
+
+        stopLazyLoading() {
+            const lazy = ImageLoader._lazy;
+            if (!lazy) return;
+            lazy.loadObserver.disconnect();
+            lazy.unloadObserver.disconnect();
+            lazy.queue.length = 0;
+            ImageLoader._lazy = null;
         },
 
-        _concurrentRunner(items, sessionId) {
-            const queue = ImageLoader._prioritizeByViewport(items);
-            const limit = CONFIG.MAX_CONCURRENT_FETCHES;
-            let cursor = 0;
+        // Frees one image's blob and restores the site's thumbnail.
+        _unloadOriginal(item) {
+            const imgElement = item.linkElement?.querySelector?.('img');
+            const thumbSrc = imgElement?.dataset.ugThumbSrc;
+            if (!imgElement || !thumbSrc) return false; // nothing to restore → keep it
+            if (state.currentResizeMode === 'full') return false; // thumbnail would reflow the page
+            if (galleryOverlay && state.fullSizeImageSrcs[state.currentGalleryIndex]?.src === item.originalUrl) return false;
 
-            const worker = async () => {
-                while (cursor < queue.length && state.currentLoadSessionId === sessionId) {
-                    const { item, index } = queue[cursor++];
-                    try {
-                        await ImageLoader.loadImageAndApplyToPage(item.linkElement, index, item.posterUrl, true, sessionId, item);
-                    } catch { /* handled inside */ }
+            const blobUrl = loadedBlobUrls.get(item.posterUrl);
+            imgElement.src = thumbSrc;
+            imgElement.classList.remove('ug-image-loaded');
+            if (blobUrl) {
+                BlobManager.revokeUrl(blobUrl);
+                loadedBlobUrls.delete(item.posterUrl);
+            }
+            return true;
+        },
+
+        _startLazyLoading(items, sessionId) {
+            ImageLoader.stopLazyLoading();
+
+            const limit = CONFIG.MAX_CONCURRENT_FETCHES;
+            const lazy = { queue: [], active: 0, status: new Map(), byElement: new Map(), loadObserver: null, unloadObserver: null };
+            ImageLoader._lazy = lazy;
+
+            const pump = () => {
+                while (ImageLoader._lazy === lazy && state.currentLoadSessionId === sessionId &&
+                       lazy.active < limit && lazy.queue.length) {
+                    const entry = lazy.queue.shift();
+                    if (lazy.status.get(entry.item) !== 'queued') continue; // left the band while waiting
+                    lazy.status.set(entry.item, 'loading');
+                    lazy.active++;
+                    ImageLoader.loadImageAndApplyToPage(
+                        entry.item.linkElement, entry.index, entry.item.posterUrl, true, sessionId, entry.item
+                    ).catch(() => { /* handled inside */ }).finally(() => {
+                        lazy.active--;
+                        if (lazy.status.get(entry.item) === 'loading') lazy.status.set(entry.item, 'loaded');
+                        pump();
+                    });
                 }
             };
 
-            return Promise.all(Array.from({ length: Math.min(limit, queue.length) }, worker));
+            lazy.loadObserver = new IntersectionObserver((entries) => {
+                for (const e of entries) {
+                    const entry = lazy.byElement.get(e.target);
+                    if (!entry || !e.isIntersecting || lazy.status.get(entry.item) !== 'idle') continue;
+                    lazy.status.set(entry.item, 'queued');
+                    lazy.queue.push(entry);
+                }
+                pump();
+            }, { rootMargin: CONFIG.LAZY_LOAD_MARGIN });
+
+            lazy.unloadObserver = new IntersectionObserver((entries) => {
+                for (const e of entries) {
+                    if (e.isIntersecting) continue;
+                    const entry = lazy.byElement.get(e.target);
+                    const status = entry && lazy.status.get(entry.item);
+                    if (status === 'queued') {
+                        lazy.status.set(entry.item, 'idle');
+                    } else if (status === 'loaded' && entry.item.type === 'image' && ImageLoader._unloadOriginal(entry.item)) {
+                        lazy.status.set(entry.item, 'idle');
+                    }
+                }
+            }, { rootMargin: CONFIG.LAZY_UNLOAD_MARGIN });
+
+            items.forEach((item, index) => {
+                const el = item.linkElement;
+                if (!el || lazy.byElement.has(el)) return;
+                lazy.byElement.set(el, { item, index });
+                lazy.status.set(item, 'idle');
+                lazy.loadObserver.observe(el);
+                lazy.unloadObserver.observe(el);
+            });
         },
 
         _findPostContainer() {
@@ -3884,41 +3975,22 @@
 
                 if (state.autoLoadOriginals) {
                     Utils.ensureThumbnailsExist();
-                    await ImageLoader._concurrentRunner(uniqueItems, sessionId);
-                    if (state.currentLoadSessionId !== sessionId) return;
-
-                    ImageLoader._pruneBlobUrls();
-                    state.isLoading = false;
-                    ImageLoader.updateFinalStatus();
+                    ImageLoader._startLazyLoading(uniqueItems, sessionId);
                 } else {
+                    ImageLoader.stopLazyLoading();
                     ImageLoader._pruneBlobUrls();
-                    state.isLoading = false;
-                    state.notificationType = 'success';
-                    state.notification = state.totalImages
-                        ? `Gallery Ready (${state.totalImages} items).`
-                        : 'No gallery images found.';
                 }
+                state.isLoading = false;
+                state.notificationType = 'success';
+                state.notification = state.totalImages
+                    ? `Gallery Ready (${state.totalImages} items).`
+                    : 'No gallery images found.';
             } catch (error) {
                 console.error('Critical Error in ImageLoader.loadImages:', error);
                 state.galleryReady = true;
                 updateGalleryButton(true);
             } finally {
                 if (state.currentLoadSessionId === sessionId) state.isLoading = false;
-            }
-        },
-
-        updateFinalStatus() {
-            if (state.totalImages === 0) {
-                state.notificationType = 'info';
-                state.notification = 'No gallery images found.';
-            } else if (state.loadedImages >= state.totalImages) {
-                if (state.errorCount === 0) {
-                    state.notificationType = 'success';
-                    state.notification = `Media Done Loading! Total: ${state.totalImages}`;
-                } else {
-                    state.notificationType = 'warning';
-                    state.notification = `Gallery: Loaded with ${state.errorCount} error(s).`;
-                }
             }
         }
     };
@@ -4185,8 +4257,7 @@
                 return unique;
             };
 
-            const fetchEntry = async ({ item }) =>
-                (await ImageCacheDB.get(item.src)) || (await ImageLoader.fetchBlobDirect(item.src));
+            const fetchEntry = ({ item }) => ImageLoader.getBestBlob(item.src);
 
             let written = 0;
             let skipped = 0;
@@ -4275,7 +4346,7 @@
             }
 
             try {
-                const blob = (await ImageCacheDB.get(item.src)) || (await ImageLoader.fetchBlobDirect(item.src));
+                const blob = await ImageLoader.getBestBlob(item.src);
                 if (!blob) throw new Error('Blob is null');
                 DOM.saveBlob(blob, formattedName);
                 state.notificationType = 'success';
@@ -4377,6 +4448,7 @@
         },
 
         cleanupPostActions() {
+            ImageLoader.stopLazyLoading();
             ActiveRequests.abortAll();
             ImageLoader._inflight.clear();
             UGModal.closeAny();
@@ -4663,6 +4735,7 @@
         if (galleryOverlay && document.fullscreenElement === galleryOverlay) {
             document.exitFullscreen().catch(() => {});
         }
+        ImageLoader.stopLazyLoading();
         ActiveRequests.abortAll();
         ImageLoader._inflight.clear();
         PostActions.cleanupPostActions();
@@ -4713,8 +4786,6 @@
     color: var(--ug-accent, #6f5fff);
     background: var(--ug-accent-subtle, rgba(111, 95, 255, 0.08));
 }
-
-.ug-hidden { display: none !important; }
 
 @media (max-width: 640px) {
     .ug-gallery-overlay.ug-strip-floating .ug-gallery-thumbnail-strip-container {

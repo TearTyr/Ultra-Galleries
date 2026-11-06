@@ -1,5 +1,5 @@
 /* ====================================================
-                    Ultra Galleries v4.3.1
+                    Ultra Galleries v4.5.0
    ==================================================== */
 
 /* ------------------- THEME & VARIABLES ------------------- */
@@ -187,10 +187,11 @@
     outline-offset: 2px;
 }
 
-/* Disable animations globally when setting is off */
-.ug-animations-disabled *,
-.ug-animations-disabled *::before,
-.ug-animations-disabled *::after {
+/* Disable animations in Ultra Galleries UI only when setting is off (never the host site) */
+.ug-animations-disabled :is(.ug-gallery-overlay, .ug-settings-overlay, .ug-notification-area, .ug-modal-overlay, .ug-injected-ui, .ug-thumbnail-context-menu, .ug-thumbnail-zoom-preview),
+.ug-animations-disabled :is(.ug-gallery-overlay, .ug-settings-overlay, .ug-notification-area, .ug-modal-overlay, .ug-injected-ui, .ug-thumbnail-context-menu, .ug-thumbnail-zoom-preview) *,
+.ug-animations-disabled :is(.ug-gallery-overlay, .ug-settings-overlay, .ug-notification-area, .ug-modal-overlay, .ug-injected-ui, .ug-thumbnail-context-menu, .ug-thumbnail-zoom-preview) *::before,
+.ug-animations-disabled :is(.ug-gallery-overlay, .ug-settings-overlay, .ug-notification-area, .ug-modal-overlay, .ug-injected-ui, .ug-thumbnail-context-menu, .ug-thumbnail-zoom-preview) *::after {
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
@@ -323,7 +324,7 @@
     font-weight: 600 !important;
     cursor: pointer !important;
     border: none !important;
-    transition: all var(--ug-duration-fast) var(--ug-ease-smooth) !important;
+    transition: background-color var(--ug-duration-fast) var(--ug-ease-smooth), color var(--ug-duration-fast) var(--ug-ease-smooth), border-color var(--ug-duration-fast) var(--ug-ease-smooth), box-shadow var(--ug-duration-fast) var(--ug-ease-smooth), transform var(--ug-duration-fast) var(--ug-ease-smooth) !important;
     min-width: 110px !important;
 }
 
@@ -368,7 +369,7 @@
     cursor: pointer !important;
     font-size: 0.9em !important;
     text-decoration: none !important;
-    transition: all var(--ug-transition-fast) !important;
+    transition: background-color var(--ug-transition-fast), color var(--ug-transition-fast), border-color var(--ug-transition-fast), box-shadow var(--ug-transition-fast), transform var(--ug-transition-fast), opacity var(--ug-transition-fast) !important;
     white-space: nowrap !important;
     box-shadow: none !important;
     flex-shrink: 0 !important;
@@ -674,7 +675,6 @@ img.post__image {
     z-index: 2;
     cursor: grab;
     touch-action: none;
-    will-change: transform;
     transform-origin: 0 0 !important;
     display: flex;
     justify-content: center;
