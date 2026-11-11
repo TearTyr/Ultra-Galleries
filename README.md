@@ -69,7 +69,16 @@ This userscript provides a seamless and efficient way to interact with image, vi
 
 ## Version History
 
-### Version 4.5.0 — Current
+### Version 4.5.1 — Current
+
+- **Security:** Media is only fetched from the supported sites. Links inside post text that point elsewhere are ignored, so a post can no longer make your browser request arbitrary hosts.
+- **Downloads:** Navigating to another post no longer aborts a running ZIP. Cancel now stops queued and retrying requests immediately. Big files are fetched one at a time to limit memory. Archives that would pass 4 GiB stop with a clear error instead of being written corrupt. A dismissed Save As dialog no longer triggers a second download. Out-of-range post dates no longer break ZIP creation.
+- **Gallery:** "Remove from Gallery" no longer gets undone by lazy loading, so ZIP contents stay correct. ←/→/Space work after clicking a thumbnail or button. The slideshow waits for a playing video to finish.
+- **Navigation:** `#anchor` links no longer reload the post UI.
+- **Settings:** "Auto-load Original Images" takes effect immediately.
+- **Memory:** Images that scroll far away while still loading are freed as soon as they finish.
+
+### Version 4.5.0
 
 - **Lazy original loading:** Full-size originals now load only for images near the viewport and are freed again when you scroll far away, keeping memory flat on very large posts.
 - **Smarter downloads:** ZIP and single-file downloads reuse images already in memory (then the persistent cache) before hitting the network.
@@ -188,4 +197,4 @@ All shortcut keys (except the fixed ones like `Escape`, `+`, `-`, `0`, and `f`) 
 
 ## Version
 
-Current version: **4.5.0**
+Current version: **4.5.1**

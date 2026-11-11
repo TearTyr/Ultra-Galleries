@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1477603-%E3%83%A1%E3%83%AA%E3%83%BC
-// @version      4.5.0
+// @version      4.5.1
 // @description  Modern image gallery with streaming ZIP downloads, video playback, browsing, fullscreen with a floating (higher-layer) thumbnail strip, and download features. Native DOM, unified pointer gestures, and zero external UI dependencies.
 // @author       ntf (original), Meri/TearTyr (maintained)
 // @match        *://kemono.su/*
@@ -68,6 +68,7 @@
         PRELOAD_WINDOW_BUFFER: 4,
         PROGRESS_NOTIFY_INTERVAL: 250,
         ZIP_LOOKAHEAD: 4,
+        ZIP_MAX_BYTES: 0xFFFFFFFF - 1_000_000, // fflate writes no ZIP64; stay under the 32-bit limit
         BLOB_URL_REVOKE_DELAY: 60_000,
         LAZY_LOAD_MARGIN: '150% 0px',
         LAZY_UNLOAD_MARGIN: '400% 0px'
@@ -76,7 +77,7 @@
     // ====================================================
     // Pawchive Compliance Configuration & Pacer
     // ====================================================
-    const SCRIPT_VERSION = '4.5.0';
+    const SCRIPT_VERSION = '4.5.1';
 
     const PAWCHIVE_CONFIG = {
         USER_AGENT: `UltraGalleries/${SCRIPT_VERSION} (+https://github.com/TearTyr/Ultra-Galleries; contact: Meri/TearTyr)`,
@@ -86,6 +87,15 @@
     const PAWCHIVE_RE = /pawchive\.(st|pw)/i;
     const IS_PAWCHIVE_PAGE = PAWCHIVE_RE.test(window.location.hostname);
     const isPawchiveHost = (url = '') => IS_PAWCHIVE_PAGE || PAWCHIVE_RE.test(url);
+
+    // Post text is author-controlled: only fetch media from the supported sites,
+    // never from arbitrary hosts a post links to (tracking / LAN requests).
+    const TRUSTED_MEDIA_HOST_RE = /(^|\.)(kemono|coomer|nekohouse|pawchive)\.(su|cr|st|pw)$/i;
+    const isTrustedMediaUrl = (url) => {
+        if (typeof url !== 'string' || !url) return false;
+        if (url.startsWith('data:') || url.startsWith('blob:')) return true;
+        try { return TRUSTED_MEDIA_HOST_RE.test(new URL(url, location.href).hostname); } catch { return false; }
+    };
 
     const RequestPacer = {
         lastRequestTime: 0,
@@ -291,6 +301,9 @@
         warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
         info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12.01" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>'
     };
+
+    const PLAY_ICON_SVG = '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+    const FILE_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
 
     const UGModal = {
         // Tracks the currently-open modal so a superseding modal (or page
@@ -709,7 +722,8 @@
             if (!match) return null;
             const [, y, mo, d, h = '00', mi = '00', s = '00'] = match;
             const date = new Date(+y, +mo - 1, +d, +h, +mi, +s);
-            return Number.isNaN(date.getTime()) ? null : date;
+            // fflate throws on ZIP (DOS) dates outside 1980-2099.
+            return (Number.isNaN(date.getTime()) || date.getFullYear() < 1980 || date.getFullYear() > 2099) ? null : date;
         },
 
         setImageStyle(img, styles) {
@@ -1215,6 +1229,8 @@
         _tick() {
             // Don't advance while the user is panning/pinching or the tab is hidden.
             if (document.hidden || PointerEngine.isDragging || viewState.pinchZoomActive) return;
+            // Let a playing video finish instead of cutting it off.
+            if (galleryRefs.mainContainer?.querySelector('video')?.paused === false) return;
             Gallery.nextImage();
         },
 
@@ -1755,7 +1771,11 @@
         zoomEnabled: persist('zoomEnabled'),
         inertiaEnabled: persist('inertiaEnabled'),
         preserveFileDates: persist('preserveFileDates'),
-        autoLoadOriginals: persist('autoLoadOriginals'),
+        autoLoadOriginals(value) {
+            SettingsManager.saveSetting('autoLoadOriginals', value);
+            // Apply now instead of on the next navigation (skipped during startup).
+            if (state.currentLoadSessionId !== null && Utils.isPostPage()) ImageLoader.loadImages({ force: true });
+        },
         notificationsEnabled: persist('notificationsEnabled'),
         sortMode: persist('sortMode'),
         fullscreenMode: persist('fullscreenMode'),
@@ -1971,6 +1991,8 @@
         setupKeyboardNavigation(signal) {
             const strip = galleryRefs.strip;
             strip.addEventListener('keydown', (e) => {
+                // Mouse-focused thumbnail: the global handler navigates instead.
+                if (!keyboardFocus) return;
                 const focused = e.target.closest(`.${CSS.GALLERY.THUMBNAIL_WRAPPER}`);
                 if (!focused) return;
                 switch (e.key) {
@@ -2951,7 +2973,7 @@
                 className: 'ug-video-play-overlay',
                 'aria-label': 'Play video',
                 title: 'Play video',
-                html: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
+                html: PLAY_ICON_SVG,
                 onclick: (e) => {
                     e.stopPropagation();
                     Gallery.safePlay(video);
@@ -3099,7 +3121,7 @@
 
             if (mediaItem.type === 'video') {
                 wrapper.append(
-                    DOM.create('div', { className: 'ug-play-icon', html: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>' }),
+                    DOM.create('div', { className: 'ug-play-icon', html: PLAY_ICON_SVG }),
                     DOM.create('img', {
                         src: mediaItem.poster || FALLBACK_POSTER,
                         loading: 'lazy',
@@ -3111,7 +3133,7 @@
             } else if (mediaItem.type === 'attachment') {
                 wrapper.appendChild(DOM.create('div', {
                     className: 'ug-thumbnail-file-icon',
-                    html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
+                    html: FILE_ICON_SVG
                 }));
             } else {
                 // The site's small thumbnail — not the full-resolution original.
@@ -3385,9 +3407,7 @@
             const fileExt = (fileName.match(/\.([a-z0-9]+)$/i)?.[1] || 'file').toUpperCase();
 
             container.appendChild(DOM.create('div', { className: 'ug-attachment-preview' }, [
-                DOM.create('div', {
-                    html: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
-                }),
+                DOM.create('div', { html: FILE_ICON_SVG }),
                 DOM.create('div', { className: 'ug-attachment-type', text: fileExt }),
                 DOM.create('div', { className: 'ug-attachment-info', text: fileName }),
                 DOM.create('button', {
@@ -3563,7 +3583,10 @@
             (ImageLoader.imageActions[state.currentResizeMode] || ImageSizing.applyFillHeight)(img);
         },
 
-        async _fetchBlobInternal(url, sessionId, retries, delay) {
+        // Requests are tracked per scope: a page-load session id, 'dl' for a
+        // cancellable ZIP (has a signal), or 'direct' for one-off downloads.
+        // Page navigation aborts sessions only; downloads outlive it.
+        async _fetchBlobInternal(url, sessionId, retries, delay, signal = null) {
             try {
                 await RequestPacer.throttle(url);
 
@@ -3572,9 +3595,13 @@
                         reject(new Error('Stale session'));
                         return;
                     }
+                    if (signal?.aborted) {
+                        reject(new Error('Request aborted'));
+                        return;
+                    }
 
                     let handle = null;
-                    const trackId = sessionId ?? 'direct';
+                    const trackId = sessionId ?? (signal ? 'dl' : 'direct');
                     const cleanup = () => ActiveRequests.remove(trackId, handle);
 
                     handle = GM.xmlHttpRequest({
@@ -3614,18 +3641,20 @@
                 // Jittered backoff so parallel failures don't retry in lockstep.
                 await Utils.delay(delay * (0.75 + Math.random() * 0.5));
                 if (sessionId !== null && state.currentLoadSessionId !== sessionId) throw new Error('Stale session');
-                return ImageLoader._fetchBlobInternal(url, sessionId, retries - 1, delay * 1.5);
+                if (signal?.aborted) throw new Error('Request aborted');
+                return ImageLoader._fetchBlobInternal(url, sessionId, retries - 1, delay * 1.5, signal);
             }
         },
 
         // Cache-first, de-duplicated (concurrent callers for the same URL in
-        // the same session share one request).
-        fetchBlob(url, sessionId = null, retries = CONFIG.MAX_RETRIES, delay = CONFIG.RETRY_DELAY) {
+        // the same scope share one request). `signal` makes it cancellable.
+        fetchBlob(url, sessionId = null, retries = CONFIG.MAX_RETRIES, delay = CONFIG.RETRY_DELAY, signal = null) {
             if (sessionId !== null && state.currentLoadSessionId !== sessionId) {
                 return Promise.reject(new Error('Stale session'));
             }
+            if (signal?.aborted) return Promise.reject(new Error('Request aborted'));
 
-            const key = `${sessionId ?? 'direct'}:${url}`;
+            const key = `${sessionId ?? (signal ? 'dl' : 'direct')}:${url}`;
             const existing = ImageLoader._inflight.get(key);
             if (existing) return existing;
 
@@ -3637,7 +3666,8 @@
                 if (sessionId !== null && state.currentLoadSessionId !== sessionId) {
                     throw new Error('Stale session');
                 }
-                return ImageLoader._fetchBlobInternal(url, sessionId, retries, delay);
+                if (signal?.aborted) throw new Error('Request aborted');
+                return ImageLoader._fetchBlobInternal(url, sessionId, retries, delay, signal);
             })();
 
             ImageLoader._inflight.set(key, promise);
@@ -3648,12 +3678,13 @@
             return promise;
         },
 
-        fetchBlobDirect(url) {
-            return ImageLoader.fetchBlob(url, null);
+        fetchBlobDirect(url, signal = null) {
+            return ImageLoader.fetchBlob(url, null, CONFIG.MAX_RETRIES, CONFIG.RETRY_DELAY, signal);
         },
 
-        // Cheapest source first: blob already in memory → IndexedDB → network.
-        async getBestBlob(url) {
+        // Cheapest source first: blob already in memory → IndexedDB → network
+        // (fetchBlob itself checks IndexedDB first).
+        async getBestBlob(url, signal = null) {
             const blobUrl = loadedBlobUrls.get(url);
             if (blobUrl) {
                 try {
@@ -3661,11 +3692,7 @@
                     if (res.ok) return await res.blob();
                 } catch { /* revoked meanwhile: fall through */ }
             }
-            if (state.enablePersistentCaching) {
-                const cached = await ImageCacheDB.get(url);
-                if (cached) return cached;
-            }
-            return ImageLoader.fetchBlobDirect(url);
+            return ImageLoader.fetchBlobDirect(url, signal);
         },
 
         _pruneBlobUrls() {
@@ -3745,15 +3772,21 @@
                 }
 
                 if (isUniqueForGallery) {
-                    state.fullSizeImageSrcs[galleryIndex] = ImageLoader._buildGalleryEntry(
-                        itemData,
-                        itemData.type === 'video' ? blobUrlToUse : null
-                    );
-                    state.originalImageSrcs[galleryIndex] = {
-                        src: cacheKey,
-                        type: itemData.type,
-                        fileName: itemData.fileName || linkElement.getAttribute?.('download') || cacheKey.split('/').pop()
-                    };
+                    // Find the slot by URL, not by the index captured when loading
+                    // started: "Remove from Gallery" shifts indices, and a removed
+                    // item (slot -1) must stay removed.
+                    const slot = state.originalImageSrcs.findIndex(x => x?.src === cacheKey);
+                    if (slot > -1) {
+                        state.fullSizeImageSrcs[slot] = ImageLoader._buildGalleryEntry(
+                            itemData,
+                            itemData.type === 'video' ? blobUrlToUse : null
+                        );
+                        state.originalImageSrcs[slot] = {
+                            src: cacheKey,
+                            type: itemData.type,
+                            fileName: itemData.fileName || linkElement.getAttribute?.('download') || cacheKey.split('/').pop()
+                        };
+                    }
                 }
 
                 // Items can reload after being unloaded; count each only once.
@@ -3802,11 +3835,12 @@
 
                 if (isVideo) {
                     const url = cleanHref;
-                    if (!url || items.has(url)) continue;
+                    if (!url || items.has(url) || !isTrustedMediaUrl(url)) continue;
                     const posterImg = linkElement.querySelector('img');
                     let posterSrc = posterImg?.getAttribute('data-src') || posterImg?.getAttribute('src');
                     if (posterSrc?.startsWith('blob:')) posterSrc = blobToOriginal.get(posterSrc) || posterSrc;
-                    const poster = linkElement.querySelector('video')?.getAttribute('poster') || posterSrc || FALLBACK_POSTER;
+                    const rawPoster = linkElement.querySelector('video')?.getAttribute('poster') || posterSrc;
+                    const poster = isTrustedMediaUrl(rawPoster) ? rawPoster : FALLBACK_POSTER;
 
                     items.set(url, {
                         linkElement, originalUrl: url, posterUrl: poster, type: 'video',
@@ -3817,7 +3851,7 @@
 
                 let url = Utils.handleMediaSrc(linkElement);
                 if (!url && linkElement.href) url = linkElement.href.split('?')[0];
-                if (!url || items.has(url)) continue;
+                if (!url || items.has(url) || !isTrustedMediaUrl(url)) continue;
 
                 if (/\.(jpe?g|png|gif|webp|bmp|avif)$/i.test(url)) {
                     items.set(url, {
@@ -3837,10 +3871,11 @@
                 let url = videoEl.getAttribute('src') || videoEl.querySelector('source')?.getAttribute('src');
                 if (!url || url.startsWith('blob:')) continue;
                 url = url.split('?')[0];
-                if (items.has(url)) continue;
+                if (items.has(url) || !isTrustedMediaUrl(url)) continue;
+                const rawPoster = videoEl.getAttribute('poster');
                 items.set(url, {
                     linkElement: videoEl, originalUrl: url,
-                    posterUrl: videoEl.getAttribute('poster') || FALLBACK_POSTER, type: 'video',
+                    posterUrl: isTrustedMediaUrl(rawPoster) ? rawPoster : FALLBACK_POSTER, type: 'video',
                     fileName: Utils.extractFileName(videoEl, url)
                 });
             }
@@ -3885,7 +3920,8 @@
             ImageLoader.stopLazyLoading();
 
             const limit = CONFIG.MAX_CONCURRENT_FETCHES;
-            const lazy = { queue: [], active: 0, status: new Map(), byElement: new Map(), loadObserver: null, unloadObserver: null };
+            // `band`: element → inside the unload margin? (absent until first reported)
+            const lazy = { queue: [], active: 0, status: new Map(), byElement: new Map(), band: new Map(), loadObserver: null, unloadObserver: null };
             ImageLoader._lazy = lazy;
 
             const pump = () => {
@@ -3899,7 +3935,15 @@
                         entry.item.linkElement, entry.index, entry.item.posterUrl, true, sessionId, entry.item
                     ).catch(() => { /* handled inside */ }).finally(() => {
                         lazy.active--;
-                        if (lazy.status.get(entry.item) === 'loading') lazy.status.set(entry.item, 'loaded');
+                        if (lazy.status.get(entry.item) === 'loading') {
+                            lazy.status.set(entry.item, 'loaded');
+                            // Scrolled far past while it was loading: free it now,
+                            // the unload observer won't fire again for it.
+                            if (entry.item.type === 'image' && lazy.band.get(entry.item.linkElement) === false &&
+                                ImageLoader._unloadOriginal(entry.item)) {
+                                lazy.status.set(entry.item, 'idle');
+                            }
+                        }
                         pump();
                     });
                 }
@@ -3917,6 +3961,7 @@
 
             lazy.unloadObserver = new IntersectionObserver((entries) => {
                 for (const e of entries) {
+                    lazy.band.set(e.target, e.isIntersecting);
                     if (e.isIntersecting) continue;
                     const entry = lazy.byElement.get(e.target);
                     const status = entry && lazy.status.get(entry.item);
@@ -4057,7 +4102,8 @@
                         name,
                         headers: RequestPacer.getHeaders(url),
                         onload: () => resolve(true),
-                        onerror: () => resolve(false),
+                        // A dismissed Save As dialog also lands here: don't re-download.
+                        onerror: (e) => resolve(/cancel/i.test(`${e?.error} ${e?.details}`) ? 'cancelled' : false),
                         ontimeout: () => resolve(false)
                     });
                 } catch (e) {
@@ -4065,7 +4111,7 @@
                     resolve(false);
                 }
             });
-            if (gmResult === true) return true;
+            if (gmResult === true || gmResult === 'cancelled') return gmResult;
 
             try {
                 const blob = await ImageLoader.fetchBlobDirect(url);
@@ -4095,8 +4141,7 @@
                     };
                 } catch (e) {
                     if (e?.name === 'AbortError') return null;
-                    console.warn('Ultra Galleries: save picker unavailable, buffering in memory:', e);
-                }
+                    console.warn('Ultra Galleries: save picker unavailable, buffering in memory:', e);                }
             }
             let chunks = [];
             return {
@@ -4111,36 +4156,46 @@
         },
 
         // Fetches up to `lookahead` entries concurrently, yields them in order.
-        async *_orderedFetch(entries, fetcher, lookahead, signal) {
+        // A "heavy" entry (big file) is only fetched alone, so RAM holds at most
+        // one of them. Abort ends the iteration at once instead of waiting for
+        // the head-of-line fetch.
+        async *_orderedFetch(entries, fetcher, lookahead, signal, isHeavy = () => false) {
             const pending = [];
+            const aborted = new Promise(r => signal.addEventListener('abort', () => r(null), { once: true }));
             let next = 0;
             const fill = () => {
                 while (!signal.aborted && pending.length < lookahead && next < entries.length) {
-                    const entry = entries[next++];
-                    pending.push(fetcher(entry).then(
-                        blob => ({ entry, blob }),
-                        error => ({ entry, blob: null, error })
-                    ));
+                    const entry = entries[next];
+                    const heavy = isHeavy(entry);
+                    if (pending.length && (heavy || pending.some(p => p.heavy))) break;
+                    next++;
+                    pending.push({
+                        heavy,
+                        promise: fetcher(entry).then(
+                            blob => ({ entry, blob }),
+                            error => ({ entry, blob: null, error })
+                        )
+                    });
                 }
             };
             fill();
             while (pending.length) {
-                const result = await pending.shift();
+                const result = await Promise.race([pending.shift().promise, aborted]);
+                if (!result) return;
                 fill();
                 yield result;
             }
         },
 
         _ensureCancelStyle() {
-            if (document.getElementById('ug-dl-cancel-style')) return;
-            const node = GM_addStyle(
+            addStyle(
                 '#ug-dl-cancel{position:fixed;right:20px;bottom:20px;z-index:2147483000;' +
                 'padding:8px 16px;border:1px solid rgba(255,110,110,.55);border-radius:999px;' +
                 'background:rgba(24,24,28,.94);color:#ff8a8a;font:600 13px/1.2 system-ui,sans-serif;' +
                 'cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.5);}' +
-                '#ug-dl-cancel:hover{background:rgba(60,24,28,.96);color:#ffb3b3;}'
+                '#ug-dl-cancel:hover{background:rgba(60,24,28,.96);color:#ffb3b3;}',
+                'ug-dl-cancel-style'
             );
-            node?.setAttribute?.('id', 'ug-dl-cancel-style');
         },
 
         _showCancelButton() {
@@ -4162,7 +4217,7 @@
         cancelDownload() {
             if (!state.isDownloading) return;
             DownloadManager._abort?.abort();
-            ActiveRequests.abortSession('direct');
+            ActiveRequests.abortSession('dl');
             state.notificationType = 'warning';
             state.notification = 'Download cancelled.';
         },
@@ -4221,7 +4276,7 @@
             state.isDownloading = true;
             DownloadManager._showCancelButton();
             state.notificationType = 'info';
-            state.notification = sink.streamed ? 'Streaming ZIP to disk...' : 'Preparing ZIP...';
+            state.notification = sink.streamed ? 'Streaming ZIP to disk...' : 'Preparing ZIP in memory...';
 
             const notifyProgress = Utils.throttle((message) => {
                 if (!state.isDownloading) return;
@@ -4257,19 +4312,26 @@
                 return unique;
             };
 
-            const fetchEntry = ({ item }) => ImageLoader.getBestBlob(item.src);
+            const fetchEntry = ({ item }) => ImageLoader.getBestBlob(item.src, abort.signal);
+            const isHeavy = ({ item }) => item.type !== 'image';
 
             let written = 0;
             let skipped = 0;
+            let totalBytes = 0;
 
             try {
                 for await (const { entry, blob, error } of
-                    DownloadManager._orderedFetch(entries, fetchEntry, CONFIG.ZIP_LOOKAHEAD, abort.signal)) {
+                    DownloadManager._orderedFetch(entries, fetchEntry, CONFIG.ZIP_LOOKAHEAD, abort.signal, isHeavy)) {
                     if (abort.signal.aborted || zipError) break;
                     if (!blob) {
                         skipped++;
                         console.warn(`Skipping ${entry.item.src}`, error);
                         continue;
+                    }
+
+                    totalBytes += blob.size;
+                    if (totalBytes > CONFIG.ZIP_MAX_BYTES) {
+                        throw new Error('archive would pass 4 GiB (ZIP64 is not supported). Use DL IMAGES and DL FILES separately.');
                     }
 
                     const file = new fflate.ZipPassThrough(
@@ -4313,6 +4375,8 @@
                     ? `Download complete — ${skipped} file(s) could not be fetched.`
                     : 'Download complete!';
             } catch (e) {
+                abort.abort(); // stop fetches still running ahead of a failed write/size check
+                ActiveRequests.abortSession('dl');
                 try { zip.terminate(); } catch { /* ignore */ }
                 await sink.abort();
                 if (e?.name !== 'AbortError') {
@@ -4340,6 +4404,11 @@
                 state.notificationType = 'info';
                 state.notification = `Starting ${label.toLowerCase()} download...`;
                 const ok = await DownloadManager.downloadFile(item.src, formattedName);
+                if (ok === 'cancelled') {
+                    state.notificationType = 'info';
+                    state.notification = `${label} download cancelled`;
+                    return;
+                }
                 state.notificationType = ok ? 'success' : 'error';
                 state.notification = `${label} download ${ok ? 'complete' : 'failed'}`;
                 return;
@@ -4449,7 +4518,8 @@
 
         cleanupPostActions() {
             ImageLoader.stopLazyLoading();
-            ActiveRequests.abortAll();
+            // Page sessions only: a running download must survive navigation.
+            ActiveRequests.abortSession(state.currentLoadSessionId);
             ImageLoader._inflight.clear();
             UGModal.closeAny();
             state.currentLoadSessionId = null;
@@ -4589,6 +4659,10 @@
     // ====================================================
     // Keyboard & Event Handlers
     // ====================================================
+    // True after Tab, false after any pointer press (see focusIsControl).
+    let keyboardFocus = false;
+    const clearKeyboardFocus = () => { keyboardFocus = false; };
+
     const EventHandlers = {
         keyMatchesSetting(eventKey, settingValue) {
             return Boolean(settingValue) && String(eventKey).toLowerCase() === String(settingValue).toLowerCase();
@@ -4614,6 +4688,7 @@
 
         handleGlobalKeyDown(event) {
             if (!event.key || event.isComposing) return;
+            if (event.key === 'Tab') keyboardFocus = true;
             if (UGModal.isOpen()) return;
 
             // Settings: Esc closes the panel even while an input has focus.
@@ -4654,7 +4729,9 @@
             }
             if (!noModifiers) return;
 
-            const focusIsControl = Boolean(activeEl) && activeEl !== document.body &&
+            // Only controls reached with Tab keep their own keys; a control left
+            // focused by a mouse click must not swallow ←/→/Space.
+            const focusIsControl = Boolean(activeEl) && activeEl !== document.body && keyboardFocus &&
                 (activeEl.tagName === 'BUTTON' || activeEl.tagName === 'A' || activeEl.hasAttribute('tabindex'));
             const stripOwnsArrows = focusIsControl &&
                 Boolean(activeEl.closest?.(`.${CSS.GALLERY.THUMBNAIL_STRIP}`)) &&
@@ -4685,6 +4762,8 @@
             } else if (keyLower === '0') {
                 Zoom.resetZoom();
             } else if (keyLower === ' ') {
+                // Drop mouse-given focus so the button doesn't also fire on key release.
+                if (activeEl instanceof HTMLButtonElement) activeEl.blur();
                 Slideshow.toggle();
             } else if (keyLower === 'f') {
                 Gallery.toggleFullscreen();
@@ -4708,7 +4787,8 @@
     // ====================================================
     const injectUI = () => {
         try {
-            const currentUrl = window.location.href;
+            // Fragment-only changes (#anchors) are not navigations.
+            const currentUrl = location.origin + location.pathname + location.search;
             const postContainer = ImageLoader._findPostContainer();
             const onPostPage = Boolean(postContainer) && Utils.isPostPage();
 
@@ -4746,6 +4826,7 @@
         ThumbnailStrip.cleanup();
 
         document.removeEventListener('keydown', EventHandlers.handleGlobalKeyDown);
+        document.removeEventListener('pointerdown', clearKeyboardFocus, true);
         window.removeEventListener('resize', EventHandlers.handleResize);
     };
 
@@ -4856,6 +4937,7 @@
             if (state.enablePersistentCaching) ImageCacheDB.init().catch(() => {});
 
             document.addEventListener('keydown', EventHandlers.handleGlobalKeyDown);
+            document.addEventListener('pointerdown', clearKeyboardFocus, true);
             window.addEventListener('resize', EventHandlers.handleResize, { passive: true });
             // pagehide instead of beforeunload: keeps the page eligible for the
             // back/forward cache, and skips teardown when it's being cached.
