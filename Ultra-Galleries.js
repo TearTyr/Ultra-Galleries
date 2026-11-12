@@ -28,7 +28,7 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_getResourceText
-// @resource     mainCSS https://cdn.jsdelivr.net/gh/TearTyr/Ultra-Galleries@26bc08aa2897f03a2d68c30902cf0480d3418d76/Ultra-Galleries.css
+// @resource     mainCSS https://cdn.jsdelivr.net/gh/TearTyr/Ultra-Galleries@8fb0feeb86ddf92bb570ba020f3aa65781d443d7/Ultra-Galleries.css
 // @require      https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js
 // @downloadURL  https://update.sleazyfork.org/scripts/537986/Ultra%20Galleries.user.js
 // @updateURL    https://update.sleazyfork.org/scripts/537986/Ultra%20Galleries.meta.js

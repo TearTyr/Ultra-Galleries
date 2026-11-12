@@ -1,200 +1,149 @@
 # Ultra Galleries
 
-Ultra Galleries is a powerful userscript that enhances the browsing and downloading experience on `kemono.su`, `coomer.su`, `nekohouse.su`, `pawchive.st`, and their associated domain mirrors (`kemono.cr`, `coomer.cr`, `coomer.st`, `pawchive.pw`) by adding features for image manipulation, viewing, and batch downloading. It was originally based on [Better Kemono Galleries](https://sleazyfork.org/en/scripts/460064-better-kemono-galleries) but has been significantly expanded, modernized, and improved.
+A userscript that adds a full-screen gallery, resizing tools, and batch ZIP downloads to `kemono.su`, `coomer.su`, `nekohouse.su`, `pawchive.st` and their mirrors (`kemono.cr`, `coomer.cr`, `coomer.st`, `pawchive.pw`).
 
-## Overview
+Originally based on [Better Kemono Galleries](https://sleazyfork.org/en/scripts/460064-better-kemono-galleries), since rewritten. It uses only native browser APIs: no jQuery, no SweetAlert2, no UI libraries.
 
-This userscript provides a seamless and efficient way to interact with image, video, and file-attachment content on supported websites, making it easier to view, resize, download, and manage your favorite media. It is built entirely on native browser APIs — no jQuery, no SweetAlert2, no external UI libraries — for maximum speed and minimal footprint.
+## Installation
+
+1. Install a userscript manager: [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/).
+2. Install the script from [Sleazy Fork](https://sleazyfork.org/en/scripts/537986-ultra-galleries), or directly from [GitHub](https://github.com/TearTyr/Ultra-Galleries/raw/main/Ultra-Galleries.js).
+3. Open a post on any supported site.
+
+Your script manager checks for updates automatically.
 
 ## Features
 
-### Image Viewing and Manipulation
+### Gallery
 
-- **Original Resolution Loading:** Directly loads images in their original resolution.
-- **Auto-Load Originals:** Toggleable feature to automatically fetch and display high-res media in the background without interrupting your browsing with loading screens.
-- **Resize Options:**
-  - Toggle to resize individual or all images in a gallery to fit:
-    - Vertical height (`FILL HEIGHT`)
-    - Horizontal width (`FILL WIDTH`)
-    - Full resolution (`FULL`)
-  - Each scope (post action bar vs. per-thumbnail) has independent visibility toggles in Settings.
-- **Gallery View:** A modern, feature-rich gallery view for easier browsing of images within a post. Grid view has been removed for a cleaner, unified presentation.
-- **Slideshow Mode:** Automatically cycle through gallery media with customizable delays and pause-on-hover capabilities.
-- **Unified Pointer Gestures & Pan/Zoom:** Advanced zooming with mouse wheel, toolbar buttons, and double-tap/double-click support, plus smooth inertia-based panning and touch pinch-to-zoom powered by unified Pointer Events.
-- **Interactive Thumbnail Strip:** Thumbnail strip with drag-to-scroll, keyboard navigation, hover zoom previews, right-click context menus, and individual item management.
-- **Native Fullscreen:** Toggle true browser fullscreen via the toolbar button or the `f` key. Choose between **Native** (real fullscreen, hides browser chrome), **CSS** (styled in-page expansion), or **Ask each time** in Settings → General.
+- **Original resolution:** Loads full-size images. Originals load only near the viewport and are freed when you scroll away, so memory stays flat on very large posts. Toggle **Auto-load Original Images** in Settings → General.
+- **Immersive viewer:** Thumbnail strip with drag-to-scroll, hover previews and a right-click menu (open, download, copy URL, remove from gallery).
+- **Thumbnail strip modes:** *Floating* layers the strip above the image and hides it with the controls, so fullscreen is truly fullscreen. *Docked* pins it to the bottom.
+- **Zoom and pan:** Mouse wheel, toolbar buttons, double-click / double-tap, drag with inertia, and touch pinch.
+- **Slideshow:** Adjustable delay, pause on hover. Waits for a playing video to finish.
+- **Fullscreen:** Native browser fullscreen, in-page (CSS) expansion, or ask each time. Toggle with `f`.
+- **Resize buttons:** `HEIGHT` (fit height), `WIDTH` (fit width) and `FULL` (original size), for the whole post or per image.
+- **Sort order:** Site order or natural filename sort (A→Z / Z→A), so `page_10` comes after `page_9`. Useful for comic posts.
 
-### Video Handling
+### Video and attachments
 
-- **In-Gallery Playback:** Videos are fully playable directly inside the expanded gallery view with native controls, play overlays, and looping.
-- **Paced Video Fetching on Pawchive:** Video sources are fetched through the same rate-limited pipeline as images, ensuring Pawchive's per-host request limit is respected even during playback.
-- **Batch Inclusion:** Includes video files in batch downloads alongside images.
-- **Preserves Filenames:** Retains original video filenames upon downloading.
+- **Video:** Plays inside the gallery with native controls, and is included in batch downloads. Original filenames are kept.
+- **Attachments:** `.clip`, `.psd`, `.zip`, `.pdf` and any other downloadable file is collected, shown with a file-type placeholder, and downloadable from the gallery.
 
-### File Attachments
+### Downloads
 
-- **Non-Media Files Supported:** Recognizes and downloads arbitrary attachments (`.clip`, `.psd`, `.zip`, `.pdf`, and any other `download`-attributed file) in addition to images and videos.
-- **Attachment Preview:** Non-previewable files display a stylized file-type placeholder and an inline download button in the gallery view.
-- **Thumbnail Fallback:** Attachments show a file icon in the thumbnail strip instead of a broken image.
+- **Individual download:** One click per image, video or file.
+- **Batch buttons:**
+  - **DL ALL:** one ZIP with every item in the post.
+  - **DL IMAGES:** a ZIP of images only, in reading order (`…-images.zip`).
+  - **DL FILES:** a ZIP of videos and attachments only (`…-files.zip`).
+- **Streaming ZIP:** Files are zipped with [fflate](https://github.com/101arrowz/fflate) in STORE mode as they download. On Chromium browsers the ZIP streams straight to a file you choose, so large posts use little memory. There is no ZIP64: archives are capped just under 4 GiB, and larger ones stop with a clear error.
+- **Date preservation:** Each ZIP entry carries the post's published date, so 7-Zip, WinRAR, Explorer and Keka restore the original modification time.
+- **Custom naming:** Patterns for ZIP and image names using `{title}`, `{artistName}`, `{fileName}`, `{index}`, `{date_published}`, `{date_edited}`, `{date_imported}` and `{date}`.
+- **Cancel:** Stops queued and retrying requests immediately. Navigating to another post does not abort a running download.
 
-### Downloading
+### Performance and reliability
 
-- **Individual Media Download:** Download single images or videos with a click.
-- **Split Batch Download Buttons:**
-  - **DL ALL** — one ZIP containing every item in the post (images, videos, and attachments), with the post's published date preserved on each entry.
-  - **DL IMAGES** — a ZIP of just the images, in sorted reading order.
-  - **DL FILES** — a ZIP of just the videos and non-media attachments.
-  - Each variant produces a distinct archive (`…-images.zip`, `…-files.zip`, or the base name for `DL ALL`) so downloads never collide.
-- **Web Worker Batch Downloading:** Offloads JSZip bundling to a dedicated background Web Worker for non-blocking, stutter-free zip creation.
-- **Timestamp Preservation:** ZIP entries are stamped with the post's published date, so extraction tools (7-Zip, WinRAR, Windows Explorer, Keka) restore the original file mtime — torrent-style archiving.
-- **Custom Naming & Date Archiving:** Configurable naming patterns for ZIP archives and individual files. Supports dynamic date placeholders (`{date_published}`, `{date_edited}`, `{date_imported}`) plus `{title}`, `{artistName}`, `{fileName}`, and `{index}`.
-- **CORS Bypass:** Universal `@connect` permissions to effortlessly download assets hosted on external CDNs or dynamic subdomains, such as `file.pawchive.pw`.
-
-### Performance and User Experience
-
-- **Zero External UI Dependencies:** Built entirely with native DOM methods, custom modal dialogs, and native IndexedDB caching — no jQuery, SweetAlert2, or Dexie.
-- **HTMX & SPA Navigation Safety:** Robust UI injection and cleanup logic utilizing the modern Navigation API (with history fallbacks) to ensure the script works flawlessly across Single-Page Applications and sites using `hx-boost` (such as Pawchive).
-- **Pawchive CSS Persistence:** The injected stylesheet is marked with `data-keep`, preventing Pawchive's HTMX head-cleanup logic from removing Ultra Galleries styles during page transitions.
-- **Pawchive Rate-Limit Compliance:** All requests to Pawchive hosts are serialized through a `≤ 1 req/sec` pacer with a custom User-Agent header. The pacer is rejection-safe and cannot be silently bypassed by a failed request.
-- **Request Deduplication:** Concurrent requests for the same URL within a session are coalesced into a single network fetch. Reduces load on the origin server and speeds up gallery loads.
-- **True LRU IndexedDB Caching:** Native IndexedDB integration stores fetched image blobs persistently with an automatic Least Recently Used eviction policy when quotas are reached.
-- **Session-Aware Cancellation:** In-flight requests are tracked per navigation session and aborted when the user leaves a post, preventing wasted bandwidth and stale writes.
-- **Decoupled High-Frequency State:** Zooming and panning math are decoupled from the reactive state proxy, caching DOM elements during animations to eliminate layout thrashing.
-- **Sliding-Window Preloader:** Intelligent sliding-window memory preloader fetches adjacent images and automatically revokes unused blobs to keep memory consumption low.
-- **Dynamic Notifications:** A redesigned, non-intrusive notification system provides real-time progress feedback with per-type styling and slide-in/out animations.
-- **Mobile Support:** Touch-friendly interface with pinch-to-zoom, double-tap interactions, and smooth swipe-to-pan.
-- **Accessible by Default:** Focus-trapped modals, ARIA live announcements, `:focus-visible` rings, `prefers-reduced-motion` support, and screen-reader-friendly labels throughout.
-- **Customizable Interface:** Reorganized 9-tab settings panel (General, Gallery Viewer, Downloads, Post Actions, Thumbnails, Button Labels, Keyboard, Advanced) with sub-headers, inline descriptions, and JSON settings import/export.
-- **Auto-Updating:** Integrated `@updateURL` and `@downloadURL` metadata ensures your script manager automatically fetches the latest fixes and features.
-
-## Version History
-
-### Version 4.5.1 — Current
-
-- **Security:** Media is only fetched from the supported sites. Links inside post text that point elsewhere are ignored, so a post can no longer make your browser request arbitrary hosts.
-- **Downloads:** Navigating to another post no longer aborts a running ZIP. Cancel now stops queued and retrying requests immediately. Big files are fetched one at a time to limit memory. Archives that would pass 4 GiB stop with a clear error instead of being written corrupt. A dismissed Save As dialog no longer triggers a second download. Out-of-range post dates no longer break ZIP creation.
-- **Gallery:** "Remove from Gallery" no longer gets undone by lazy loading, so ZIP contents stay correct. ←/→/Space work after clicking a thumbnail or button. The slideshow waits for a playing video to finish.
-- **Navigation:** `#anchor` links no longer reload the post UI.
-- **Settings:** "Auto-load Original Images" takes effect immediately.
-- **Memory:** Images that scroll far away while still loading are freed as soon as they finish.
-
-### Version 4.5.0
-
-- **Lazy original loading:** Full-size originals now load only for images near the viewport and are freed again when you scroll far away, keeping memory flat on very large posts.
-- **Smarter downloads:** ZIP and single-file downloads reuse images already in memory (then the persistent cache) before hitting the network.
-- **Animation toggle scoped:** Turning animations off no longer affects the host site, only Ultra Galleries UI.
-- **Fixes:** Skipped gallery images stop downloading, pinch-zoom state syncs correctly, settings no longer steal focus when reopened quickly, and button transitions list explicit properties.
-
-### Version 4.3.1
-
-- **Button visibility fix:** Hide toggles in Settings → Post Actions and Settings → Thumbnails now apply correctly. Previously, the `.ug-button { display: inline-flex !important }` rule in the main stylesheet overrode the inline `display: none` set by the visibility function, so buttons remained visible despite the toggle. Switched to the `.ug-hidden` utility class (`display: none !important`) which wins the cascade.
-- **Initial visibility application:** Hide settings are now applied immediately after the post action bar is created, so saved preferences take effect on the first render rather than requiring a settings change to trigger the update.
-
-### Version 4.3.0
-
-- **Split Button Visibility:** Button hiding is now scoped — **Post Actions** controls the global top bar (GALLERY, HEIGHT, WIDTH, FULL, DL ALL, DL IMAGES, DL FILES) and **Thumbnails** controls the per-image button row independently. Previously, hiding a button in one location hid it everywhere.
-- **Reorganized Settings Panel:** The settings menu is now split into nine focused tabs — General, Gallery Viewer, Downloads, Post Actions, Thumbnails, Button Labels, Keyboard, and Advanced — with sub-headers, inline descriptions, and horizontal dividers between groups.
-- **Settings UI primitives:** Added support for sub-headers, description text, and dividers inside settings sections.
-- **Legacy migration:** Existing single-scope hide toggles from earlier versions are transparently migrated to the new thumbnail-scoped toggles on first load.
-
-### Version 4.2.1
-
-- **Safer timestamp fallback:** If no published date can be parsed from the post, `getPostDateObject` now returns `null` instead of `new Date()`, letting JSZip fall back to its default instead of silently stamping every file with the download time.
-- **Robust worker date handling:** The ZIP worker now validates the incoming timestamp — accepting either an epoch number or an ISO string — and falls back gracefully if the value is unparseable.
-
-### Version 4.2.0
-
-- **Post Date Preservation on ZIP Entries:** Batch downloads now stamp each ZIP entry with the post's published timestamp. Extraction tools (7-Zip, WinRAR, Windows Explorer, Keka) restore this as the file's modification time, so comics and archives extract in reading order with correct dates.
-- **Attachment Support:** Non-image, non-video files (`.clip`, `.psd`, `.zip`, `.pdf`, etc.) linked via `.post__attachment-link` are now collected, listed in the gallery with a file-type placeholder, and included in batch downloads.
-- **Split Download Buttons:** `DL ALL` was split into three distinct buttons:
-  - **DL ALL** — images (ZIP) plus videos and attachments (individual downloads).
-  - **DL IMAGES** — images only, packaged as a ZIP.
-  - **DL FILES** — videos and non-media attachments only, downloaded individually.
-- **Filtered ZIP suffixes:** Batch downloads via `DL IMAGES` or `DL FILES` append `-images` / `-files` to the ZIP filename to prevent collisions when both are saved to the same folder.
-
-### Version 4.1.1
-
-- **Request Deduplication:** Concurrent fetches for the same URL within a session are now coalesced into a single network request.
-- **Pawchive pacer hardening:** The request queue can no longer be silently bypassed by a rejected promise.
-- **In-flight request cleanup:** Added a per-session request tracker that aborts outstanding `GM.xmlHttpRequest` handles when a navigation session is superseded.
-
-### Version 4.1.0
-
-- **Native Fullscreen Support:** Three fullscreen modes — **Native**, **CSS**, and **Ask each time** — configurable under Settings → General.
-- **`f` keyboard shortcut** to toggle fullscreen.
-- **Fullscreen state sync:** Toolbar button highlights during fullscreen; exiting via `Escape` or the browser UI cleanly restores gallery state.
-- **Multi-option modal primitive:** `UGModal.choose()` for prompts requiring more than a binary decision.
-
-### Version 4.0.1
-
-- **Zero External UI Dependencies:** Removed jQuery, SweetAlert2, Dexie.js, and FileSaver.js in favor of native DOM, a built-in lightweight SVG modal system, and native IndexedDB.
-- **Unified Pointer & Gesture Engine:** Replaced legacy mouse and touch listeners with Pointer Events — smooth multi-touch pinch zoom, double-tap zoom, and inertia panning.
-- **Web Worker ZIP Archiving:** Offloaded JSZip compression and bundling to a dedicated background Worker.
-- **Domain Expansion:** Added `.cr`, `.st`, and `.pw` mirrors across all supported sites.
-- **Modern Navigation API Support:** Upgraded SPA routing handlers to use `window.navigation` alongside `popstate` and `pushState` fallbacks.
-- **Sliding-Window Cache & Memory Management:** Automatic blob URL cleanup for adjacent preload windows.
-- **Enhanced Settings Customization:** Custom button labels, individual button visibility toggles, and JSON settings import/export.
-
-## Known Bugs
-
-- If styles ever fail to appear after an update, force-refresh the page once so your script manager re-injects the latest resource bundle.
-- When updating the CSS on a `@resource` tag, jsDelivr's CDN and your userscript manager's local cache may both hold stale copies. Use a **tagged release** (e.g. `@v4.5.0`) rather than a branch ref to avoid this entirely; branches are cached for 12 hours at every edge node, tags are immutable.
+- **Persistent cache:** Fetched images are stored in IndexedDB with LRU eviction. Downloads reuse images already in memory, then the cache, before using the network.
+- **Request deduplication:** Concurrent requests for the same URL share one fetch.
+- **Pawchive rate limits:** Requests to Pawchive hosts go through a 1 request/second pacer with a custom User-Agent. This includes video. Signed temporary links (`?e=…&s=…`) keep their signature.
+- **SPA and HTMX safe:** Uses the Navigation API with history fallbacks and survives `hx-boost` page swaps. Pawchive's head cleanup does not remove the injected styles.
+- **Safe fetching:** Media is only requested from the supported sites. Links in post text that point elsewhere are ignored.
+- **Mobile and accessibility:** Touch gestures, focus-trapped dialogs, ARIA announcements, `:focus-visible` rings and `prefers-reduced-motion` support.
 
 ## Usage
 
-After installation, navigate to a post on `kemono.su`, `coomer.su`, `nekohouse.su`, `pawchive.st`, or any supported mirror. You'll see new buttons injected into the post actions area for resizing and downloading media.
+On a post you will see a button bar with **GALLERY**, **HEIGHT**, **WIDTH**, **FULL**, **DL ALL**, **DL IMAGES**, **DL FILES** and **⚙️ Settings**. Open the gallery with the button or the `g` key. Click a thumbnail to view it.
 
-- Use **DL ALL** to download everything as a single ZIP. Use **DL IMAGES** or **DL FILES** if you only want a subset.
-- The **GALLERY** button opens the immersive gallery view. Alternatively, press the configured gallery hotkey (default `g`) to open it quickly.
-- **⚙️ Settings** opens the configuration menu. Tabs include:
-  - **General** — animations, thumbnail strip, notifications, fullscreen mode, image loading.
-  - **Gallery Viewer** — navigation, zoom & pan, slideshow.
-  - **Downloads** — timestamp preservation, persistent caching, file naming patterns.
-  - **Post Actions** — show/hide the global action-bar buttons.
-  - **Thumbnails** — show/hide per-image buttons.
-  - **Button Labels** — customize every button's text.
-  - **Keyboard** — rebind shortcut keys.
-  - **Advanced** — export, import, or reset all settings.
+### Keyboard shortcuts
 
-Within the gallery view:
+| Key         | Action                            |
+| ----------- | --------------------------------- |
+| `g`         | Open / close the gallery          |
+| `k` / `←`   | Previous image                    |
+| `l` / `→`   | Next image                        |
+| `Home`      | First image                       |
+| `End`       | Last image                        |
+| `Space`     | Start / pause slideshow           |
+| `+` / `=`   | Zoom in                           |
+| `-`         | Zoom out                          |
+| `0`         | Reset zoom and pan                |
+| `f`         | Toggle fullscreen                 |
+| `?`         | Show help                         |
+| `Escape`    | Exit fullscreen, or close gallery |
 
-- Click any thumbnail in the bottom strip to view it.
-- Navigate using the `k` (previous) and `l` (next) keys, the arrow keys, or the on-screen navigation buttons.
-- To zoom in, use the mouse wheel, toolbar buttons, or double-click / double-tap the image.
-- When zoomed in, click and drag (or drag on touchscreens) to pan with momentum inertia.
-- On mobile devices, use pinch gestures to zoom and swipe to pan.
-- Press `Space` to start or pause the slideshow.
-- Press `f` to toggle fullscreen.
-- Press `Escape` to exit fullscreen (if active) or close the gallery.
-- Right-click thumbnails to open context options (open, download, copy URL, remove).
+`g`, `k` and `l` can be rebound in Settings → Keyboard. The rest are fixed. Shortcuts are disabled while typing in an input.
 
-### Keyboard Shortcuts
+### Settings
 
-| Key         | Action                               |
-| ----------- | ------------------------------------ |
-| `g`         | Open / close the gallery view        |
-| `k` / `←`   | Previous image                       |
-| `l` / `→`   | Next image                           |
-| `Home`      | Jump to first image                  |
-| `End`       | Jump to last image                   |
-| `Space`     | Start / pause slideshow              |
-| `+` / `=`   | Zoom in                              |
-| `-`         | Zoom out                             |
-| `0`         | Reset zoom & pan                     |
-| `f`         | Toggle fullscreen                    |
-| `Escape`    | Exit fullscreen, or close gallery    |
+| Tab            | Contents                                                                       |
+| -------------- | ------------------------------------------------------------------------------ |
+| General        | Animations, thumbnail strip and mode, notifications, fullscreen, image loading |
+| Gallery Viewer | Navigation arrows, zoom and pan, slideshow                                     |
+| Downloads      | Date preservation, persistent cache, file naming                               |
+| Sorting        | Media order                                                                    |
+| Post Actions   | Show or hide the top action-bar buttons                                        |
+| Thumbnails     | Show or hide the per-image buttons                                             |
+| Button Labels  | Custom text for every button                                                   |
+| Keyboard       | Rebind shortcuts                                                               |
+| Advanced       | Export, import, or reset settings (JSON)                                       |
 
-All shortcut keys (except the fixed ones like `Escape`, `+`, `-`, `0`, and `f`) are rebindable in Settings → Keyboard.
+## Troubleshooting
+
+- **No styles after an update:** Force-refresh the page once so your script manager re-fetches the stylesheet.
+- **Save dialog appears before a ZIP:** Expected on Chromium. The ZIP streams directly to the file you pick.
+
+## Changelog
+
+### 4.5.2
+
+- Pawchive signed temporary links keep their `?e=&s=` query. Stripping it caused 403 errors.
+- Clicking a post image opens the gallery even though the site now binds its own click-to-expand.
+- Restyled UI: amber accent on graphite, no glows, blur or hover lifts, sentence-case labels, lighter font weights.
+
+### 4.5.1
+
+- Only fetches media from supported sites.
+- Navigating to another post no longer aborts a running ZIP. Cancel is immediate. Large files download one at a time. Archives over 4 GiB stop with an error instead of being written corrupt. Dismissing Save As no longer triggers a second download. Out-of-range post dates no longer break ZIP creation.
+- "Remove from Gallery" is no longer undone by lazy loading. Arrow keys and Space work after clicking a thumbnail or button. The slideshow waits for videos.
+- `#anchor` links no longer reload the post UI. "Auto-load Original Images" applies immediately.
+
+### 4.5.0
+
+- Lazy original loading near the viewport, freed when scrolled away.
+- Downloads reuse in-memory and cached images before using the network.
+- Turning animations off no longer affects the host site.
+- Fixes: skipped images stop downloading, pinch-zoom state sync, settings focus.
+
+### 4.3.x
+
+- Post Actions and Thumbnails hide toggles are scoped separately, and now apply correctly on first render.
+- Settings split into focused tabs with descriptions and dividers.
+- Date fallback no longer stamps ZIP entries with the download time.
+
+### 4.2.x
+
+- ZIP entries carry the post's published date.
+- Attachment support (`.clip`, `.psd`, `.zip`, `.pdf`, …).
+- DL ALL split into DL ALL, DL IMAGES and DL FILES with distinct archive names.
+
+### 4.1.x
+
+- Native fullscreen (Native / CSS / Ask) and the `f` shortcut.
+- Request deduplication, hardened Pawchive pacer, per-navigation request cancellation.
+
+### 4.0.1
+
+- Removed jQuery, SweetAlert2, Dexie and FileSaver in favor of native DOM and IndexedDB.
+- Unified Pointer Events gesture engine.
+- Added `.cr`, `.st` and `.pw` mirrors and Navigation API routing.
+- Settings customization with JSON import/export.
 
 ## Dependencies
 
-- [JSZip](https://stuk.github.io/jszip/) — v3.10.2
+- [fflate](https://github.com/101arrowz/fflate) 0.8.2 (loaded via `@require`)
 
 ## Acknowledgments
 
-- Original concept based on [Better Kemono Galleries](https://sleazyfork.org/en/scripts/460064-better-kemono-galleries) by ntf.
+- Original concept: [Better Kemono Galleries](https://sleazyfork.org/en/scripts/460064-better-kemono-galleries) by ntf.
 - Maintained and modernized by [Meri/TearTyr](https://github.com/TearTyr).
-
-## Version
-
-Current version: **4.5.1**
