@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Ultra Galleries
 // @namespace    https://sleazyfork.org/en/users/1477603-%E3%83%A1%E3%83%AA%E3%83%BC
-// @version      4.5.1
+// @version      4.5.2
 // @description  Modern image gallery with streaming ZIP downloads, video playback, browsing, fullscreen with a floating (higher-layer) thumbnail strip, and download features. Native DOM, unified pointer gestures, and zero external UI dependencies.
 // @author       ntf (original), Meri/TearTyr (maintained)
 // @match        *://kemono.su/*
@@ -77,7 +77,7 @@
     // ====================================================
     // Pawchive Compliance Configuration & Pacer
     // ====================================================
-    const SCRIPT_VERSION = '4.5.1';
+    const SCRIPT_VERSION = '4.5.2';
 
     const PAWCHIVE_CONFIG = {
         USER_AGENT: `UltraGalleries/${SCRIPT_VERSION} (+https://github.com/TearTyr/Ultra-Galleries; contact: Meri/TearTyr)`,
@@ -776,19 +776,25 @@
             };
         },
 
+        // Strips tracking/filename queries, but keeps pawchive's signed temp links
+        // (/f/<id>/x.png?e=<expiry>&s=<sig>): without the signature they 403.
+        cleanUrl(url) {
+            return /[?&]e=\d+/.test(url) && /[?&]s=[0-9a-f]+/i.test(url) ? url : url.split('?')[0];
+        },
+
         handleMediaSrc(mediaLink) {
             let href = mediaLink.getAttribute('href') || mediaLink.querySelector('.fileThumb')?.getAttribute('href');
             if (!href && mediaLink.href) href = mediaLink.href;
 
             if (href) {
-                return href.split('?')[0].replace('/thumbnail/', '/data/');
+                return Utils.cleanUrl(href).replace('/thumbnail/', '/data/');
             }
 
             const directImg = mediaLink.querySelector('img');
             if (directImg) {
                 const rawSrc = directImg.getAttribute('data-src') || directImg.src;
                 if (!rawSrc) return null;
-                return rawSrc.split('?')[0].replace('/thumbnail/', '/data/');
+                return Utils.cleanUrl(rawSrc).replace('/thumbnail/', '/data/');
             }
             return null;
         },
@@ -3830,8 +3836,8 @@
                 if (linkElement.closest('.post__user-profile, .scrape__user-profile')) continue;
                 if (linkElement.classList.contains('user-header__avatar')) continue;
 
-                const cleanHref = (linkElement.getAttribute('href') || linkElement.href || '').split('?')[0];
-                const isVideo = linkElement.matches(SELECTORS.VIDEO_LINK) || /\.(mp4|webm|mov)$/i.test(cleanHref);
+                const cleanHref = Utils.cleanUrl(linkElement.getAttribute('href') || linkElement.href || '');
+                const isVideo = linkElement.matches(SELECTORS.VIDEO_LINK) || /\.(mp4|webm|mov)$/i.test(cleanHref.split('?')[0]);
 
                 if (isVideo) {
                     const url = cleanHref;
@@ -3850,10 +3856,10 @@
                 }
 
                 let url = Utils.handleMediaSrc(linkElement);
-                if (!url && linkElement.href) url = linkElement.href.split('?')[0];
+                if (!url && linkElement.href) url = Utils.cleanUrl(linkElement.href);
                 if (!url || items.has(url) || !isTrustedMediaUrl(url)) continue;
 
-                if (/\.(jpe?g|png|gif|webp|bmp|avif)$/i.test(url)) {
+                if (/\.(jpe?g|png|gif|webp|bmp|avif)$/i.test(url.split('?')[0])) {
                     items.set(url, {
                         linkElement, originalUrl: url, posterUrl: url, type: 'image',
                         thumbUrl: ImageLoader._thumbSrcOf(linkElement),
@@ -4504,7 +4510,8 @@
                 if (filesArea) {
                     PostActions._injectThumbButtonGroups(filesArea, false);
                     if (!filesArea.dataset.ugLeftClickHandlerAttached) {
-                        filesArea.addEventListener('click', PostActions.imageLinkClickHandler);
+                        // capture: the site now binds its own click-to-expand on the link/img itself
+                        filesArea.addEventListener('click', PostActions.imageLinkClickHandler, true);
                         filesArea.dataset.ugLeftClickHandlerAttached = 'true';
                     }
                 }
@@ -4531,7 +4538,7 @@
             document.getElementById(CSS.NOTIF_AREA)?.remove();
 
             DOM.$$('[data-ug-left-click-handler-attached]').forEach(area => {
-                area.removeEventListener('click', PostActions.imageLinkClickHandler);
+                area.removeEventListener('click', PostActions.imageLinkClickHandler, true);
                 area.removeAttribute('data-ug-left-click-handler-attached');
             });
 
@@ -4864,8 +4871,8 @@
 }
 
 .ug-strip-toggle.active {
-    color: var(--ug-accent, #6f5fff);
-    background: var(--ug-accent-subtle, rgba(111, 95, 255, 0.08));
+    color: var(--ug-accent, #e8924a);
+    background: var(--ug-accent-subtle, rgba(232, 146, 74, 0.1));
 }
 
 @media (max-width: 640px) {
